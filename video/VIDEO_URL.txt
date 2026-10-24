@@ -1,0 +1,7 @@
+WWDC26 — "Run local agentic AI on the Mac using MLX"
+
+Video URL:
+https://www.youtube.com/watch?v=wykPErJ8M-8
+
+The video → transcript → frames → OCR pipeline used to build this repo's
+documentation is described in EXTRACTION.md (one level up).

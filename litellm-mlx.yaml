@@ -1,0 +1,23 @@
+# LiteLLM bridge: Anthropic Messages API (/v1/messages) -> MLX-LM OpenAI API.
+# Claude Code speaks Anthropic format; MLX-LM speaks OpenAI format. LiteLLM
+# translates between them.
+#
+# Start the MLX-LM server first, then this proxy:
+#   ./start_server.sh
+#   .venv-litellm/bin/litellm --config litellm-mlx.yaml --host 127.0.0.1 --port 4000
+#
+# Then point Claude Code at http://127.0.0.1:4000 (see README).
+
+model_list:
+  - model_name: default_model              # id Claude Code will request
+    litellm_params:
+      model: openai/default_model          # "openai/" = OpenAI-compatible backend
+      api_base: http://127.0.0.1:8080/v1   # must end in /v1
+      api_key: sk-no-key-needed            # LiteLLM requires a value; MLX ignores it
+      use_chat_completions_api: true       # force /chat/completions (not /responses)
+
+litellm_settings:
+  drop_params: true                        # drop params the OpenAI backend rejects
+
+general_settings:
+  master_key: sk-local-claude              # credential Claude Code must present
