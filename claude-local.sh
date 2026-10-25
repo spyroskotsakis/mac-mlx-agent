@@ -3,12 +3,16 @@
 #
 # Prerequisites (both must be running):
 #   ./start_server.sh                        # MLX-LM server on 8080
-#   .venv-litellm/bin/litellm --config litellm-mlx.yaml --host 127.0.0.1 --port 4000
+#   .venv-litellm/bin/litellm --config litellm-mlx.yaml --host 127.0.0.1 --port 4001
+#
+# Port 4001 (not 4000): port 4000 is used by a separate LiteLLM instance
+# (~/Coding-Agent-Infra/litellm). Keep this bridge on its own port so the two
+# never collide.
 #
 # Usage: ./claude-local.sh [claude args...]
 set -euo pipefail
 
-export ANTHROPIC_BASE_URL=http://127.0.0.1:4000
+export ANTHROPIC_BASE_URL=http://127.0.0.1:4001
 export ANTHROPIC_AUTH_TOKEN=sk-local-claude
 export ANTHROPIC_MODEL=default_model
 export ANTHROPIC_DEFAULT_HAIKU_MODEL=default_model

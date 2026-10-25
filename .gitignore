@@ -1,15 +1,6 @@
 # macOS
 .DS_Store
 
-# Downloaded media & extracted artifacts
-video/*.mp4
-video/*.m4a
-video/frames/
-video/frames_ocr.txt
-
-# Compiled OCR binary
-scripts/ocr_all
-
 # Python
 __pycache__/
 *.pyc
