@@ -132,6 +132,28 @@ Endpoints exposed:
 
 ---
 
+## Start it from the menu bar (optional)
+
+This repo also ships a small native macOS **menu bar app** (`MLXServer/`) that
+starts and stops the server for you and lets you switch models — no terminal
+needed. It lives next to the clock and mirrors `start_server.sh` exactly (same
+`--kv-bits 4 --max-tokens 8192 --temp 0.2 --top-p 0.8 --top-k 20`).
+
+- Click the **MLX Server** icon in the menu bar to open the control panel.
+- **Start / Stop** the server, pick the model, and watch the live log.
+- Add models later in `MLXServer/MLXServer/ServerController.swift`
+  (`ServerController.availableModels`).
+
+Open `MLXServer/MLXServer.xcodeproj` and press **Run**, or:
+
+```bash
+xcodebuild -project MLXServer/MLXServer.xcodeproj -target MLXServer -configuration Debug build
+```
+
+See `MLXServer/README.md` for details.
+
+---
+
 ## How to use it day-to-day
 
 ### Chat from the terminal (no server)
@@ -429,3 +451,4 @@ or `~/.claude/settings.json`, your normal Claude Code login is left untouched.
 - `start_server.sh` — launches the MLX-LM server with the KV-cache + sampling fixes.
 - `litellm-mlx.yaml` — LiteLLM config for the Anthropic→OpenAI bridge.
 - `claude-local.sh` — launches Claude Code pointed at the local bridge.
+- `MLXServer/` — native menu-bar app to start/stop the server and switch models.

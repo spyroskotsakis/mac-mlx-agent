@@ -6,3 +6,10 @@ __pycache__/
 *.pyc
 .venv/
 .venv-litellm/
+
+# Xcode user state
+xcuserdata/
+*.xcuserstate
+
+# Build artifacts
+build/
