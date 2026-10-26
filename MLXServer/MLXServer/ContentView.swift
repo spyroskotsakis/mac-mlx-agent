@@ -8,6 +8,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 14) {
             header
             statusCard
+            requirementsSection
             modelSection
             controls
             Divider()
@@ -17,6 +18,13 @@ struct ContentView: View {
         }
         .padding(16)
         .frame(width: 470)
+        .onAppear {
+            server.onAppear()
+            server.checkModelCached()
+        }
+        .onChange(of: server.selectedModel) { _, _ in
+            server.checkModelCached()
+        }
     }
 
     private var header: some View {
@@ -53,6 +61,78 @@ struct ContentView: View {
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary))
+    }
+
+    private var requirementsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Requirements").font(.subheadline).foregroundStyle(.secondary)
+
+            requirementRow(
+                ok: server.resolvedExecutable != nil,
+                showAction: server.resolvedExecutable == nil,
+                title: "mlx-lm (mlx_lm.server)",
+                detail: server.resolvedExecutable ?? "not installed",
+                buttonTitle: "Install",
+                action: server.installMLX
+            )
+
+            requirementRow(
+                ok: server.modelCached == true,
+                showAction: server.modelCached == false,
+                title: "Model files",
+                detail: modelDetail,
+                buttonTitle: "Download",
+                action: server.downloadModel
+            )
+
+            if server.isInstalling {
+                ProgressView().controlSize(.small)
+                ScrollView {
+                    Text(server.installOutput.isEmpty ? "Working…" : server.installOutput)
+                        .font(.system(.caption, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+                .frame(height: 90)
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .windowBackgroundColor)))
+            }
+        }
+    }
+
+    private var modelDetail: String {
+        if let cached = server.modelCached {
+            return cached ? "downloaded" : "not downloaded — required before first start"
+        }
+        return "checking…"
+    }
+
+    private func requirementRow(ok: Bool,
+                                showAction: Bool,
+                                title: String,
+                                detail: String,
+                                buttonTitle: String,
+                                action: @escaping () -> Void) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(ok ? Color.green : Color.orange)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.callout)
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer()
+            if showAction {
+                Button(buttonTitle, action: action)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(server.isInstalling)
+            }
+        }
     }
 
     private var modelSection: some View {

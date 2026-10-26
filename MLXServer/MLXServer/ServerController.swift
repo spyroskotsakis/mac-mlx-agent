@@ -52,6 +52,10 @@ final class ServerController: ObservableObject {
     @Published private(set) var log: String = ""
     @Published private(set) var resolvedExecutable: String?
 
+    @Published private(set) var modelCached: Bool?
+    @Published private(set) var installOutput: String = ""
+    @Published private(set) var isInstalling: Bool = false
+
     @Published var selectedModel: ModelOption {
         didSet { UserDefaults.standard.set(selectedModel.repoID, forKey: Keys.model) }
     }
@@ -292,6 +296,111 @@ final class ServerController: ObservableObject {
         }
     }
 
+    // MARK: - Prerequisites
+
+    /// Checks whether the currently-selected model is already in the local
+    /// HuggingFace cache and updates `modelCached`.
+    func checkModelCached() {
+        modelCached = Self.modelIsCached(repoID: selectedModel.repoID)
+    }
+
+    /// Re-resolves the `mlx_lm.server` binary (used after an install finishes).
+    func refreshExecutableResolution() {
+        resolvedExecutable = Self.resolveExecutable(override: executablePath)
+    }
+
+    /// Installs `mlx-lm` (plus the `uvicorn`/`fastapi` its server needs) into the
+    /// discovered Python environment, streaming output to `installOutput`.
+    func installMLX() {
+        guard !isInstalling else { return }
+        guard let python = Self.findPython() else {
+            installOutput = "Could not find a Python interpreter to install into.\n"
+            return
+        }
+        isInstalling = true
+        installOutput = ""
+        appendInstallOutput("$ \(python) -m pip install --upgrade mlx-lm uvicorn fastapi\n\n")
+        runStreaming(executable: python,
+                     arguments: ["-m", "pip", "install", "--upgrade", "mlx-lm", "uvicorn", "fastapi"],
+                     sink: { [weak self] in self?.appendInstallOutput($0) },
+                     completion: { [weak self] status in
+            guard let self else { return }
+            self.isInstalling = false
+            self.appendInstallOutput(status == 0 ? "\n[mlx-lm installed]\n" : "\n[install failed (status \(status))]\n")
+            self.refreshExecutableResolution()
+        })
+    }
+
+    /// Downloads the currently-selected model into the local HuggingFace cache.
+    func downloadModel() {
+        guard !isInstalling else { return }
+        guard let hf = Self.findHF() else {
+            installOutput = "Download tool (`hf`) not found. Install mlx-lm first — it bundles huggingface_hub.\n"
+            return
+        }
+        isInstalling = true
+        installOutput = ""
+        let repo = selectedModel.repoID
+        appendInstallOutput("$ \(hf) download \(repo)\n\n")
+        runStreaming(executable: hf,
+                     arguments: ["download", repo],
+                     sink: { [weak self] in self?.appendInstallOutput($0) },
+                     completion: { [weak self] status in
+            guard let self else { return }
+            self.isInstalling = false
+            self.appendInstallOutput(status == 0 ? "\n[Model downloaded]\n" : "\n[download failed (status \(status))]\n")
+            self.checkModelCached()
+        })
+    }
+
+    private func appendInstallOutput(_ text: String) {
+        installOutput.append(text)
+        if installOutput.count > 200_000 {
+            installOutput = String(installOutput.suffix(100_000))
+        }
+    }
+
+    /// Runs a subprocess, streaming stdout/stderr into `sink` on the main actor
+    /// and reporting the exit status to `completion`.
+    @discardableResult
+    private func runStreaming(executable: String,
+                              arguments: [String],
+                              sink: @escaping (String) -> Void,
+                              completion: @escaping (Int32) -> Void) -> Process? {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: executable)
+        proc.arguments = arguments
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        proc.standardOutput = outPipe
+        proc.standardError = errPipe
+        outPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if let text = String(data: data, encoding: .utf8), !text.isEmpty {
+                DispatchQueue.main.async { sink(text) }
+            }
+        }
+        errPipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            if let text = String(data: data, encoding: .utf8), !text.isEmpty {
+                DispatchQueue.main.async { sink(text) }
+            }
+        }
+        proc.terminationHandler = { finished in
+            DispatchQueue.main.async { completion(finished.terminationStatus) }
+        }
+        do {
+            try proc.run()
+            return proc
+        } catch {
+            DispatchQueue.main.async {
+                sink("\nFailed to launch: \(error.localizedDescription)\n")
+                completion(-1)
+            }
+            return nil
+        }
+    }
+
     // MARK: - Networking
 
     private func isServerUp() async -> Bool {
@@ -378,5 +487,76 @@ final class ServerController: ObservableObject {
             // fall through to nil
         }
         return nil
+    }
+
+    /// Directories that may contain the conda/homebrew Python and `hf` tooling.
+    private static func candidateBinDirs() -> [String] {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return [
+            "/opt/anaconda3/bin",
+            "/opt/miniconda3/bin",
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            home + "/anaconda3/bin",
+            home + "/miniconda3/bin",
+            home + "/miniforge3/bin",
+            home + "/.local/bin"
+        ]
+    }
+
+    /// Finds a usable Python interpreter, preferring the one that owns
+    /// `mlx_lm.server` (read from its shebang).
+    private static func findPython() -> String? {
+        if let exe = resolveExecutable(override: ServerController.shared.executablePath),
+           let shebang = try? String(contentsOfFile: exe, encoding: .utf8).split(separator: "\n").first {
+            let line = shebang.trimmingCharacters(in: .whitespaces)
+            if line.hasPrefix("#!") {
+                var p = line.dropFirst(2).trimmingCharacters(in: .whitespaces)
+                if let space = p.firstIndex(of: " ") { p = String(p[..<space]) }
+                if FileManager.default.isExecutableFile(atPath: p) { return p }
+            }
+        }
+        for bin in candidateBinDirs() {
+            for name in ["python3.13", "python3.12", "python3.11", "python3.10", "python3"] {
+                let p = bin + "/" + name
+                if FileManager.default.isExecutableFile(atPath: p) { return p }
+            }
+        }
+        return nil
+    }
+
+    /// Finds the HuggingFace `hf` CLI used to download models.
+    private static func findHF() -> String? {
+        for bin in candidateBinDirs() {
+            let p = bin + "/hf"
+            if FileManager.default.isExecutableFile(atPath: p) { return p }
+        }
+        return nil
+    }
+
+    /// The local HuggingFace cache `hub/` directory (respects `HF_HOME`).
+    private static func hfHubDir() -> String {
+        if let hfHome = ProcessInfo.processInfo.environment["HF_HOME"], !hfHome.isEmpty {
+            return (hfHome as NSString).expandingTildeInPath + "/hub"
+        }
+        return FileManager.default.homeDirectoryForCurrentUser.path + "/.cache/huggingface/hub"
+    }
+
+    private static let weightExtensions = [".safetensors", ".gguf", ".npz", ".bin"]
+
+    /// A model is considered cached when some snapshot has both a `config.json`
+    /// and at least one weight file.
+    private static func modelIsCached(repoID: String) -> Bool {
+        let repoName = "models--" + repoID.replacingOccurrences(of: "/", with: "--")
+        let snapshots = hfHubDir() + "/" + repoName + "/snapshots"
+        guard let dirs = try? FileManager.default.contentsOfDirectory(atPath: snapshots) else { return false }
+        for dir in dirs {
+            let snapshotDir = snapshots + "/" + dir
+            guard let entries = try? FileManager.default.contentsOfDirectory(atPath: snapshotDir) else { continue }
+            let hasConfig = entries.contains("config.json")
+            let hasWeights = entries.contains { e in weightExtensions.contains(where: { e.hasSuffix($0) }) }
+            if hasConfig && hasWeights { return true }
+        }
+        return false
     }
 }

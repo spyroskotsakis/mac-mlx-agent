@@ -19,6 +19,20 @@ The server arguments mirror `start_server.sh` exactly:
   --kv-bits 4 --max-tokens 8192 --temp 0.2 --top-p 0.8 --top-k 20
 ```
 
+## Requirements check
+
+The panel shows a **Requirements** list and verifies the two things the server
+needs, with one-click fixes when something is missing:
+
+- **mlx-lm (`mlx_lm.server`)** — if the binary isn't found, click **Install** to
+  run `python -m pip install --upgrade mlx-lm uvicorn fastapi` into the detected
+  Python environment (the same one the `mlx_lm.server` shebang points at).
+- **Model files** — checks the local HuggingFace cache for the selected model's
+  weights; click **Download** to fetch them with `hf download <repo-id>`. (You
+  can also just press Start — the server auto-downloads on first launch.)
+
+The checks run when you open the panel and whenever you switch models.
+
 ## Build & run
 
 Open `MLXServer.xcodeproj` in Xcode and press **Run**, or build from the terminal:
