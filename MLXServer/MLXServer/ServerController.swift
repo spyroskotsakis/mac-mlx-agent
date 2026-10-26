@@ -36,6 +36,10 @@ final class ServerController: ObservableObject {
     /// Models offered by the picker. Add more entries here as you download them
     /// (the server auto-downloads on first launch if they aren't cached). The
     /// first entry is the default selection.
+    /// Single shared instance used by both the SwiftUI app and the AppDelegate
+    /// (which needs to stop the server before the app exits).
+    static let shared = ServerController()
+
     static let availableModels: [ModelOption] = [
         ModelOption(repoID: "mlx-community/Qwen3.5-35B-A3B-4bit",
                     displayName: "Qwen3.5-35B-A3B (4-bit)")
@@ -203,6 +207,27 @@ final class ServerController: ObservableObject {
             }
             kill(pid, SIGKILL)
         }
+    }
+
+    /// Stops the child server and waits (up to ~3s) for it to actually exit before
+    /// hard-killing it. Used on quit so the menu-bar app never leaves an orphaned
+    /// `mlx_lm.server` running after it disappears.
+    func stopSynchronouslyForQuit() {
+        guard let proc = process else { return }
+        let pid = proc.processIdentifier
+        process = nil
+        pollTask?.cancel()
+        pollTask = nil
+
+        proc.terminate() // SIGTERM — lets uvicorn shut down cleanly
+
+        // The kernel marks the pid dead independently of our run loop, so polling
+        // is safe even though quit runs on the main thread.
+        for _ in 0..<60 {
+            if kill(pid, 0) != 0 { return } // already gone
+            usleep(50_000)                  // 50 ms
+        }
+        kill(pid, SIGKILL)
     }
 
     // MARK: - Polling / process bookkeeping

@@ -38,6 +38,17 @@ tracks the server state:
 | `●` circle.fill | running |
 | `!` exclamationmark.circle | failed |
 
+## Quitting
+
+Because it's a menu-bar-only app (no Dock icon or menu bar), you quit it from
+inside the panel:
+
+- Click **Quit MLX Server** at the bottom of the panel, or
+- press **⌘Q**.
+
+Quitting first stops the model server (SIGTERM, then SIGKILL if it lingers) so
+you never leave an orphaned `mlx_lm.server` holding port 8080.
+
 ## How it finds `mlx_lm.server`
 
 GUI apps don't inherit your shell `PATH`, so the app auto-detects the binary by

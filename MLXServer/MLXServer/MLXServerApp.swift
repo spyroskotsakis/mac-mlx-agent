@@ -1,8 +1,39 @@
 import SwiftUI
+import AppKit
+
+/// App-level lifecycle: a menu-bar-only app (LSUIElement) has no visible menu bar
+/// or Dock icon, so the standard "Quit" item — and its Cmd+Q key equivalent — is
+/// missing by default. This restores both, and makes sure the model server is
+/// stopped before the app exits so we never leave an orphaned process behind.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Build a minimal menu with just a Quit item so Cmd+Q works everywhere.
+        let mainMenu = NSMenu()
+        let appMenuItem = NSMenuItem()
+        mainMenu.addItem(appMenuItem)
+
+        let appMenu = NSMenu()
+        appMenu.addItem(
+            withTitle: "Quit MLX Server",
+            action: #selector(NSApplication.terminate(_:)),
+            keyEquivalent: "q"
+        )
+        appMenuItem.submenu = appMenu
+        NSApp.mainMenu = mainMenu
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        // Stop the child server synchronously so quitting never leaves it running.
+        ServerController.shared.stopSynchronouslyForQuit()
+        return .terminateNow
+    }
+}
 
 @main
 struct MLXServerApp: App {
-    @StateObject private var server = ServerController()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @StateObject private var server = ServerController.shared
 
     var body: some Scene {
         MenuBarExtra {

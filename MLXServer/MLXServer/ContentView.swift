@@ -145,6 +145,7 @@ struct ContentView: View {
 
     private var footer: some View {
         HStack {
+            Text("⌘Q to quit").font(.caption2).foregroundStyle(.tertiary)
             Spacer()
             Button("Quit MLX Server") {
                 NSApplication.shared.terminate(nil)
