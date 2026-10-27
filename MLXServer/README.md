@@ -114,6 +114,33 @@ then SIGKILL if anything lingers), and as a final safety net sweeps the
 configured port to kill any `mlx_lm.server` still listening there — so you never
 leave an orphaned server holding the port.
 
+### Can't delete the app ("it's in use")
+
+If you try to drag `MLXServer.app` out of Applications (or empty the Trash) and
+macOS says it's **in use**, that just means the app is still running — the
+running process holds the `.app` bundle open. Quit it first, then delete:
+
+1. Quit from inside the app (**Quit MLX Server** or **⌘Q**), or quit it from a
+   terminal:
+   ```bash
+   osascript -e 'tell application "MLXServer" to quit'
+   ```
+
+2. If that doesn't work (or it already crashed and left the process behind),
+   find and kill the leftover process:
+   ```bash
+   pkill -f '/Applications/MLXServer.app/Contents/MacOS/MLXServer'
+   ```
+
+   (If the app lives elsewhere, point the path at wherever you installed it.)
+
+Then delete `MLXServer.app` as usual. You can confirm nothing is left running
+with:
+
+```bash
+ps aux | grep -iE 'MLXServer|mlx_lm.server' | grep -v grep
+```
+
 ## How it finds `mlx_lm.server`
 
 GUI apps don't inherit your shell `PATH`, so the app auto-detects the binary by
