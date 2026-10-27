@@ -55,6 +55,8 @@ final class ServerController: ObservableObject {
     @Published private(set) var modelCached: Bool?
     @Published private(set) var installOutput: String = ""
     @Published private(set) var isInstalling: Bool = false
+    @Published private(set) var openCodeConfigConfigured: Bool = false
+    @Published private(set) var setupMessage: String = ""
 
     @Published var selectedModel: ModelOption {
         didSet { UserDefaults.standard.set(selectedModel.repoID, forKey: Keys.model) }
@@ -408,6 +410,86 @@ final class ServerController: ObservableObject {
             }
             return nil
         }
+    }
+
+    // MARK: - Integrations
+
+    /// Path to OpenCode's global config file.
+    func openCodeConfigPath() -> String {
+        FileManager.default.homeDirectoryForCurrentUser.path + "/.config/opencode/opencode.jsonc"
+    }
+
+    /// Updates `openCodeConfigConfigured` based on whether a config exists and
+    /// already points at the current port.
+    func checkOpenCodeConfig() {
+        let path = openCodeConfigPath()
+        guard let contents = try? String(contentsOfFile: path, encoding: .utf8) else {
+            openCodeConfigConfigured = false
+            return
+        }
+        openCodeConfigConfigured = contents.contains("127.0.0.1:\(port)/v1")
+    }
+
+    /// Writes a global OpenCode config pointing at this server (current port +
+    /// selected model), backing up any existing file first.
+    func writeOpenCodeConfig() {
+        let path = openCodeConfigPath()
+        let dir = (path as NSString).deletingLastPathComponent
+        do {
+            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+
+            if FileManager.default.fileExists(atPath: path) {
+                let df = DateFormatter()
+                df.dateFormat = "yyyyMMdd-HHmmss"
+                let backup = path + ".bak-" + df.string(from: Date())
+                try FileManager.default.moveItem(atPath: path, toPath: backup)
+                setupMessage = "Backed up existing config to \(backup)\n"
+            } else {
+                setupMessage = ""
+            }
+
+            try openCodeConfigText.write(toFile: path, atomically: true, encoding: .utf8)
+            setupMessage += "Wrote \(path)\n"
+            checkOpenCodeConfig()
+        } catch {
+            setupMessage = "Failed to write OpenCode config: \(error.localizedDescription)\n"
+        }
+    }
+
+    /// The OpenCode config that points the agent at this MLX server. The
+    /// `limit.output: 8192` caps OpenCode's requests to match the server's
+    /// `--max-tokens`, which keeps a mid-generation disconnect from wedging the
+    /// single generation thread (see the main repo README).
+    private var openCodeConfigText: String {
+        let config: [String: Any] = [
+            "$schema": "https://opencode.ai/config.json",
+            "model": "mlx/default_model",
+            "provider": [
+                "mlx": [
+                    "npm": "@ai-sdk/openai-compatible",
+                    "name": "MLX (local)",
+                    "options": [
+                        "baseURL": "http://127.0.0.1:\(port)/v1",
+                        "chunkTimeout": false,
+                        "headerTimeout": false
+                    ],
+                    "models": [
+                        "default_model": [
+                            "name": selectedModel.displayName,
+                            "limit": ["context": 32768, "output": 8192]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: config,
+                                                  options: [.prettyPrinted, .sortedKeys]),
+           let text = String(data: data, encoding: .utf8) {
+            // JSONSerialization escapes "/" as "\/"; unescape for a readable
+            // config and so the "already configured" substring check matches.
+            return text.replacingOccurrences(of: "\\/", with: "/")
+        }
+        return "{}\n"
     }
 
     // MARK: - Networking

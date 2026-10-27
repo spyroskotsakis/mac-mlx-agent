@@ -9,6 +9,7 @@ struct ContentView: View {
             header
             statusCard
             requirementsSection
+            integrationsSection
             modelSection
             controls
             Divider()
@@ -21,9 +22,13 @@ struct ContentView: View {
         .onAppear {
             server.onAppear()
             server.checkModelCached()
+            server.checkOpenCodeConfig()
         }
         .onChange(of: server.selectedModel) { _, _ in
             server.checkModelCached()
+        }
+        .onChange(of: server.port) { _, _ in
+            server.checkOpenCodeConfig()
         }
     }
 
@@ -131,6 +136,40 @@ struct ContentView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .disabled(server.isInstalling)
+            }
+        }
+    }
+
+    private var integrationsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Integrations").font(.subheadline).foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                Image(systemName: server.openCodeConfigConfigured ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(server.openCodeConfigConfigured ? Color.green : Color.orange)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("OpenCode").font(.callout)
+                    Text(server.openCodeConfigConfigured
+                         ? "configured for port \(server.port)"
+                         : "write a global config pointing OpenCode at this server")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                Spacer()
+                Button(server.openCodeConfigConfigured ? "Rewrite" : "Set up") {
+                    server.writeOpenCodeConfig()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+            if !server.setupMessage.isEmpty {
+                Text(server.setupMessage)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
             }
         }
     }
