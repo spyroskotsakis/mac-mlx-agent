@@ -33,6 +33,17 @@ needs, with one-click fixes when something is missing:
 
 The checks run when you open the panel and whenever you switch models.
 
+## Concurrent requests
+
+By default the server uses a **4-bit KV cache** (`--kv-bits 4`), which keeps big
+models inside Metal memory but makes `mlx_lm.server` serve requests one at a time.
+
+For a **smaller model**, turn on **Advanced → Allow concurrent requests**. This
+drops the quantized KV cache (full precision), so the server can batch concurrent
+requests in parallel (`--prompt-concurrency` / `--decode-concurrency`). It's **off
+by default** because it needs more memory — enable it only when the model leaves
+room to spare. The setting is remembered and only takes effect on the next Start.
+
 ## Build & run
 
 Open `MLXServer.xcodeproj` in Xcode and press **Run**, or build from the terminal:

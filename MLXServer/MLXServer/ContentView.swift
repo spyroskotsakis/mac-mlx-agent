@@ -186,6 +186,19 @@ struct ContentView: View {
                     Text("Port: \(server.port)")
                 }
                 .disabled(!server.canSwitchModel)
+
+                Divider()
+
+                Toggle(isOn: $server.allowConcurrentRequests) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Allow concurrent requests")
+                        Text("Uses full-precision KV cache so the server can batch requests in parallel. Needs more memory — use only with a smaller model.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
+                .disabled(!server.canSwitchModel)
             }
             .padding(.top, 6)
         }

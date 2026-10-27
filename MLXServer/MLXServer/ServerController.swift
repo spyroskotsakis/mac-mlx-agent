@@ -33,13 +33,13 @@ final class ServerController: ObservableObject {
         }
     }
 
-    /// Models offered by the picker. Add more entries here as you download them
-    /// (the server auto-downloads on first launch if they aren't cached). The
-    /// first entry is the default selection.
     /// Single shared instance used by both the SwiftUI app and the AppDelegate
     /// (which needs to stop the server before the app exits).
     static let shared = ServerController()
 
+    /// Models offered by the picker. Add more entries here as you download them
+    /// (the server auto-downloads on first launch if they aren't cached). The
+    /// first entry is the default selection.
     static let availableModels: [ModelOption] = [
         ModelOption(repoID: "mlx-community/Qwen3.5-35B-A3B-4bit",
                     displayName: "Qwen3.5-35B-A3B (4-bit)")
@@ -71,6 +71,13 @@ final class ServerController: ObservableObject {
         }
     }
 
+    /// When true, the server omits `--kv-bits 4` so its KV cache stays full
+    /// precision and requests can be batched in parallel. Off by default because
+    /// quantized KV cache is what keeps larger models inside Metal memory.
+    @Published var allowConcurrentRequests: Bool {
+        didSet { UserDefaults.standard.set(allowConcurrentRequests, forKey: Keys.allowConcurrent) }
+    }
+
     private var process: Process?
     private var pollTask: Task<Void, Never>?
 
@@ -78,6 +85,7 @@ final class ServerController: ObservableObject {
         static let model = "mlxServerModel"
         static let port = "mlxServerPort"
         static let executable = "mlxServerExecutable"
+        static let allowConcurrent = "mlxServerAllowConcurrent"
     }
 
     init() {
@@ -85,6 +93,7 @@ final class ServerController: ObservableObject {
         self.port = savedPort == 0 ? 8080 : savedPort
 
         self.executablePath = UserDefaults.standard.string(forKey: Keys.executable) ?? ""
+        self.allowConcurrentRequests = UserDefaults.standard.bool(forKey: Keys.allowConcurrent)
 
         let savedModel = UserDefaults.standard.string(forKey: Keys.model)
         self.selectedModel = Self.availableModels.first(where: { $0.repoID == savedModel })
@@ -152,7 +161,7 @@ final class ServerController: ObservableObject {
 
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: exe)
-        proc.arguments = Self.arguments(model: selectedModel.repoID, port: port)
+        proc.arguments = arguments(model: selectedModel.repoID, port: port)
 
         let outPipe = Pipe()
         let errPipe = Pipe()
@@ -175,7 +184,7 @@ final class ServerController: ObservableObject {
         process = proc
         state = .starting
         log = ""
-        appendLog("$ \(exe) " + Self.arguments(model: selectedModel.repoID, port: port).joined(separator: " ") + "\n\n")
+        appendLog("$ \(exe) " + arguments(model: selectedModel.repoID, port: port).joined(separator: " ") + "\n\n")
 
         proc.terminationHandler = { [weak self] finished in
             DispatchQueue.main.async {
@@ -428,20 +437,27 @@ final class ServerController: ObservableObject {
 
     // MARK: - Static helpers
 
-    private static func arguments(model: String, port: Int) -> [String] {
-        // Mirrors start_server.sh: 4-bit KV cache (keeps the 35B-A3B MoE inside
-        // Metal memory), a token cap that lets tool calls finish, and
+    private func arguments(model: String, port: Int) -> [String] {
+        // Mirrors start_server.sh: a token cap that lets tool calls finish, and
         // deterministic-but-not-greedy sampling to avoid repetition loops.
-        [
+        var args: [String] = [
             "--model", model,
             "--host", "127.0.0.1",
-            "--port", "\(port)",
-            "--kv-bits", "4",
+            "--port", "\(port)"
+        ]
+        // Quantized KV cache (--kv-bits 4) keeps large models inside Metal memory
+        // but forces mlx_lm.server to serve requests one at a time. Omit it (full
+        // precision) when the user opts into concurrent/batched requests.
+        if !allowConcurrentRequests {
+            args += ["--kv-bits", "4"]
+        }
+        args += [
             "--max-tokens", "8192",
             "--temp", "0.2",
             "--top-p", "0.8",
             "--top-k", "20"
         ]
+        return args
     }
 
     private static func resolveExecutable(override: String) -> String? {
