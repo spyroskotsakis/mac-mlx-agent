@@ -15,6 +15,53 @@ Everything runs on your own hardware. Your code never leaves your Mac.
 
 ---
 
+## What is MLX — and why this is interesting
+
+### MLX, in a paragraph
+
+**MLX** is Apple's open-source machine-learning framework for Apple Silicon
+(M1/M2/M3/M4 Macs). It runs models on the GPU and Neural Engine through Metal,
+and — critically — it uses the Mac's **unified memory**: the CPU and GPU share
+one pool of RAM instead of copying data back and forth over a bus. That single
+feature is what makes running a ~19 GB, 35-billion-parameter model on a laptop
+practical at all.
+
+**MLX-LM** is the LLM toolkit built on top of MLX (`pip install mlx-lm`). It can
+load, run, quantize, and fine-tune models, and it ships **`mlx_lm.server`** — a
+small HTTP server that loads a model and exposes it behind the same
+**OpenAI chat-completions API** (`POST /v1/chat/completions`) that ChatGPT and
+most AI libraries already speak, including tool calling.
+
+### The MLX server, concretely
+
+In this repo, `mlx_lm.server` loads `Qwen3.5-35B-A3B-4bit` into memory and
+listens on `http://127.0.0.1:8080/v1`, where your model is reachable as
+`default_model`. Because the API is OpenAI-compatible, **anything that can point
+at an OpenAI-compatible URL can use it** — Xcode, Claude Code, OpenCode, a bare
+`curl`, or your own app.
+
+### Why this setup is interesting (the pitch)
+
+| If someone cares about… | The point |
+|-------------------------|-----------|
+| **Privacy** | Your source code and prompts never leave the Mac — no cloud upload, no training on your code. |
+| **Cost** | After the hardware, inference is unlimited with no per-token meter. |
+| **Offline use** | Flights, bad Wi-Fi, or air-gapped machines — it still works. |
+| **Control** | You own the model: swap it, quantize it, fine-tune it, pin a version. No vendor ToS changes or deprecations. |
+| **"Is it a toy?"** | No — tool calling + reasoning drive a real agent that edits files, runs builds, and writes apps. |
+
+In short: **one local model becomes the engine behind your whole dev toolchain.**
+The same `127.0.0.1:8080/v1` endpoint powers Xcode's in-editor assistant, Claude
+Code's CLI, and OpenCode, with nothing round-tripping to a cloud provider.
+
+The honest tradeoff: a local 35B MoE is not a frontier cloud model — for the
+hardest problems a hosted model can still win. But for most day-to-day coding,
+"private, free, offline, and yours" is a strong offer. See
+[Performance notes](#performance-notes-from-the-video) and
+[Caveats](#caveats-be-realistic) for the realistic picture.
+
+---
+
 ## The stack (4 layers)
 
 ```
