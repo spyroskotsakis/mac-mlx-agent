@@ -4,6 +4,7 @@ import AppKit
 struct ContentView: View {
     @ObservedObject var server: ServerController
     @State private var showManualConfig = false
+    @State private var showDeleteModelConfirm = false
 
     var body: some View {
         TabView {
@@ -191,8 +192,16 @@ struct ContentView: View {
                 title: "Model files",
                 detail: modelDetail,
                 buttonTitle: "Download",
-                action: server.downloadModel
+                action: server.downloadModel,
+                deleteAction: server.modelCached == true ? { showDeleteModelConfirm = true } : nil
             )
+
+            if !server.modelMessage.isEmpty {
+                Text(server.modelMessage)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
 
             if server.isInstalling {
                 if let progress = server.downloadProgress {
@@ -217,6 +226,12 @@ struct ContentView: View {
                 .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .windowBackgroundColor)))
             }
         }
+        .alert("Delete \(server.selectedModel.displayName)?", isPresented: $showDeleteModelConfirm) {
+            Button("Delete", role: .destructive) { server.deleteModel() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes the model from the local HuggingFace cache and frees \(selectedModelSizeText) of disk space. You can download it again later.")
+        }
     }
 
     private var modelDetail: String {
@@ -224,6 +239,10 @@ struct ContentView: View {
             return cached ? "downloaded" : "not downloaded — required before first start"
         }
         return "checking…"
+    }
+
+    private var selectedModelSizeText: String {
+        ByteCountFormatter.string(fromByteCount: server.selectedModelDiskBytes, countStyle: .file)
     }
 
     private var downloadProgressLabel: String {
@@ -241,7 +260,8 @@ struct ContentView: View {
                                 title: String,
                                 detail: String,
                                 buttonTitle: String,
-                                action: @escaping () -> Void) -> some View {
+                                action: @escaping () -> Void,
+                                deleteAction: (() -> Void)? = nil) -> some View {
         HStack(spacing: 8) {
             Image(systemName: ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                 .foregroundStyle(ok ? Color.green : Color.orange)
@@ -254,6 +274,12 @@ struct ContentView: View {
                     .truncationMode(.middle)
             }
             Spacer()
+            if let deleteAction {
+                Button("Delete") { deleteAction() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(!server.canSwitchModel || server.isInstalling)
+            }
             if showAction {
                 Button(buttonTitle, action: action)
                     .buttonStyle(.bordered)

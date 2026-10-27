@@ -35,7 +35,9 @@ needs, with one-click fixes when something is missing:
 - **Model files** — checks the local HuggingFace cache for the selected model's
   weights; click **Download** to fetch them with `hf download <repo-id>`, and
   watch a live **progress bar with the percentage** while it downloads. (You can
-  also just press Start — the server auto-downloads on first launch.)
+  also just press Start — the server auto-downloads on first launch.) Once a
+  model is cached, a **Delete** button removes it from the cache (after a
+  confirmation) to free disk space; the server must be stopped first.
 
 The checks run when you open the panel and whenever you switch models.
 

@@ -68,6 +68,7 @@ final class ServerController: ObservableObject {
     @Published private(set) var downloadProgress: Double?
     @Published private(set) var downloadTotalBytes: Int64?
     @Published private(set) var downloadBytes: Int64 = 0
+    @Published private(set) var modelMessage: String = ""
     @Published private(set) var openCodeConfigStatus: OpenCodeConfigStatus = .checking
     @Published private(set) var setupMessage: String = ""
     @Published private(set) var openCodePath: String?
@@ -396,6 +397,33 @@ final class ServerController: ObservableObject {
     /// HuggingFace cache and updates `modelCached`.
     func checkModelCached() {
         modelCached = Self.modelIsCached(repoID: selectedModel.repoID)
+        modelMessage = ""
+    }
+
+    /// On-disk bytes of the currently-selected model in the HF cache (0 if absent).
+    var selectedModelDiskBytes: Int64 {
+        let repo = selectedModel.repoID
+        let blobsDir = Self.hfHubDir() + "/models--" + repo.replacingOccurrences(of: "/", with: "--") + "/blobs"
+        return Self.directorySize(atPath: blobsDir)
+    }
+
+    /// Deletes the currently-selected model from the local HuggingFace cache,
+    /// removing its whole `models--…` directory (blobs, snapshots, and refs).
+    func deleteModel() {
+        guard !isInstalling, canSwitchModel else { return }
+        let repo = selectedModel.repoID
+        let repoDir = Self.hfHubDir() + "/models--" + repo.replacingOccurrences(of: "/", with: "--")
+        let freed = Self.directorySize(atPath: repoDir + "/blobs")
+        do {
+            if FileManager.default.fileExists(atPath: repoDir) {
+                try FileManager.default.removeItem(atPath: repoDir)
+            }
+            checkModelCached()
+            let freedText = ByteCountFormatter.string(fromByteCount: freed, countStyle: .file)
+            modelMessage = "Deleted \(repo) — freed \(freedText)."
+        } catch {
+            modelMessage = "Failed to delete \(repo): \(error.localizedDescription)"
+        }
     }
 
     /// Re-resolves the `mlx_lm.server` binary (used after an install finishes).
