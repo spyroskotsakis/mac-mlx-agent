@@ -11,8 +11,8 @@ A small native macOS **menu-bar app** that starts and stops the local
 - **Pick the model** (one now — Qwen3.5-35B-A3B — with a single place to add more).
 - Shows a **live log** of the server (model load progress, requests, errors).
 - Lets you override the **port** and the **`mlx_lm.server` path** under *Advanced*.
-- **One-click OpenCode setup** — writes a global OpenCode config pointing at the
-  server (see below).
+- **OpenCode setup, automatic or manual** — writes (or shows you) a global
+  OpenCode config pointing at the server (see below).
 
 The server arguments mirror `start_server.sh` exactly:
 
@@ -46,20 +46,41 @@ requests in parallel (`--prompt-concurrency` / `--decode-concurrency`). It's **o
 by default** because it needs more memory — enable it only when the model leaves
 room to spare. The setting is remembered and only takes effect on the next Start.
 
-## OpenCode one-click setup
+## OpenCode setup (automatic or manual)
 
-The **Integrations → OpenCode** row writes a global config to
-`~/.config/opencode/opencode.jsonc` that points OpenCode at this server:
+The **Integrations** section first checks whether the `opencode` CLI is
+installed. If it isn't, the automatic setup button is disabled and the panel
+shows the one-liner to install it:
 
-- Uses the app's **current port** and **selected model**.
-- Sets `model: "mlx/default_model"`, `baseURL: http://127.0.0.1:<port>/v1`, and
-  the load-bearing `limit.output: 8192` (so a mid-generation disconnect can't
-  wedge the single generation thread — see the main repo `README.md`).
-- Backs up any existing `opencode.jsonc` to a timestamped `.bak-…` file before
-  overwriting.
+```bash
+curl -fsSL https://opencode.ai/install | bash
+```
 
-Click **Set up** (or **Rewrite** once configured). The row shows a green ✓ when
-the file already points at the current port.
+Once OpenCode is present, you choose how to set up the config that points it at
+this server (`~/.config/opencode/opencode.jsonc`):
+
+- **Automatic** — click **Set up**. It writes the config for you, using the
+  app's **current port** and **selected model**, and backs up any existing
+  `opencode.jsonc` to a timestamped `.bak-…` file before overwriting.
+- **Manual** — click **Manual** to see the exact config text, then write it
+  yourself (or click **Copy config**). Click **Verify** to re-check it.
+
+The config sets `model: "mlx/default_model"`,
+`baseURL: http://127.0.0.1:<port>/v1`, and the load-bearing `limit.output: 8192`
+(so a mid-generation disconnect can't wedge the single generation thread — see
+the main repo `README.md`).
+
+Because the config is **port-specific**, the status re-checks the current port
+every time the panel opens (and whenever you change the port):
+
+| Status | Meaning |
+|--------|---------|
+| ✓ configured for port N | config points at the current port — done |
+| ⚠ points at port M, not N | stale port — click **Update** to fix |
+| ⚠ no config yet | missing — **Set up** or **Manual** |
+
+Once the config correctly points at the current port, the automatic button is
+hidden so a setup you did by hand can't be overwritten by an accidental click.
 
 ## Build & run
 

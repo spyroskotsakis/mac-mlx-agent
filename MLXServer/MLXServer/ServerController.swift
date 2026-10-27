@@ -33,6 +33,13 @@ final class ServerController: ObservableObject {
         }
     }
 
+    enum OpenCodeConfigStatus {
+        case checking
+        case notConfigured
+        case portMismatch(foundPort: Int)
+        case configured
+    }
+
     /// Single shared instance used by both the SwiftUI app and the AppDelegate
     /// (which needs to stop the server before the app exits).
     static let shared = ServerController()
@@ -55,8 +62,9 @@ final class ServerController: ObservableObject {
     @Published private(set) var modelCached: Bool?
     @Published private(set) var installOutput: String = ""
     @Published private(set) var isInstalling: Bool = false
-    @Published private(set) var openCodeConfigConfigured: Bool = false
+    @Published private(set) var openCodeConfigStatus: OpenCodeConfigStatus = .checking
     @Published private(set) var setupMessage: String = ""
+    @Published private(set) var openCodePath: String?
 
     @Published var selectedModel: ModelOption {
         didSet { UserDefaults.standard.set(selectedModel.repoID, forKey: Keys.model) }
@@ -96,6 +104,7 @@ final class ServerController: ObservableObject {
 
         self.executablePath = UserDefaults.standard.string(forKey: Keys.executable) ?? ""
         self.allowConcurrentRequests = UserDefaults.standard.bool(forKey: Keys.allowConcurrent)
+        self.openCodePath = Self.resolveOpenCode()
 
         let savedModel = UserDefaults.standard.string(forKey: Keys.model)
         self.selectedModel = Self.availableModels.first(where: { $0.repoID == savedModel })
@@ -419,15 +428,37 @@ final class ServerController: ObservableObject {
         FileManager.default.homeDirectoryForCurrentUser.path + "/.config/opencode/opencode.jsonc"
     }
 
-    /// Updates `openCodeConfigConfigured` based on whether a config exists and
-    /// already points at the current port.
+    /// Re-checks the OpenCode config file. Because the config is port-specific,
+    /// this verifies the file actually points at the *current* port (and reports
+    /// a stale port as a mismatch rather than "configured"), so a manual or
+    /// automatic setup is never treated as done unless it aligns with the server.
     func checkOpenCodeConfig() {
         let path = openCodeConfigPath()
-        guard let contents = try? String(contentsOfFile: path, encoding: .utf8) else {
-            openCodeConfigConfigured = false
+        guard let contents = try? String(contentsOfFile: path, encoding: .utf8),
+              let found = Self.portReferenced(in: contents) else {
+            openCodeConfigStatus = .notConfigured
             return
         }
-        openCodeConfigConfigured = contents.contains("127.0.0.1:\(port)/v1")
+        openCodeConfigStatus = found == port ? .configured : .portMismatch(foundPort: found)
+    }
+
+    /// Extracts the `127.0.0.1:<port>/v1` (or `localhost:<port>/v1`) port that a
+    /// config file's `baseURL` points at, if any.
+    private static func portReferenced(in text: String) -> Int? {
+        let pattern = #"(?:127\.0\.0\.1|localhost):(\d+)/v1"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, range: range),
+              let portRange = Range(match.range(at: 1), in: text),
+              let found = Int(text[portRange]) else {
+            return nil
+        }
+        return found
+    }
+
+    /// Re-resolves the OpenCode CLI (nil if not installed).
+    func checkOpenCode() {
+        openCodePath = Self.resolveOpenCode()
     }
 
     /// Writes a global OpenCode config pointing at this server (current port +
@@ -460,7 +491,7 @@ final class ServerController: ObservableObject {
     /// `limit.output: 8192` caps OpenCode's requests to match the server's
     /// `--max-tokens`, which keeps a mid-generation disconnect from wedging the
     /// single generation thread (see the main repo README).
-    private var openCodeConfigText: String {
+    var openCodeConfigText: String {
         let config: [String: Any] = [
             "$schema": "https://opencode.ai/config.json",
             "model": "mlx/default_model",
@@ -562,13 +593,28 @@ final class ServerController: ObservableObject {
         for candidate in candidates where FileManager.default.isExecutableFile(atPath: candidate) {
             return candidate
         }
-        return resolveViaLoginShell()
+        return resolveViaLoginShell(command: "mlx_lm.server")
     }
 
-    private static func resolveViaLoginShell() -> String? {
+    /// Finds the OpenCode CLI, preferring its standard install location.
+    private static func resolveOpenCode() -> String? {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let candidates = [
+            home + "/.opencode/bin/opencode",
+            home + "/.local/bin/opencode",
+            "/opt/homebrew/bin/opencode",
+            "/usr/local/bin/opencode"
+        ]
+        for candidate in candidates where FileManager.default.isExecutableFile(atPath: candidate) {
+            return candidate
+        }
+        return resolveViaLoginShell(command: "opencode")
+    }
+
+    private static func resolveViaLoginShell(command: String) -> String? {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        proc.arguments = ["-ic", "command -v mlx_lm.server"]
+        proc.arguments = ["-ic", "command -v \(command)"]
         let out = Pipe()
         proc.standardOutput = out
         proc.standardError = Pipe()

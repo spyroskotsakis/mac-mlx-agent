@@ -3,6 +3,7 @@ import AppKit
 
 struct ContentView: View {
     @ObservedObject var server: ServerController
+    @State private var showManualConfig = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -23,6 +24,7 @@ struct ContentView: View {
             server.onAppear()
             server.checkModelCached()
             server.checkOpenCodeConfig()
+            server.checkOpenCode()
         }
         .onChange(of: server.selectedModel) { _, _ in
             server.checkModelCached()
@@ -144,24 +146,54 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Integrations").font(.subheadline).foregroundStyle(.secondary)
 
+            // OpenCode binary: detect whether the CLI is installed.
             HStack(spacing: 8) {
-                Image(systemName: server.openCodeConfigConfigured ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                    .foregroundStyle(server.openCodeConfigConfigured ? Color.green : Color.orange)
+                Image(systemName: server.openCodePath != nil ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(server.openCodePath != nil ? Color.green : Color.orange)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("OpenCode").font(.callout)
-                    Text(server.openCodeConfigConfigured
-                         ? "configured for port \(server.port)"
-                         : "write a global config pointing OpenCode at this server")
+                    Text(server.openCodePath ?? "not installed")
+                        .font(.caption2)
+                        .foregroundStyle(server.openCodePath == nil ? .orange : .secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer()
+            }
+
+            if server.openCodePath == nil {
+                Text("Install OpenCode, then reopen this panel:\ncurl -fsSL https://opencode.ai/install | bash")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+
+            // Config: automatic or manual. The config is port-specific, so the
+            // status re-checks the current port and flags a stale one.
+            HStack(spacing: 8) {
+                Image(systemName: configSymbol)
+                    .foregroundStyle(configColor)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Config").font(.callout)
+                    Text(configDetail)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
                 Spacer()
-                Button(server.openCodeConfigConfigured ? "Rewrite" : "Set up") {
-                    server.writeOpenCodeConfig()
+                if showsAutoSetup {
+                    Button(configButtonTitle) { server.writeOpenCodeConfig() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(server.openCodePath == nil)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                Button(showManualConfig ? "Hide" : "Manual") { showManualConfig.toggle() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+            }
+
+            if showManualConfig {
+                manualConfigView
             }
 
             if !server.setupMessage.isEmpty {
@@ -170,6 +202,77 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
+            }
+        }
+    }
+
+    private var configSymbol: String {
+        switch server.openCodeConfigStatus {
+        case .configured: return "checkmark.circle.fill"
+        case .checking: return "hourglass"
+        case .notConfigured, .portMismatch: return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private var configColor: Color {
+        switch server.openCodeConfigStatus {
+        case .configured: return .green
+        case .checking: return .gray
+        case .notConfigured, .portMismatch: return .orange
+        }
+    }
+
+    private var configDetail: String {
+        switch server.openCodeConfigStatus {
+        case .checking: return "checking…"
+        case .notConfigured: return "no config yet — set it up automatically or manually"
+        case .portMismatch(let foundPort): return "points at port \(foundPort), not \(server.port)"
+        case .configured: return "configured for port \(server.port)"
+        }
+    }
+
+    /// Show the auto "Set up"/"Update" button only when the config is missing or
+    /// stale. Once it's correctly configured we hide it, so a manual setup can't
+    /// be overwritten by an accidental click.
+    private var showsAutoSetup: Bool {
+        switch server.openCodeConfigStatus {
+        case .notConfigured, .portMismatch: return true
+        case .checking, .configured: return false
+        }
+    }
+
+    private var configButtonTitle: String {
+        if case .portMismatch = server.openCodeConfigStatus { return "Update" }
+        return "Set up"
+    }
+
+    private var manualConfigView: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Write this to \(server.openCodeConfigPath())")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+            ScrollView {
+                Text(server.openCodeConfigText)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+            .frame(height: 170)
+            .padding(8)
+            .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .windowBackgroundColor)))
+            HStack(spacing: 8) {
+                Button("Copy config") {
+                    let pasteboard = NSPasteboard.general
+                    pasteboard.clearContents()
+                    pasteboard.setString(server.openCodeConfigText, forType: .string)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                Button("Verify") { server.checkOpenCodeConfig() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
             }
         }
     }
