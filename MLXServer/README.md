@@ -12,6 +12,8 @@ A small native macOS **menu-bar app** that starts and stops the local
   or Qwen3-14B, with a single place to add more.
 - Shows a **live log** of the server (model load progress, requests, errors).
 - Lets you override the **port** and the **`mlx_lm.server` path** under *Advanced*.
+- **Model settings** — toggle **thinking mode** and tune temperature, top-p,
+  top-k, and max tokens (applied on the next Start).
 - A **folder** button next to the model files and the OpenCode config opens that
   folder in Finder (the model cache, or `~/.config/opencode`).
 - **OpenCode setup, automatic or manual** — writes (or shows you) a global
@@ -19,11 +21,14 @@ A small native macOS **menu-bar app** that starts and stops the local
 - A **Connect** tab with everything you need to call the model from custom code
   (base URL, model name, endpoints, ready-to-paste `curl` and Python examples).
 
-The server arguments mirror `start_server.sh` exactly:
+The server is launched with `start_server.sh`'s defaults, all configurable in
+the **Model settings** section (thinking mode, temperature, top-p, top-k, max
+tokens):
 
 ```
 --model <model> --host 127.0.0.1 --port <port> \
-  --kv-bits 4 --max-tokens 8192 --temp 0.2 --top-p 0.8 --top-k 20
+  --kv-bits 4 --max-tokens 8192 --temp 0.2 --top-p 0.8 --top-k 20 \
+  --chat-template-args '{"enable_thinking":false}'
 ```
 
 ## Requirements check
@@ -74,9 +79,9 @@ this server (`~/.config/opencode/opencode.jsonc`):
   yourself (or click **Copy config**). Click **Verify** to re-check it.
 
 The config sets `model: "mlx/default_model"`,
-`baseURL: http://127.0.0.1:<port>/v1`, and the load-bearing `limit.output: 8192`
-(so a mid-generation disconnect can't wedge the single generation thread — see
-the main repo `README.md`).
+`baseURL: http://127.0.0.1:<port>/v1`, and a `limit.output` matching the app's
+configured **Max tokens** (so a mid-generation disconnect can't wedge the single
+generation thread — see the main repo `README.md`).
 
 Because the config is **port-specific**, the status re-checks the current port
 every time the panel opens (and whenever you change the port):

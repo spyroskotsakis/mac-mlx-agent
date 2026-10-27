@@ -35,6 +35,7 @@ struct ContentView: View {
             requirementsSection
             integrationsSection
             modelSection
+            modelSettingsSection
             controls
             Divider()
             advancedSection
@@ -461,6 +462,64 @@ struct ContentView: View {
             Text("Stop the server before switching models.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    private var modelSettingsSection: some View {
+        DisclosureGroup("Model settings") {
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle(isOn: $server.enableThinking) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Thinking mode")
+                        Text("Qwen3 models reason in a hidden thinking step before answering.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .toggleStyle(.switch)
+                .disabled(!server.canSwitchModel)
+
+                Divider()
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Temperature").font(.callout)
+                        Spacer()
+                        Text(String(format: "%.2f", server.temperature))
+                            .font(.callout.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                    Slider(value: $server.temperature, in: 0...2, step: 0.05)
+                        .disabled(!server.canSwitchModel)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Top-p").font(.callout)
+                        Spacer()
+                        Text(String(format: "%.2f", server.topP))
+                            .font(.callout.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
+                    Slider(value: $server.topP, in: 0...1, step: 0.05)
+                        .disabled(!server.canSwitchModel)
+                }
+
+                Stepper(value: $server.topK, in: 0...200) {
+                    Text("Top-k: \(server.topK)").font(.callout)
+                }
+                .disabled(!server.canSwitchModel)
+
+                Stepper(value: $server.maxTokens, in: 256...32768, step: 256) {
+                    Text("Max tokens: \(server.maxTokens)").font(.callout)
+                }
+                .disabled(!server.canSwitchModel)
+
+                Text("Settings apply on the next Start.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.top, 6)
         }
     }
 

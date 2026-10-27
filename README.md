@@ -186,8 +186,9 @@ Endpoints exposed:
 
 This repo also ships a small native macOS **menu bar app** (`MLXServer/`) that
 starts and stops the server for you and lets you switch models — no terminal
-needed. It lives next to the clock and mirrors `start_server.sh` exactly (same
-`--kv-bits 4 --max-tokens 8192 --temp 0.2 --top-p 0.8 --top-k 20`).
+needed. It lives next to the clock and defaults to `start_server.sh`'s flags —
+`--kv-bits 4 --max-tokens 8192 --temp 0.2 --top-p 0.8 --top-k 20` — all editable
+in its **Model settings** section, plus a **Thinking mode** toggle.
 
 - Click the **MLX Server** icon in the menu bar to open the control panel.
 - **Start / Stop** the server, pick the model, and watch the live log.

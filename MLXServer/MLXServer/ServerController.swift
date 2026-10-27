@@ -95,6 +95,33 @@ final class ServerController: ObservableObject {
         didSet { UserDefaults.standard.set(allowConcurrentRequests, forKey: Keys.allowConcurrent) }
     }
 
+    /// When true, the server passes `--chat-template-args '{"enable_thinking":true}'`
+    /// so Qwen3-family models emit a hidden reasoning step before answering.
+    /// Only takes effect on the next Start.
+    @Published var enableThinking: Bool {
+        didSet { UserDefaults.standard.set(enableThinking, forKey: Keys.enableThinking) }
+    }
+
+    /// Sampling temperature (0–2).
+    @Published var temperature: Double {
+        didSet { UserDefaults.standard.set(temperature, forKey: Keys.temperature) }
+    }
+
+    /// Nucleus sampling top-p (0–1).
+    @Published var topP: Double {
+        didSet { UserDefaults.standard.set(topP, forKey: Keys.topP) }
+    }
+
+    /// Top-k sampling (0 disables it).
+    @Published var topK: Int {
+        didSet { UserDefaults.standard.set(topK, forKey: Keys.topK) }
+    }
+
+    /// Default maximum number of generated tokens per request.
+    @Published var maxTokens: Int {
+        didSet { UserDefaults.standard.set(maxTokens, forKey: Keys.maxTokens) }
+    }
+
     private var process: Process?
     private var pollTask: Task<Void, Never>?
     private var downloadPollTask: Task<Void, Never>?
@@ -104,6 +131,11 @@ final class ServerController: ObservableObject {
         static let port = "mlxServerPort"
         static let executable = "mlxServerExecutable"
         static let allowConcurrent = "mlxServerAllowConcurrent"
+        static let enableThinking = "mlxServerEnableThinking"
+        static let temperature = "mlxServerTemperature"
+        static let topP = "mlxServerTopP"
+        static let topK = "mlxServerTopK"
+        static let maxTokens = "mlxServerMaxTokens"
     }
 
     init() {
@@ -112,6 +144,11 @@ final class ServerController: ObservableObject {
 
         self.executablePath = UserDefaults.standard.string(forKey: Keys.executable) ?? ""
         self.allowConcurrentRequests = UserDefaults.standard.bool(forKey: Keys.allowConcurrent)
+        self.enableThinking = UserDefaults.standard.bool(forKey: Keys.enableThinking)
+        self.temperature = UserDefaults.standard.object(forKey: Keys.temperature) as? Double ?? 0.2
+        self.topP = UserDefaults.standard.object(forKey: Keys.topP) as? Double ?? 0.8
+        self.topK = UserDefaults.standard.object(forKey: Keys.topK) as? Int ?? 20
+        self.maxTokens = UserDefaults.standard.object(forKey: Keys.maxTokens) as? Int ?? 8192
         self.openCodePath = Self.resolveOpenCode()
 
         let savedModel = UserDefaults.standard.string(forKey: Keys.model)
@@ -634,9 +671,10 @@ final class ServerController: ObservableObject {
     }
 
     /// The OpenCode config that points the agent at this MLX server. The
-    /// `limit.output: 8192` caps OpenCode's requests to match the server's
-    /// `--max-tokens`, which keeps a mid-generation disconnect from wedging the
-    /// single generation thread (see the main repo README).
+    /// `limit.output` caps OpenCode's requests to match the server's
+    /// `--max-tokens` (kept in sync with the Model settings), which keeps a
+    /// mid-generation disconnect from wedging the single generation thread (see
+    /// the main repo README).
     var openCodeConfigText: String {
         let config: [String: Any] = [
             "$schema": "https://opencode.ai/config.json",
@@ -653,7 +691,7 @@ final class ServerController: ObservableObject {
                     "models": [
                         "default_model": [
                             "name": selectedModel.displayName,
-                            "limit": ["context": 32768, "output": 8192]
+                            "limit": ["context": 32768, "output": maxTokens]
                         ]
                     ]
                 ]
@@ -729,8 +767,9 @@ final class ServerController: ObservableObject {
     // MARK: - Static helpers
 
     private func arguments(model: String, port: Int) -> [String] {
-        // Mirrors start_server.sh: a token cap that lets tool calls finish, and
-        // deterministic-but-not-greedy sampling to avoid repetition loops.
+        // A token cap that lets tool calls finish, and deterministic-but-not-greedy
+        // sampling to avoid repetition loops. All values are user-configurable in
+        // the Model settings section and only take effect on the next Start.
         var args: [String] = [
             "--model", model,
             "--host", "127.0.0.1",
@@ -743,12 +782,19 @@ final class ServerController: ObservableObject {
             args += ["--kv-bits", "4"]
         }
         args += [
-            "--max-tokens", "8192",
-            "--temp", "0.2",
-            "--top-p", "0.8",
-            "--top-k", "20"
+            "--max-tokens", "\(maxTokens)",
+            "--temp", Self.samplingText(temperature),
+            "--top-p", Self.samplingText(topP),
+            "--top-k", "\(topK)",
+            "--chat-template-args", "{\"enable_thinking\":\(enableThinking ? "true" : "false")}"
         ]
         return args
+    }
+
+    /// Formats a sampling Double for the command line without trailing noise
+    /// (0.8, not 0.80).
+    private static func samplingText(_ value: Double) -> String {
+        String(format: "%.4g", value)
     }
 
     private static func resolveExecutable(override: String) -> String? {
