@@ -12,6 +12,8 @@ A small native macOS **menu-bar app** that starts and stops the local
   or Qwen3-14B, with a single place to add more.
 - Shows a **live log** of the server (model load progress, requests, errors).
 - Lets you override the **port** and the **`mlx_lm.server` path** under *Advanced*.
+- A **folder** button next to the model files and the OpenCode config opens that
+  folder in Finder (the model cache, or `~/.config/opencode`).
 - **OpenCode setup, automatic or manual** — writes (or shows you) a global
   OpenCode config pointing at the server (see below).
 - A **Connect** tab with everything you need to call the model from custom code

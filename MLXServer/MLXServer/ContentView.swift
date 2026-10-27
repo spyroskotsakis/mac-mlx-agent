@@ -137,6 +137,19 @@ struct ContentView: View {
         pasteboard.setString(text, forType: .string)
     }
 
+    /// Opens `path` in Finder, falling back to the nearest existing ancestor so
+    /// the click always lands somewhere sensible (a not-yet-created folder opens
+    /// its parent instead).
+    private func openInFinder(_ path: String) {
+        var p = path
+        while !FileManager.default.fileExists(atPath: p) {
+            let parent = (p as NSString).deletingLastPathComponent
+            if parent == p { break }
+            p = parent
+        }
+        NSWorkspace.shared.open(URL(fileURLWithPath: p))
+    }
+
     private var header: some View {
         HStack(spacing: 10) {
             Image(systemName: "cpu")
@@ -193,7 +206,8 @@ struct ContentView: View {
                 detail: modelDetail,
                 buttonTitle: "Download",
                 action: server.downloadModel,
-                deleteAction: server.modelCached == true ? { showDeleteModelConfirm = true } : nil
+                deleteAction: server.modelCached == true ? { showDeleteModelConfirm = true } : nil,
+                folderAction: { openInFinder(server.modelFolderPath) }
             )
 
             if !server.modelMessage.isEmpty {
@@ -261,7 +275,8 @@ struct ContentView: View {
                                 detail: String,
                                 buttonTitle: String,
                                 action: @escaping () -> Void,
-                                deleteAction: (() -> Void)? = nil) -> some View {
+                                deleteAction: (() -> Void)? = nil,
+                                folderAction: (() -> Void)? = nil) -> some View {
         HStack(spacing: 8) {
             Image(systemName: ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                 .foregroundStyle(ok ? Color.green : Color.orange)
@@ -279,6 +294,13 @@ struct ContentView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .disabled(!server.canSwitchModel || server.isInstalling)
+            }
+            if let folderAction {
+                Button { folderAction() } label: {
+                    Image(systemName: "folder")
+                }
+                .buttonStyle(.borderless)
+                .help("Show in Finder")
             }
             if showAction {
                 Button(buttonTitle, action: action)
@@ -337,6 +359,11 @@ struct ContentView: View {
                 Button(showManualConfig ? "Hide" : "Manual") { showManualConfig.toggle() }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                Button { openInFinder(server.configFolderPath) } label: {
+                    Image(systemName: "folder")
+                }
+                .buttonStyle(.borderless)
+                .help("Show config folder in Finder")
             }
 
             if showManualConfig {

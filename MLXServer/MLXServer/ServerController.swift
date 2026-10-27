@@ -407,6 +407,11 @@ final class ServerController: ObservableObject {
         return Self.directorySize(atPath: blobsDir)
     }
 
+    /// The local HuggingFace cache folder for the currently-selected model.
+    var modelFolderPath: String {
+        Self.hfHubDir() + "/models--" + selectedModel.repoID.replacingOccurrences(of: "/", with: "--")
+    }
+
     /// Deletes the currently-selected model from the local HuggingFace cache,
     /// removing its whole `models--…` directory (blobs, snapshots, and refs).
     func deleteModel() {
@@ -562,6 +567,11 @@ final class ServerController: ObservableObject {
     /// Path to OpenCode's global config file.
     func openCodeConfigPath() -> String {
         FileManager.default.homeDirectoryForCurrentUser.path + "/.config/opencode/opencode.jsonc"
+    }
+
+    /// Folder containing OpenCode's config file (used for "Show in Finder").
+    var configFolderPath: String {
+        (openCodeConfigPath() as NSString).deletingLastPathComponent
     }
 
     /// Re-checks the OpenCode config file. Because the config is port-specific,
