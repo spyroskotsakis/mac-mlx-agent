@@ -8,7 +8,8 @@ A small native macOS **menu-bar app** that starts and stops the local
 
 - **Start / Stop** the MLX-LM server (OpenAI-compatible,
   `http://127.0.0.1:8080/v1`).
-- **Pick the model** (one now — Qwen3.5-35B-A3B — with a single place to add more).
+- **Pick the model** — Qwen3.5-35B-A3B (default), Qwen3.6-35B-A3B, Qwen3.8-27B,
+  or Qwen3-14B, with a single place to add more.
 - Shows a **live log** of the server (model load progress, requests, errors).
 - Lets you override the **port** and the **`mlx_lm.server` path** under *Advanced*.
 - **OpenCode setup, automatic or manual** — writes (or shows you) a global
@@ -32,8 +33,9 @@ needs, with one-click fixes when something is missing:
   run `python -m pip install --upgrade mlx-lm uvicorn fastapi` into the detected
   Python environment (the same one the `mlx_lm.server` shebang points at).
 - **Model files** — checks the local HuggingFace cache for the selected model's
-  weights; click **Download** to fetch them with `hf download <repo-id>`. (You
-  can also just press Start — the server auto-downloads on first launch.)
+  weights; click **Download** to fetch them with `hf download <repo-id>`, and
+  watch a live **progress bar with the percentage** while it downloads. (You can
+  also just press Start — the server auto-downloads on first launch.)
 
 The checks run when you open the panel and whenever you switch models.
 
@@ -174,6 +176,12 @@ Edit `ServerController.availableModels` in `MLXServer/ServerController.swift`:
 static let availableModels: [ModelOption] = [
     ModelOption(repoID: "mlx-community/Qwen3.5-35B-A3B-4bit",
                 displayName: "Qwen3.5-35B-A3B (4-bit)"),
+    ModelOption(repoID: "mlx-community/Qwen3.6-35B-A3B-4bit",
+                displayName: "Qwen3.6-35B-A3B (4-bit)"),
+    ModelOption(repoID: "mlx-community/Qwen3.8-27B-4bit",
+                displayName: "Qwen3.8-27B (4-bit)"),
+    ModelOption(repoID: "mlx-community/Qwen3-14B-4bit",
+                displayName: "Qwen3-14B (4-bit)"),
     ModelOption(repoID: "mlx-community/Your-New-Model-4bit",
                 displayName: "Your New Model (4-bit)"),
 ]

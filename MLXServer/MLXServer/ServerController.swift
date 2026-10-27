@@ -49,10 +49,13 @@ final class ServerController: ObservableObject {
     /// first entry is the default selection.
     static let availableModels: [ModelOption] = [
         ModelOption(repoID: "mlx-community/Qwen3.5-35B-A3B-4bit",
-                    displayName: "Qwen3.5-35B-A3B (4-bit)")
-        // To add another model later, uncomment and fill in, e.g.:
-        // ModelOption(repoID: "mlx-community/Some-Model-4bit",
-        //             displayName: "Some Model (4-bit)")
+                    displayName: "Qwen3.5-35B-A3B (4-bit)"),
+        ModelOption(repoID: "mlx-community/Qwen3.6-35B-A3B-4bit",
+                    displayName: "Qwen3.6-35B-A3B (4-bit)"),
+        ModelOption(repoID: "mlx-community/Qwen3.8-27B-4bit",
+                    displayName: "Qwen3.8-27B (4-bit)"),
+        ModelOption(repoID: "mlx-community/Qwen3-14B-4bit",
+                    displayName: "Qwen3-14B (4-bit)")
     ]
 
     @Published private(set) var state: ServerState = .stopped
@@ -62,6 +65,9 @@ final class ServerController: ObservableObject {
     @Published private(set) var modelCached: Bool?
     @Published private(set) var installOutput: String = ""
     @Published private(set) var isInstalling: Bool = false
+    @Published private(set) var downloadProgress: Double?
+    @Published private(set) var downloadTotalBytes: Int64?
+    @Published private(set) var downloadBytes: Int64 = 0
     @Published private(set) var openCodeConfigStatus: OpenCodeConfigStatus = .checking
     @Published private(set) var setupMessage: String = ""
     @Published private(set) var openCodePath: String?
@@ -90,6 +96,7 @@ final class ServerController: ObservableObject {
 
     private var process: Process?
     private var pollTask: Task<Void, Never>?
+    private var downloadPollTask: Task<Void, Never>?
 
     private enum Keys {
         static let model = "mlxServerModel"
@@ -418,7 +425,8 @@ final class ServerController: ObservableObject {
         })
     }
 
-    /// Downloads the currently-selected model into the local HuggingFace cache.
+    /// Downloads the currently-selected model into the local HuggingFace cache,
+    /// reporting byte-level progress to `downloadProgress` while it runs.
     func downloadModel() {
         guard !isInstalling else { return }
         guard let hf = Self.findHF() else {
@@ -427,14 +435,47 @@ final class ServerController: ObservableObject {
         }
         isInstalling = true
         installOutput = ""
+        downloadProgress = 0
+        downloadTotalBytes = nil
+        downloadBytes = 0
         let repo = selectedModel.repoID
         appendInstallOutput("$ \(hf) download \(repo)\n\n")
+
+        let blobsDir = Self.hfHubDir() + "/models--" + repo.replacingOccurrences(of: "/", with: "--") + "/blobs"
+
+        // Poll the cache's blobs directory to turn bytes-on-disk into a real
+        // percentage, instead of trying to parse the CLI's animated progress bar.
+        downloadPollTask = Task { [weak self] in
+            guard let self else { return }
+            let total = await Self.totalDownloadSize(repoID: repo)
+            await MainActor.run { self.downloadTotalBytes = total }
+            while !Task.isCancelled {
+                let bytes = Self.directorySize(atPath: blobsDir)
+                let fraction: Double?
+                if let total = total, total > 0 {
+                    fraction = min(1.0, Double(bytes) / Double(total))
+                } else {
+                    fraction = nil
+                }
+                await MainActor.run {
+                    self.downloadBytes = bytes
+                    self.downloadProgress = fraction
+                }
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
+        }
+
         runStreaming(executable: hf,
                      arguments: ["download", repo],
                      sink: { [weak self] in self?.appendInstallOutput($0) },
                      completion: { [weak self] status in
             guard let self else { return }
+            self.downloadPollTask?.cancel()
+            self.downloadPollTask = nil
             self.isInstalling = false
+            self.downloadProgress = nil
+            self.downloadTotalBytes = nil
+            self.downloadBytes = 0
             self.appendInstallOutput(status == 0 ? "\n[Model downloaded]\n" : "\n[download failed (status \(status))]\n")
             self.checkModelCached()
         })
@@ -783,6 +824,34 @@ final class ServerController: ObservableObject {
             return (hfHome as NSString).expandingTildeInPath + "/hub"
         }
         return FileManager.default.homeDirectoryForCurrentUser.path + "/.cache/huggingface/hub"
+    }
+
+    /// Total byte size of a repo's downloadable files, from the HF API.
+    private static func totalDownloadSize(repoID: String) async -> Int64? {
+        guard let url = URL(string: "https://huggingface.co/api/models/\(repoID)?blobs=true") else { return nil }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 20
+        guard let (data, _) = try? await URLSession.shared.data(for: request),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let siblings = json["siblings"] as? [[String: Any]] else {
+            return nil
+        }
+        let total = siblings.reduce(into: Int64(0)) { acc, file in
+            if let size = file["size"] as? NSNumber { acc += size.int64Value }
+        }
+        return total > 0 ? total : nil
+    }
+
+    /// Sum of regular-file sizes directly under `path` (0 if it doesn't exist).
+    private static func directorySize(atPath path: String) -> Int64 {
+        let fm = FileManager.default
+        guard let names = try? fm.contentsOfDirectory(atPath: path) else { return 0 }
+        return names.reduce(into: Int64(0)) { acc, name in
+            if let attrs = try? fm.attributesOfItem(atPath: path + "/" + name),
+               let size = attrs[.size] as? NSNumber {
+                acc += size.int64Value
+            }
+        }
     }
 
     private static let weightExtensions = [".safetensors", ".gguf", ".npz", ".bin"]

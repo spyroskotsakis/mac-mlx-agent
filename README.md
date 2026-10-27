@@ -121,6 +121,9 @@ RAM; 4-bit weights ≈ (parameters in billions) × 0.55 GB.
 | Model | Size (4-bit) | Notes |
 |-------|-------------|-------|
 | `mlx-community/Qwen3.5-35B-A3B-4bit` | ~19 GB | **Default.** MoE coder (3B active → fast). The model the WWDC26 demo used; its tool calls parse reliably. |
+| `mlx-community/Qwen3.6-35B-A3B-4bit` | ~20 GB | MoE coder (3B active), newer sibling of the default. |
+| `mlx-community/Qwen3.8-27B-4bit` | ~16 GB | 27B mid-size option. |
+| `mlx-community/Qwen3-14B-4bit` | ~8.3 GB | **Smallest option.** Qwen3 instruct — less RAM, and the natural pick for "concurrent requests" mode. |
 
 > **Avoid for agent use:** `Qwen3-Coder-30B-A3B` (drops the `<tool_call>` wrapper)
 > and `Qwen2.5-Coder-14B` (wraps its call in `<tools>` instead of `<tool_call>`)

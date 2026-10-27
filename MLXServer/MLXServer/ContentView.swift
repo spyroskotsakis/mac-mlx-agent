@@ -195,9 +195,18 @@ struct ContentView: View {
             )
 
             if server.isInstalling {
-                ProgressView().controlSize(.small)
+                if let progress = server.downloadProgress {
+                    ProgressView(value: progress)
+                        .controlSize(.small)
+                    Text(downloadProgressLabel)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                } else {
+                    ProgressView().controlSize(.small)
+                    Text("Working…").font(.caption).foregroundStyle(.secondary)
+                }
                 ScrollView {
-                    Text(server.installOutput.isEmpty ? "Working…" : server.installOutput)
+                    Text(server.installOutput.isEmpty ? "Waiting…" : server.installOutput)
                         .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -215,6 +224,16 @@ struct ContentView: View {
             return cached ? "downloaded" : "not downloaded — required before first start"
         }
         return "checking…"
+    }
+
+    private var downloadProgressLabel: String {
+        let pct = Int((server.downloadProgress ?? 0) * 100)
+        if let total = server.downloadTotalBytes, total > 0 {
+            let done = ByteCountFormatter.string(fromByteCount: server.downloadBytes, countStyle: .file)
+            let all = ByteCountFormatter.string(fromByteCount: total, countStyle: .file)
+            return "\(pct)% — \(done) of \(all)"
+        }
+        return "\(pct)% downloaded"
     }
 
     private func requirementRow(ok: Bool,
@@ -385,7 +404,7 @@ struct ContentView: View {
             }
             .labelsHidden()
             .pickerStyle(.menu)
-            .disabled(!server.canSwitchModel)
+            .disabled(!server.canSwitchModel || server.isInstalling)
             Text("Stop the server before switching models.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
