@@ -6,19 +6,12 @@ struct ContentView: View {
     @State private var showManualConfig = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            header
-            statusCard
-            requirementsSection
-            integrationsSection
-            modelSection
-            controls
-            Divider()
-            advancedSection
-            logSection
-            footer
+        TabView {
+            serverTab
+                .tabItem { Label("Server", systemImage: "cpu") }
+            connectTab
+                .tabItem { Label("Connect", systemImage: "link") }
         }
-        .padding(16)
         .frame(width: 470)
         .onAppear {
             server.onAppear()
@@ -32,6 +25,115 @@ struct ContentView: View {
         .onChange(of: server.port) { _, _ in
             server.checkOpenCodeConfig()
         }
+    }
+
+    private var serverTab: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            header
+            statusCard
+            requirementsSection
+            integrationsSection
+            modelSection
+            controls
+            Divider()
+            advancedSection
+            logSection
+            footer
+        }
+        .padding(16)
+    }
+
+    private var connectTab: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Connect to the local model")
+                .font(.title3.bold())
+            Text("The server speaks the OpenAI chat-completions API. Point any OpenAI-compatible client at the base URL below.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            copyRow(title: "Base URL", value: server.baseURL)
+            copyRow(title: "Model", value: server.modelAlias)
+            copyRow(title: "Loaded model (HF id)", value: server.selectedModel.repoID)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Endpoints").font(.subheadline).foregroundStyle(.secondary)
+                endpointRow(method: "POST", path: "/v1/chat/completions", note: "chat + tool calling")
+                endpointRow(method: "GET", path: "/v1/models", note: "list cached models")
+            }
+
+            codeBlock(title: "curl", code: server.curlExample)
+            codeBlock(title: "Python — OpenAI SDK", code: server.pythonExample)
+
+            Text("api_key is not checked — pass any non-empty value (e.g. \"not-needed\").")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+    }
+
+    private func copyRow(title: String, value: String) -> some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(.caption2).foregroundStyle(.secondary)
+                Text(value)
+                    .font(.callout.monospaced())
+                    .textSelection(.enabled)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Spacer()
+            Button {
+                copy(value)
+            } label: {
+                Image(systemName: "doc.on.doc")
+            }
+            .buttonStyle(.borderless)
+            .help("Copy")
+        }
+    }
+
+    private func endpointRow(method: String, path: String, note: String) -> some View {
+        HStack(spacing: 8) {
+            Text(method)
+                .font(.caption2.monospaced().bold())
+                .padding(.horizontal, 5)
+                .padding(.vertical, 1)
+                .background(RoundedRectangle(cornerRadius: 4).fill(Color.accentColor.opacity(0.15)))
+                .foregroundStyle(Color.accentColor)
+            Text(path)
+                .font(.callout.monospaced())
+                .textSelection(.enabled)
+            Text(note)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Spacer()
+        }
+    }
+
+    private func codeBlock(title: String, code: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(title).font(.caption2).foregroundStyle(.secondary)
+                Spacer()
+                Button("Copy") { copy(code) }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+            }
+            Text(code)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+                .padding(8)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .windowBackgroundColor)))
+        }
+    }
+
+    private func copy(_ text: String) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(text, forType: .string)
     }
 
     private var header: some View {
@@ -263,11 +365,7 @@ struct ContentView: View {
             .padding(8)
             .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .windowBackgroundColor)))
             HStack(spacing: 8) {
-                Button("Copy config") {
-                    let pasteboard = NSPasteboard.general
-                    pasteboard.clearContents()
-                    pasteboard.setString(server.openCodeConfigText, forType: .string)
-                }
+                Button("Copy config") { copy(server.openCodeConfigText) }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
                 Button("Verify") { server.checkOpenCodeConfig() }

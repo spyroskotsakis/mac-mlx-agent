@@ -590,6 +590,38 @@ final class ServerController: ObservableObject {
         return "{}\n"
     }
 
+    // MARK: - Connect info
+
+    /// OpenAI-compatible base URL for the running server.
+    var baseURL: String { "http://127.0.0.1:\(port)/v1" }
+
+    /// Model name clients put in the `model` field. `mlx_lm.server` serves the
+    /// loaded model under the fixed alias `default_model` (mapped to `--model`).
+    var modelAlias: String { "default_model" }
+
+    /// A ready-to-paste `curl` smoke test for the running server.
+    var curlExample: String {
+        """
+        curl http://127.0.0.1:\(port)/v1/chat/completions \\
+          -H "Content-Type: application/json" \\
+          -d '{"model": "default_model", "messages": [{"role": "user", "content": "Hello!"}]}'
+        """
+    }
+
+    /// A ready-to-paste Python example using the OpenAI SDK.
+    var pythonExample: String {
+        """
+        from openai import OpenAI
+
+        client = OpenAI(base_url="http://127.0.0.1:\(port)/v1", api_key="not-needed")
+        resp = client.chat.completions.create(
+            model="default_model",
+            messages=[{"role": "user", "content": "Hello!"}],
+        )
+        print(resp.choices[0].message.content)
+        """
+    }
+
     // MARK: - Networking
 
     private func isServerUp() async -> Bool {

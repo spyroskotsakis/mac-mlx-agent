@@ -13,6 +13,8 @@ A small native macOS **menu-bar app** that starts and stops the local
 - Lets you override the **port** and the **`mlx_lm.server` path** under *Advanced*.
 - **OpenCode setup, automatic or manual** — writes (or shows you) a global
   OpenCode config pointing at the server (see below).
+- A **Connect** tab with everything you need to call the model from custom code
+  (base URL, model name, endpoints, ready-to-paste `curl` and Python examples).
 
 The server arguments mirror `start_server.sh` exactly:
 
@@ -81,6 +83,21 @@ every time the panel opens (and whenever you change the port):
 
 Once the config correctly points at the current port, the automatic button is
 hidden so a setup you did by hand can't be overwritten by an accidental click.
+
+## Connect info (tab)
+
+The **Connect** tab shows what any OpenAI-compatible client needs to reach the
+running server, live-updated for the current port and model:
+
+- **Base URL** — `http://127.0.0.1:<port>/v1`
+- **Model** — use `default_model` (the alias `mlx_lm.server` serves the loaded
+  model under, regardless of which model you selected)
+- **Loaded model (HF id)** — the actual `mlx-community/…` model behind the alias
+- **Endpoints** — `POST /v1/chat/completions` (chat + tool calling) and
+  `GET /v1/models`
+- **curl** and **Python (OpenAI SDK)** examples, with copy buttons.
+
+`api_key` is not checked — pass any non-empty value (e.g. `"not-needed"`).
 
 ## Build & run
 
