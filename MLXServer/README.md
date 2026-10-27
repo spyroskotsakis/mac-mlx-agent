@@ -109,8 +109,10 @@ inside the panel:
 - Click **Quit MLX Server** at the bottom of the panel, or
 - press **⌘Q**.
 
-Quitting first stops the model server (SIGTERM, then SIGKILL if it lingers) so
-you never leave an orphaned `mlx_lm.server` holding port 8080.
+Quitting first stops the model server and every process it spawned (SIGTERM,
+then SIGKILL if anything lingers), and as a final safety net sweeps the
+configured port to kill any `mlx_lm.server` still listening there — so you never
+leave an orphaned server holding the port.
 
 ## How it finds `mlx_lm.server`
 

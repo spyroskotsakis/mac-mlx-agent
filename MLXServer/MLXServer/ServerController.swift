@@ -220,38 +220,105 @@ final class ServerController: ObservableObject {
         }
         state = .stopping
         appendLog("\n[Stopping server…]\n")
-        let pid = proc.processIdentifier
-        proc.terminate() // SIGTERM — lets uvicorn shut down cleanly
 
-        // Escalate to SIGKILL if it's still alive after a few seconds.
+        let tree = Self.processTreePIDs(root: proc.processIdentifier)
+        Self.signal(tree, SIGTERM) // lets uvicorn shut down cleanly
+
+        // Escalate to SIGKILL if anything is still alive after a few seconds.
         DispatchQueue.global().asyncAfter(deadline: .now() + 5) { [weak self] in
-            guard kill(pid, 0) == 0 else { return } // already gone
+            let survivors = tree.filter { kill($0, 0) == 0 }
+            guard !survivors.isEmpty else { return } // all gone
             DispatchQueue.main.async {
                 self?.appendLog("[Server ignored SIGTERM; sending SIGKILL]\n")
             }
-            kill(pid, SIGKILL)
+            Self.signal(survivors, SIGKILL)
         }
     }
 
-    /// Stops the child server and waits (up to ~3s) for it to actually exit before
-    /// hard-killing it. Used on quit so the menu-bar app never leaves an orphaned
-    /// `mlx_lm.server` running after it disappears.
+    /// Stops the server and every process it spawned, waits (up to ~3s) for them
+    /// to actually exit before hard-killing, then sweeps the port. Used on quit
+    /// so the menu-bar app never leaves an `mlx_lm.server` (or any child process)
+    /// running after it disappears.
     func stopSynchronouslyForQuit() {
-        guard let proc = process else { return }
-        let pid = proc.processIdentifier
-        process = nil
         pollTask?.cancel()
         pollTask = nil
 
-        proc.terminate() // SIGTERM — lets uvicorn shut down cleanly
+        if let proc = process {
+            let root = proc.processIdentifier
+            process = nil
 
-        // The kernel marks the pid dead independently of our run loop, so polling
-        // is safe even though quit runs on the main thread.
-        for _ in 0..<60 {
-            if kill(pid, 0) != 0 { return } // already gone
-            usleep(50_000)                  // 50 ms
+            // Collect the whole tree up front, then signal it together so we
+            // don't lose track of children after the parent starts dying.
+            let tree = Self.processTreePIDs(root: root)
+            Self.signal(tree, SIGTERM)
+
+            // The kernel marks a pid dead independently of our run loop, so
+            // polling is safe even though quit runs on the main thread.
+            for _ in 0..<60 {
+                if tree.allSatisfy({ kill($0, 0) != 0 }) { break } // all gone
+                usleep(50_000)                                      // 50 ms
+            }
+            Self.signal(tree.filter { kill($0, 0) == 0 }, SIGKILL)
         }
-        kill(pid, SIGKILL)
+
+        // Safety net: also kill anything still listening on our port, tracked or
+        // not, so a server from a crashed/previous session can't outlive the app.
+        Self.killListeners(on: port)
+    }
+
+    // MARK: - Process tree
+
+    /// The PID of `root` and every process descended from it.
+    private static func processTreePIDs(root: pid_t) -> [pid_t] {
+        var seen: Set<pid_t> = [root]
+        var frontier: [pid_t] = [root]
+        while let parent = frontier.popLast() {
+            for child in childPIDs(of: parent) where !seen.contains(child) {
+                seen.insert(child)
+                frontier.append(child)
+            }
+        }
+        return Array(seen)
+    }
+
+    /// Direct child PIDs of `pid` (via `pgrep -P`). Empty on failure.
+    private static func childPIDs(of pid: pid_t) -> [pid_t] {
+        let output = runTool("/usr/bin/pgrep", ["-P", "\(pid)"])
+        return output.split(separator: "\n").compactMap { Int32($0) }
+    }
+
+    /// Sends `signal` to every pid in `pids`.
+    private static func signal(_ pids: [pid_t], _ signal: Int32) {
+        for pid in pids { kill(pid, signal) }
+    }
+
+    /// Kills any process currently listening on `port`. A last-resort sweep.
+    private static func killListeners(on port: Int) {
+        let output = runTool("/usr/sbin/lsof", ["-nP", "-iTCP:\(port)", "-sTCP:LISTEN", "-t"])
+        for pidStr in output.split(separator: "\n") {
+            guard let pid = Int32(pidStr) else { continue }
+            kill(pid, SIGTERM)
+            usleep(200_000)
+            if kill(pid, 0) == 0 { kill(pid, SIGKILL) }
+        }
+    }
+
+    /// Runs a tool synchronously and returns its stdout ("" on failure).
+    private static func runTool(_ path: String, _ arguments: [String]) -> String {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: path)
+        proc.arguments = arguments
+        let pipe = Pipe()
+        proc.standardOutput = pipe
+        proc.standardError = FileHandle.nullDevice
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+        } catch {
+            return ""
+        }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        return String(data: data, encoding: .utf8) ?? ""
     }
 
     // MARK: - Polling / process bookkeeping
