@@ -515,6 +515,14 @@ struct ContentView: View {
                 }
                 .disabled(!server.canSwitchModel)
 
+                HStack {
+                    Spacer()
+                    Button("Reset to defaults") { server.resetModelSettings() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .disabled(!server.canSwitchModel)
+                }
+
                 Text("Settings apply on the next Start.")
                     .font(.caption2)
                     .foregroundStyle(.secondary)

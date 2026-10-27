@@ -10,6 +10,16 @@ struct ModelOption: Identifiable, Hashable {
     var id: String { repoID }
 }
 
+/// Defaults for the model settings exposed in the app. These are the values
+/// `start_server.sh` shipped with; "Reset to defaults" restores them.
+enum ModelDefaults {
+    static let enableThinking = false
+    static let temperature = 0.2
+    static let topP = 0.8
+    static let topK = 20
+    static let maxTokens = 8192
+}
+
 /// Owns the `mlx_lm.server` subprocess: starts/stops it, streams its output into
 /// a log, and reports readiness by polling the server's own `/v1/models` endpoint.
 final class ServerController: ObservableObject {
@@ -145,10 +155,10 @@ final class ServerController: ObservableObject {
         self.executablePath = UserDefaults.standard.string(forKey: Keys.executable) ?? ""
         self.allowConcurrentRequests = UserDefaults.standard.bool(forKey: Keys.allowConcurrent)
         self.enableThinking = UserDefaults.standard.bool(forKey: Keys.enableThinking)
-        self.temperature = UserDefaults.standard.object(forKey: Keys.temperature) as? Double ?? 0.2
-        self.topP = UserDefaults.standard.object(forKey: Keys.topP) as? Double ?? 0.8
-        self.topK = UserDefaults.standard.object(forKey: Keys.topK) as? Int ?? 20
-        self.maxTokens = UserDefaults.standard.object(forKey: Keys.maxTokens) as? Int ?? 8192
+        self.temperature = UserDefaults.standard.object(forKey: Keys.temperature) as? Double ?? ModelDefaults.temperature
+        self.topP = UserDefaults.standard.object(forKey: Keys.topP) as? Double ?? ModelDefaults.topP
+        self.topK = UserDefaults.standard.object(forKey: Keys.topK) as? Int ?? ModelDefaults.topK
+        self.maxTokens = UserDefaults.standard.object(forKey: Keys.maxTokens) as? Int ?? ModelDefaults.maxTokens
         self.openCodePath = Self.resolveOpenCode()
 
         let savedModel = UserDefaults.standard.string(forKey: Keys.model)
@@ -466,6 +476,16 @@ final class ServerController: ObservableObject {
         } catch {
             modelMessage = "Failed to delete \(repo): \(error.localizedDescription)"
         }
+    }
+
+    /// Restores every model setting to its default (the values `start_server.sh`
+    /// shipped with). Takes effect on the next Start.
+    func resetModelSettings() {
+        enableThinking = ModelDefaults.enableThinking
+        temperature = ModelDefaults.temperature
+        topP = ModelDefaults.topP
+        topK = ModelDefaults.topK
+        maxTokens = ModelDefaults.maxTokens
     }
 
     /// Re-resolves the `mlx_lm.server` binary (used after an install finishes).

@@ -13,7 +13,8 @@ A small native macOS **menu-bar app** that starts and stops the local
 - Shows a **live log** of the server (model load progress, requests, errors).
 - Lets you override the **port** and the **`mlx_lm.server` path** under *Advanced*.
 - **Model settings** — toggle **thinking mode** and tune temperature, top-p,
-  top-k, and max tokens (applied on the next Start).
+  top-k, and max tokens (applied on the next Start); **Reset to defaults**
+  restores the shipped values.
 - A **folder** button next to the model files and the OpenCode config opens that
   folder in Finder (the model cache, or `~/.config/opencode`).
 - **OpenCode setup, automatic or manual** — writes (or shows you) a global
