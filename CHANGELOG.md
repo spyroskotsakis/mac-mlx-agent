@@ -6,9 +6,43 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
-## [Unreleased]
+## [1.5.0] — 2026-10-28
 
-(nothing yet — work in progress goes here before the next release.)
+### Known issue
+
+- **Claude Code is crashing on the local model** (empty replies, stalled turns,
+  and it can wedge the server's single generation thread). **Use OpenCode for
+  local agent work for now**; we'll flag it when Claude Code is usable again.
+
+### Fixed
+
+- **Out-of-memory crash on concurrent agents.** `mlx_lm.server` defaults to
+  batching up to 8 prompts in parallel, so Claude Code's large system prompt +
+  a second agent (OpenCode) at the same time exhausted Metal RAM and killed the
+  generation thread (`[METAL] Insufficient Memory` → `generation thread died`).
+  The app now forces `--prompt-concurrency 1 --decode-concurrency 1` when
+  concurrent requests are off, so requests are served one at a time.
+- **Prompt cache growth** is now capped (`--prompt-cache-bytes 6GB`), so a long
+  session can't accumulate 10 full-precision KV caches and OOM on its own.
+- **"Allow concurrent requests" now warns clearly** that it disables the
+  quantized KV cache and will OOM on a 35B model.
+
+### Added
+
+- **Out-of-memory detection** — the app watches the server log for
+  `Insufficient Memory` / `generation thread died` and shows a restart prompt
+  instead of silently hanging on "Generating…".
+- **Log Copy / Download buttons** — the Server log now has Copy (clipboard) and
+  Download (save to a `.log` file) actions for sharing logs.
+- **Thinking-mode warning** — the Thinking toggle now warns that the hidden
+  reasoning step is emitted instead of the answer, so it stalls agents (Claude
+  Code / OpenCode) and can leave the reply empty. Leave it off for coding agents.
+- **Prompt-cache size setting** — `--prompt-cache-bytes` is now adjustable in
+  Model settings (default 6 GB). Claude Code's ~85k-token system prompt needs
+  ~6 GB of KV cache on its own, which fills the default and defeats caching
+  (`system: 0 sequences`); raise it, or trim MCP servers/skills.
+- **Agent recommendations** — documented which agent works best for which job
+  (OpenCode vs Claude Code) and why Claude Code's large system prompt is slow.
 
 ## [1.4.1] — 2026-10-28
 
@@ -137,6 +171,7 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.5.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.5.0
 [1.4.1]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.4.1
 [1.4.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.4.0
 [1.3.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.3.0

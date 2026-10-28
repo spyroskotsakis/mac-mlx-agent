@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KeySourceCheck</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+        <h1>KeySourceCheck</h1>
+      </div>
+      <p class="subtitle">Enterprise-grade API key detection</p>
+    </header>
+
+    <div class="scan-section">
+      <div class="current-url" id="currentUrlContainer">
+        <span class="url-label">Scanning:</span>
+        <span class="url-value" id="currentUrl">Loading...</span>
+      </div>
+
+      <button id="scanCurrentTab" class="scan-button">
+        <svg class="scan-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/>
+          <path d="m21 21-4.35-4.35"/>
+        </svg>
+        <span class="button-text">Scan Current Page</span>
+        <span class="loading-spinner" style="display: none;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10" stroke-dasharray="30"/>
+          </svg>
+        </span>
+      </button>
+
+      <div class="progress-container" id="progressContainer" style="display: none;">
+        <div class="progress-bar">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+        <div class="progress-text" id="progressText">Initializing scan...</div>
+      </div>
+
+      <div class="url-input-group">
+        <input type="text" id="scanUrlInput" placeholder="Enter URL to scan...">
+        <button id="scanUrlButton" class="secondary-button">Scan</button>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <h3>Detection Engine</h3>
+      <div class="pattern-list" id="patternList">
+        <!-- Patterns will be rendered here -->
+      </div>
+    </div>
+
+    <div class="results-container" id="resultsContainer" style="display: none;">
+      <div class="results-header">
+        <h3>Scan Results</h3>
+        <div class="stats">
+          <span class="stat critical" id="criticalCount">0</span>
+          <span class="stat high" id="highCount">0</span>
+          <span class="stat medium" id="mediumCount">0</span>
+        </div>
+      </div>
+
+      <div class="results-list" id="resultsList">
+        <!-- Results will be rendered here -->
+      </div>
+
+      <div class="export-options">
+        <button id="exportResults" class="export-button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Export Results
+        </button>
+        <select id="exportFormat">
+          <option value="json">JSON</option>
+          <option value="markdown">Markdown</option>
+          <option value="csv">CSV</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="error" id="error" style="display: none;"></div>
+
+    <footer>
+      <p>KeySourceCheck v1.0.0 | Enterprise Security</p>
+    </footer>
+  </div>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

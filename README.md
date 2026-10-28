@@ -11,6 +11,15 @@ It works with:
 
 Everything runs on your own hardware. Your code never leaves your Mac.
 
+> ## ⚠️ Claude Code is crashing — use OpenCode instead
+>
+> **Claude Code is currently crashing on the local model** (its ~85k-token system
+> prompt stalls or returns empty, and it can wedge the server's generation
+> thread). **For now, use [OpenCode](#use-it-in-opencode) for local agent work** —
+> it sends a far smaller prompt, caches reliably, and is the agent this project
+> tests against. See [Which agent to use](#which-agent-to-use). This note will be
+> removed when Claude Code is usable again.
+
 > **Just want it to work?** Download the **MLX Server** menu-bar app from the
 > [latest release](https://github.com/spyroskotsakis/mac-mlx-agent/releases/latest)
 > and run it — it installs `mlx-lm`, downloads the model, and sets up OpenCode
@@ -35,6 +44,44 @@ load, run, quantize, and fine-tune models, and it ships **`mlx_lm.server`** — 
 small HTTP server that loads a model and exposes it behind the same
 **OpenAI chat-completions API** (`POST /v1/chat/completions`) that ChatGPT and
 most AI libraries already speak, including tool calling.
+
+### The MLX ecosystem — and where the models come from
+
+All the models used here come from the **[`mlx-community`](https://huggingface.co/mlx-community)
+organization on Hugging Face** — a community org hosting **pre-converted,
+Apple-Silicon-ready model weights** (already quantized and in MLX format), so you
+can run them straight from `mlx-lm` or integrate them into your own apps without
+doing the conversion yourself.
+
+MLX isn't just for chat — it's a small family of packages:
+
+| Package | What it does |
+|---------|--------------|
+| **`mlx-lm`** | LLM text generation + fine-tuning (what this repo uses). |
+| **`mlx-swift-examples`** | A Swift package to run MLX models in native apps. |
+| **`mlx-vlm`** | Vision Language Models (inference + fine-tuning). |
+| **`mlx-audio`** | Text-to-speech, speech-to-text, and speech-to-speech. |
+
+**Quick start for LLMs** (from the `mlx-community` README):
+
+```bash
+pip install mlx-lm
+mlx_lm.generate --model mlx-community/Qwen3-4B-Instruct-2507-4bit --prompt "hello"
+mlx_lm.chat        # a chat REPL; context is preserved across turns
+```
+
+**Convert & quantize your own model** — and optionally upload it back to the
+`mlx-community` org:
+
+```bash
+mlx_lm.convert --model Qwen/Qwen3-4B-Instruct-2507 -q
+mlx_lm.convert --model Qwen/Qwen3-4B-Instruct-2507 -q \
+  --upload-repo mlx-community/Qwen3-4B-Instruct-2507-4bit
+```
+
+For more (image generation with Flux/Stable Diffusion, LoRA fine-tuning, Whisper,
+CLIP/LLaVA, and other examples), see the
+[MLX Examples repo](https://github.com/ml-explore/mlx-examples).
 
 ### The MLX server, concretely
 
@@ -118,9 +165,10 @@ This pulls in `mlx`, `mlx-metal`, `mlx-lm`, and its CLI tools.
 
 ## Step 2 — Pick and download a model
 
-The model must be **MLX format** (from HuggingFace `mlx-community/…`) and
-**support tool calling** so agents can invoke tools. Pick one that fits your
-RAM; 4-bit weights ≈ (parameters in billions) × 0.55 GB.
+The model must be **MLX format** — i.e. a pre-converted weight from the
+[`mlx-community` organization on Hugging Face](https://huggingface.co/mlx-community)
+— and **support tool calling** so agents can invoke tools. Pick one that fits
+your RAM; 4-bit weights ≈ (parameters in billions) × 0.55 GB.
 
 | Model | Size (4-bit) | Notes |
 |-------|-------------|-------|
@@ -347,6 +395,14 @@ through your local model.
 
 ## Use it in Claude Code
 
+> ## ⚠️ Claude Code is crashing — use OpenCode instead
+>
+> Claude Code is currently crashing/hanging on the local model (empty replies,
+> stalled turns, and it can wedge the server's single generation thread).
+> **Do not rely on Claude Code for local work right now — use
+> [OpenCode](#use-it-in-opencode) instead.** The setup below is kept so it's
+> ready when this is fixed.
+
 > **Important:** Claude Code speaks the **Anthropic Messages API**
 > (`POST /v1/messages`); the MLX-LM server speaks **OpenAI chat-completions**
 > (`POST /v1/chat/completions`). Claude Code has *no* native OpenAI mode, so you
@@ -471,6 +527,32 @@ or `~/.claude/settings.json`, your normal Claude Code login is left untouched.
   all of it before answering — minutes per message even for a fast MoE.
   **OpenCode sends a far smaller prompt and is the recommended agent for local
   models.**
+
+---
+
+## Which agent to use
+
+The same local model drives every agent, but they're **not interchangeable** —
+the prompt each one sends decides speed and whether caching helps.
+
+| Agent | Prompt per turn | Speed (35B on M4 Max) | Use it for |
+|-------|----------------|------------------------|------------|
+| **OpenCode** | small — ~15k tokens | fast, prompt caches well | **Everyday local agent work — the recommended choice.** |
+| **Xcode** (via OpenCode `acp`) | small | fast | In-editor assistant and agent-driven app building. |
+| **Claude Code** | ~66k-token system prompt (measured; more with extra MCP servers + skills) | slow — minutes/turn, cache can't help | Occasional use, after trimming MCP servers/skills. |
+| **curl / OpenAI SDK** | tiny | fast | Quick smoke test or a script. |
+
+**Why Claude Code is slow:** it resends its system prompt every turn — ~66k
+tokens on a trimmed setup (OpenCode: ~15k), up to ~85k with all MCP servers +
+skills. That prompt's 4-bit KV cache fills the app's default
+`--prompt-cache-bytes 6GB` cap, and the cache must hold the prompt twice (stored
++ in-flight), so every turn re-prefills the whole thing (`system: 0 sequences` in
+the server log). Claude Code also sends `max_tokens=32000` on every request,
+overriding the server's `--max-tokens 8192`, so cap output client-side
+(`CLAUDE_CODE_MAX_OUTPUT_TOKENS`, written by the app). To make it usable: trim
+MCP servers/skills, keep Thinking mode off, keep Max tokens at 8192, or raise
+**Prompt cache** in Model settings. For most local work, **OpenCode is the better
+default.**
 
 ---
 

@@ -10,6 +10,10 @@ import Darwin
 struct ModelProfile: Hashable {
     let maxContext: Int
     let thinkingSupported: Bool
+    /// Approximate RAM (GiB) the 4-bit weights occupy once loaded. Used by the
+    /// memory-safety guard to decide whether concurrent requests (full-precision
+    /// KV cache, no byte cap) can fit alongside the model on this machine.
+    let weightGB: Double
 }
 
 /// One selectable model. `repoID` is the HuggingFace `mlx-community/…` id passed
@@ -33,6 +37,13 @@ enum ModelDefaults {
     /// most this many tokens in a single response (same for every model, so it
     /// lives here rather than in each model's profile).
     static let maxOutputTokens = 32768
+    /// Default prompt-cache cap in GB, passed as `--prompt-cache-bytes`. The cache
+    /// must hold the system prompt's quantized KV cache TWICE (the stored entry
+    /// plus the in-flight copy), so size this to ~2× your largest system prompt.
+    /// Claude Code's ~85k-token system prompt quantizes to ~6 GB, which fills a
+    /// 6 GB cache and defeats caching — trim MCP servers/skills (or raise this) to
+    /// make caching effective. OpenCode's far smaller prompt caches comfortably.
+    static let promptCacheBytesGB = 6
 }
 
 /// Owns the `mlx_lm.server` subprocess: starts/stops it, streams its output into
@@ -75,16 +86,16 @@ final class ServerController: ObservableObject {
     static let availableModels: [ModelOption] = [
         ModelOption(repoID: "mlx-community/Qwen3.5-35B-A3B-4bit",
                     displayName: "Qwen3.5-35B-A3B (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true)),
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 18)),
         ModelOption(repoID: "mlx-community/Qwen3.6-35B-A3B-4bit",
                     displayName: "Qwen3.6-35B-A3B (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true)),
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 18)),
         ModelOption(repoID: "mlx-community/Qwen3.8-27B-4bit",
                     displayName: "Qwen3.8-27B (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true)),
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 14)),
         ModelOption(repoID: "mlx-community/Qwen3-14B-4bit",
                     displayName: "Qwen3-14B (4-bit)",
-                    profile: ModelProfile(maxContext: 40_960, thinkingSupported: true))
+                    profile: ModelProfile(maxContext: 40_960, thinkingSupported: true, weightGB: 7))
     ]
 
     @Published private(set) var state: ServerState = .stopped
@@ -92,6 +103,7 @@ final class ServerController: ObservableObject {
     @Published private(set) var resolvedExecutable: String?
 
     @Published private(set) var modelCached: Bool?
+    @Published private(set) var modelPartialDownload: Bool = false
     @Published private(set) var installOutput: String = ""
     @Published private(set) var isInstalling: Bool = false
     @Published private(set) var downloadProgress: Double?
@@ -104,18 +116,23 @@ final class ServerController: ObservableObject {
     @Published private(set) var claudeCodePath: String?
     @Published private(set) var claudeCodeVersion: String?
     @Published private(set) var claudeCodeProfileWritten: Bool = false
+    @Published private(set) var claudeCodeProfilePortMismatch: Bool = false
     @Published private(set) var litellmPath: String?
     @Published private(set) var litellmVersion: String?
     @Published private(set) var litellmConfigWritten: Bool = false
+    @Published private(set) var litellmConfigPortMismatch: Bool = false
     @Published private(set) var bridgeRunning: Bool = false
     @Published private(set) var portConflictMessage: String?
     @Published private(set) var mlxLMHealthy: Bool = true
+    @Published private(set) var mlxOutOfMemory: Bool = false
 
     @Published var selectedModel: ModelOption {
         didSet {
             UserDefaults.standard.set(selectedModel.repoID, forKey: Keys.model)
             // Reflect this model's own thinking preference in the UI.
             enableThinking = Self.loadThinking(for: selectedModel.repoID)
+            // A large model must never stay in concurrent-requests mode.
+            clampConcurrentRequestsForSelectedModel()
         }
     }
 
@@ -169,6 +186,11 @@ final class ServerController: ObservableObject {
     @Published var maxTokens: Int {
         didSet { UserDefaults.standard.set(maxTokens, forKey: Keys.maxTokens) }
     }
+    /// Prompt-cache cap in GB, passed as `--prompt-cache-bytes`. See
+    /// `ModelDefaults.promptCacheBytesGB` for the sizing rule.
+    @Published var promptCacheBytesGB: Int {
+        didSet { UserDefaults.standard.set(promptCacheBytesGB, forKey: Keys.promptCacheBytes) }
+    }
 
     private var process: Process?
     private var bridgeProcess: Process?
@@ -186,6 +208,7 @@ final class ServerController: ObservableObject {
         static let topP = "mlxServerTopP"
         static let topK = "mlxServerTopK"
         static let maxTokens = "mlxServerMaxTokens"
+        static let promptCacheBytes = "mlxServerPromptCacheBytes"
     }
 
     init() {
@@ -208,21 +231,61 @@ final class ServerController: ObservableObject {
         self.topP = UserDefaults.standard.object(forKey: Keys.topP) as? Double ?? ModelDefaults.topP
         self.topK = UserDefaults.standard.object(forKey: Keys.topK) as? Int ?? ModelDefaults.topK
         self.maxTokens = UserDefaults.standard.object(forKey: Keys.maxTokens) as? Int ?? ModelDefaults.maxTokens
+        self.promptCacheBytesGB = UserDefaults.standard.object(forKey: Keys.promptCacheBytes) as? Int ?? ModelDefaults.promptCacheBytesGB
         self.openCodePath = Self.resolveOpenCode()
         self.claudeCodePath = Self.resolveClaudeCode()
         self.claudeCodeVersion = self.claudeCodePath.flatMap { Self.claudeVersion(at: $0) }
         self.claudeCodeProfileWritten = FileManager.default.fileExists(atPath: Self.claudeCodeEnvFilePath())
+        self.claudeCodeProfilePortMismatch = Self.configPortMismatch(atPath: Self.claudeCodeEnvFilePath(), port: self.bridgePort)
         self.litellmPath = Self.resolveLitellm()
         self.litellmVersion = self.litellmPath.flatMap { Self.litellmVersion(at: $0) }
         self.litellmConfigWritten = FileManager.default.fileExists(atPath: Self.litellmConfigFilePath())
+        self.litellmConfigPortMismatch = Self.configPortMismatch(atPath: Self.litellmConfigFilePath(), port: self.port)
 
         self.resolvedExecutable = Self.resolveExecutable(override: self.executablePath)
+
+        // A persisted unsafe combination (large model + concurrent requests) must
+        // not survive a relaunch: clamp it before the app can start the server.
+        clampConcurrentRequestsForSelectedModel()
     }
 
     // MARK: - UI helpers
 
     var canSwitchModel: Bool {
         !state.isRunning && !state.isTransitioning
+    }
+
+    /// Installed RAM in GiB (Apple's advertised unified-memory tier, e.g. 36).
+    /// Drives the memory-safety guard below.
+    static var physicalRAMGB: Double {
+        Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824
+    }
+
+    /// Whether "Allow concurrent requests" is safe with the currently-selected
+    /// model on this machine. Concurrent mode drops the 4-bit KV cache and the
+    /// prompt-cache byte cap, so it needs roughly 4× the model's weight footprint
+    /// free in unified memory; anything larger risks a whole-machine Metal OOM.
+    var concurrentRequestsSafe: Bool {
+        selectedModel.profile.weightGB <= Self.physicalRAMGB / 4
+    }
+
+    /// Human-readable reason the current configuration must not be started, or nil
+    /// when it's safe. `start()` treats this as a hard block, not a warning: the
+    /// unsafe combination can take the whole machine down, not just the server.
+    private func memorySafetyBlock() -> String? {
+        guard allowConcurrentRequests else { return nil }
+        guard concurrentRequestsSafe else {
+            return "Allow concurrent requests is unsafe with \(selectedModel.displayName) on \(Int(Self.physicalRAMGB)) GB of RAM. Turn it off, or switch to Qwen3-14B."
+        }
+        return nil
+    }
+
+    /// Forces concurrent requests off when the selected model is too large for it
+    /// on this machine, so an unsafe combination never persists.
+    private func clampConcurrentRequestsForSelectedModel() {
+        if allowConcurrentRequests && !concurrentRequestsSafe {
+            allowConcurrentRequests = false
+        }
     }
 
     var primaryLabel: String {
@@ -277,6 +340,12 @@ final class ServerController: ObservableObject {
             state = .failed(conflict)
             return
         }
+        // Hard block: the unsafe combination (concurrent requests on a large
+        // model) can exhaust unified memory and take the whole machine down.
+        if let block = memorySafetyBlock() {
+            state = .failed(block)
+            return
+        }
         guard let exe = resolvedExecutable else {
             state = .failed("mlx_lm.server not found. Set its full path in Advanced.")
             return
@@ -307,6 +376,7 @@ final class ServerController: ObservableObject {
         process = proc
         state = .starting
         log = ""
+        mlxOutOfMemory = false
         appendLog("$ \(exe) " + arguments(model: selectedModel.repoID, port: port).joined(separator: " ") + "\n\n")
 
         proc.terminationHandler = { [weak self] finished in
@@ -506,6 +576,9 @@ final class ServerController: ObservableObject {
     /// HuggingFace cache and updates `modelCached`.
     func checkModelCached() {
         modelCached = Self.modelIsCached(repoID: selectedModel.repoID)
+        // A partial download leaves blobs but no complete snapshot — flag it so
+        // the UI can offer "Retry download" (hf resumes) instead of a fresh start.
+        modelPartialDownload = (modelCached == false) && Self.modelIsPartiallyDownloaded(repoID: selectedModel.repoID)
         modelMessage = ""
     }
 
@@ -548,6 +621,7 @@ final class ServerController: ObservableObject {
         topP = ModelDefaults.topP
         topK = ModelDefaults.topK
         maxTokens = ModelDefaults.maxTokens
+        promptCacheBytesGB = ModelDefaults.promptCacheBytesGB
     }
 
     // MARK: - Per-model settings
@@ -823,6 +897,32 @@ final class ServerController: ObservableObject {
         return found
     }
 
+    /// Extracts the first `127.0.0.1:<port>` / `localhost:<port>` from `text`,
+    /// with or without a trailing `/v1`. Used for config files that embed the
+    /// port in an `api_base` or `ANTHROPIC_BASE_URL` line.
+    private static func firstHostPort(in text: String) -> Int? {
+        let pattern = #"(?:127\.0\.0\.1|localhost):(\d+)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, range: range),
+              let portRange = Range(match.range(at: 1), in: text),
+              let found = Int(text[portRange]) else {
+            return nil
+        }
+        return found
+    }
+
+    /// True when the config/profile at `path` exists but points at a different
+    /// `host:port` than `port` (stale after a port change). False when missing,
+    /// matching, or unparseable.
+    private static func configPortMismatch(atPath path: String, port: Int) -> Bool {
+        guard let contents = try? String(contentsOfFile: path, encoding: .utf8),
+              let found = firstHostPort(in: contents) else {
+            return false
+        }
+        return found != port
+    }
+
     /// Re-resolves the OpenCode CLI (nil if not installed).
     func checkOpenCode() {
         openCodePath = Self.resolveOpenCode()
@@ -853,6 +953,13 @@ final class ServerController: ObservableObject {
         claudeCodePath = Self.resolveClaudeCode()
         claudeCodeVersion = claudeCodePath.flatMap { Self.claudeVersion(at: $0) }
         claudeCodeProfileWritten = FileManager.default.fileExists(atPath: Self.claudeCodeEnvFilePath())
+        claudeCodeProfilePortMismatch = Self.configPortMismatch(atPath: Self.claudeCodeEnvFilePath(), port: bridgePort)
+    }
+
+    /// Lightweight re-check of just the profile's bridge port (no subprocess) —
+    /// used when the bridge port changes so the UI flags a stale profile fast.
+    func checkClaudeCodeProfilePort() {
+        claudeCodeProfilePortMismatch = Self.configPortMismatch(atPath: Self.claudeCodeEnvFilePath(), port: bridgePort)
     }
 
     /// The Claude Code env profile. Points `claude` at the LiteLLM bridge, which
@@ -860,15 +967,27 @@ final class ServerController: ObservableObject {
     var claudeCodeConfigText: String {
         """
         # Claude Code → local MLX model via the LiteLLM bridge.
-        # Sourced by the `claude-local` / `claude-mlx` shell alias (see ~/.bashrc).
-        # Prerequisites: the MLX server (\(port)) AND the LiteLLM bridge (\(bridgePort)) running.
+        # Sourced by the `claude-local` / `claude-mlx` shell alias (see ~/.bashrc),
+        # or by `source`-ing this file before running `claude`.
+        # Prerequisites: the MLX server (\(port)) AND the LiteLLM bridge (\(bridgePort))
+        # running — the app starts the bridge automatically with the server.
         export ANTHROPIC_BASE_URL="http://127.0.0.1:\(bridgePort)"
         export ANTHROPIC_AUTH_TOKEN="sk-local-claude"
         export ANTHROPIC_MODEL="default_model"
         export ANTHROPIC_DEFAULT_OPUS_MODEL="default_model"
         export ANTHROPIC_DEFAULT_SONNET_MODEL="default_model"
         export ANTHROPIC_DEFAULT_HAIKU_MODEL="default_model"
+        export CLAUDE_CODE_SUBAGENT_MODEL="default_model"
         export CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1
+        # "default_model" isn't a Claude model ID, so Claude Code can't resolve its
+        # context window: it warns and assumes 200k. Tell it the selected model's real
+        # window so auto-compact fires at the right size and the warning goes away.
+        export CLAUDE_CODE_MAX_CONTEXT_TOKENS=\(selectedModel.profile.maxContext)
+        # Claude Code sends max_tokens: 32000 on every request, overriding the
+        # server's --max-tokens default. Cap it here (client-side) to the app's
+        # Max tokens so a long reply can't balloon the history and OOM Metal.
+        export CLAUDE_CODE_MAX_OUTPUT_TOKENS=\(maxTokens)
+        export MAX_THINKING_TOKENS=0
         """
     }
 
@@ -897,6 +1016,20 @@ final class ServerController: ObservableObject {
         }
     }
 
+    /// Re-writes the Claude Code env profile in place when it already exists, so a
+    /// model change keeps `CLAUDE_CODE_MAX_CONTEXT_TOKENS` in sync with the selected
+    /// model. Does nothing if the profile hasn't been set up yet.
+    func autoSyncClaudeCodeConfig() {
+        guard claudeCodeProfileWritten else { return }
+        let path = claudeCodeEnvPath()
+        do {
+            try claudeCodeConfigText.write(toFile: path, atomically: true, encoding: .utf8)
+            checkClaudeCode()
+        } catch {
+            // Non-fatal: a stale value persists until the next "Set up".
+        }
+    }
+
     // MARK: - LiteLLM bridge (Claude Code needs it; written here so repo-less users get it too)
 
     /// Path to the LiteLLM bridge config the app writes for Claude Code.
@@ -918,6 +1051,13 @@ final class ServerController: ObservableObject {
         litellmPath = Self.resolveLitellm()
         litellmVersion = litellmPath.flatMap { Self.litellmVersion(at: $0) }
         litellmConfigWritten = FileManager.default.fileExists(atPath: Self.litellmConfigFilePath())
+        litellmConfigPortMismatch = Self.configPortMismatch(atPath: Self.litellmConfigFilePath(), port: port)
+    }
+
+    /// Lightweight re-check of just the bridge config's MLX port (no subprocess)
+    /// — used when the MLX port changes so the UI flags a stale config fast.
+    func checkLitellmConfigPort() {
+        litellmConfigPortMismatch = Self.configPortMismatch(atPath: Self.litellmConfigFilePath(), port: port)
     }
 
     /// The LiteLLM bridge config. Maps `default_model` to the MLX server's OpenAI
@@ -925,9 +1065,8 @@ final class ServerController: ObservableObject {
     var litellmConfigText: String {
         """
         # LiteLLM bridge: Anthropic Messages API (/v1/messages) -> MLX-LM OpenAI API.
-        # Written by MLX Server. Start the MLX server first, then this proxy:
-        #   litellm --config ~/.config/mlx-local/litellm-mlx.yaml --host 127.0.0.1 --port \(bridgePort)
-        # Then point Claude Code at http://127.0.0.1:\(bridgePort).
+        # Written and auto-started by MLX Server when you click "Start Server" —
+        # you don't need to launch this proxy yourself.
 
         model_list:
           - model_name: default_model
@@ -1035,6 +1174,7 @@ final class ServerController: ObservableObject {
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         try? litellmConfigText.write(toFile: configPath, atomically: true, encoding: .utf8)
         litellmConfigWritten = FileManager.default.fileExists(atPath: configPath)
+        litellmConfigPortMismatch = false
 
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: litellm)
@@ -1096,12 +1236,18 @@ final class ServerController: ObservableObject {
     }
 
     /// Writes a global OpenCode config pointing at this server (current port +
-    /// selected model), backing up any existing file first.
+    /// selected model), backing up any existing file first. The app's `mlx`
+    /// provider is merged into whatever is already there, so other providers,
+    /// MCP servers and agent settings the user added are left untouched.
     func writeOpenCodeConfig() {
         let path = openCodeConfigPath()
         let dir = (path as NSString).deletingLastPathComponent
         do {
             try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+
+            // Read the current config before backing it up so the merge below
+            // preserves the user's non-mlx entries.
+            let existing = Self.existingOpenCodeConfig(at: path)
 
             if FileManager.default.fileExists(atPath: path) {
                 let df = DateFormatter()
@@ -1113,12 +1259,87 @@ final class ServerController: ObservableObject {
                 setupMessage = ""
             }
 
-            try openCodeConfigText.write(toFile: path, atomically: true, encoding: .utf8)
+            try Self.openCodeConfigJSON(mergedOpenCodeConfig(existing: existing))
+                .write(toFile: path, atomically: true, encoding: .utf8)
             setupMessage += "Wrote \(path)\n"
             checkOpenCodeConfig()
         } catch {
             setupMessage = "Failed to write OpenCode config: \(error.localizedDescription)\n"
         }
+    }
+
+    /// Re-writes the OpenCode config in place (no backup) to reflect the current
+    /// model name and limits. Only does anything when OpenCode is already
+    /// configured for this server, so switching models never creates a config the
+    /// user didn't ask for. Called when the selected model or Max tokens changes.
+    func autoSyncOpenCodeConfig() {
+        checkOpenCodeConfig()
+        guard openCodeConfigStatus == .configured else { return }
+        let path = openCodeConfigPath()
+        do {
+            let existing = Self.existingOpenCodeConfig(at: path)
+            try Self.openCodeConfigJSON(mergedOpenCodeConfig(existing: existing))
+                .write(toFile: path, atomically: true, encoding: .utf8)
+            checkOpenCodeConfig()
+        } catch {
+            // Non-fatal: the stale name/limits remain until the next "Update".
+        }
+    }
+
+    /// The `mlx` provider entry written into the OpenCode config. Kept as a dict
+    /// so `mergedOpenCodeConfig` can drop it into an existing config without
+    /// clobbering the rest of the file.
+    private var mlxProviderConfig: [String: Any] {
+        [
+            "npm": "@ai-sdk/openai-compatible",
+            "name": "MLX (local)",
+            "options": [
+                "baseURL": "http://127.0.0.1:\(port)/v1",
+                "chunkTimeout": false,
+                "headerTimeout": false
+            ],
+            "models": [
+                "default_model": [
+                    "name": selectedModel.displayName,
+                    "limit": ["context": selectedModel.profile.maxContext, "output": maxTokens]
+                ]
+            ]
+        ]
+    }
+
+    /// Merges the app's `mlx` provider into `existing`, keeping every other key
+    /// (other providers, MCP servers, agent settings) intact.
+    private func mergedOpenCodeConfig(existing: [String: Any]) -> [String: Any] {
+        var config = existing
+        config["$schema"] = "https://opencode.ai/config.json"
+        config["model"] = "mlx/default_model"
+        var provider = config["provider"] as? [String: Any] ?? [:]
+        provider["mlx"] = mlxProviderConfig
+        config["provider"] = provider
+        return config
+    }
+
+    /// Reads an existing OpenCode config as a dictionary (`[:]` when missing or
+    /// not parseable, e.g. a `.jsonc` with comments).
+    private static func existingOpenCodeConfig(at path: String) -> [String: Any] {
+        guard let data = FileManager.default.contents(atPath: path),
+              let json = try? JSONSerialization.jsonObject(with: data),
+              let dict = json as? [String: Any] else {
+            return [:]
+        }
+        return dict
+    }
+
+    /// Serializes an OpenCode config dict to pretty-printed JSON. JSONSerialization
+    /// escapes "/" as "\/"; unescape for a readable file and so the "already
+    /// configured" substring check matches.
+    private static func openCodeConfigJSON(_ config: [String: Any]) -> String {
+        if let data = try? JSONSerialization.data(withJSONObject: config,
+                                                  options: [.prettyPrinted, .sortedKeys]),
+           let text = String(data: data, encoding: .utf8) {
+            return text.replacingOccurrences(of: "\\/", with: "/")
+        }
+        return "{}\n"
     }
 
     /// The OpenCode config that points the agent at this MLX server. The
@@ -1130,32 +1351,9 @@ final class ServerController: ObservableObject {
         let config: [String: Any] = [
             "$schema": "https://opencode.ai/config.json",
             "model": "mlx/default_model",
-            "provider": [
-                "mlx": [
-                    "npm": "@ai-sdk/openai-compatible",
-                    "name": "MLX (local)",
-                    "options": [
-                        "baseURL": "http://127.0.0.1:\(port)/v1",
-                        "chunkTimeout": false,
-                        "headerTimeout": false
-                    ],
-                    "models": [
-                        "default_model": [
-                            "name": selectedModel.displayName,
-                            "limit": ["context": selectedModel.profile.maxContext, "output": maxTokens]
-                        ]
-                    ]
-                ]
-            ]
+            "provider": ["mlx": mlxProviderConfig]
         ]
-        if let data = try? JSONSerialization.data(withJSONObject: config,
-                                                  options: [.prettyPrinted, .sortedKeys]),
-           let text = String(data: data, encoding: .utf8) {
-            // JSONSerialization escapes "/" as "\/"; unescape for a readable
-            // config and so the "already configured" substring check matches.
-            return text.replacingOccurrences(of: "\\/", with: "/")
-        }
-        return "{}\n"
+        return Self.openCodeConfigJSON(config)
     }
 
     // MARK: - Connect info
@@ -1213,6 +1411,14 @@ final class ServerController: ObservableObject {
         if log.count > 200_000 {
             log = String(log.suffix(100_000))
         }
+        // The MLX server's generation thread dies unrecoverably when Metal runs
+        // out of memory (e.g. two large-context requests at once on a small-RAM
+        // machine). Surface that so the user knows to restart instead of staring
+        // at a silent "Generating…".
+        if !mlxOutOfMemory,
+           text.contains("Insufficient Memory") || text.contains("generation thread died") {
+            mlxOutOfMemory = true
+        }
     }
 
     // MARK: - Static helpers
@@ -1226,11 +1432,21 @@ final class ServerController: ObservableObject {
             "--host", "127.0.0.1",
             "--port", "\(port)"
         ]
-        // Quantized KV cache (--kv-bits 4) keeps large models inside Metal memory
-        // but forces mlx_lm.server to serve requests one at a time. Omit it (full
-        // precision) when the user opts into concurrent/batched requests.
+        // Quantized KV cache (--kv-bits 4) keeps large models inside Metal
+        // memory. Combined with prompt/decode concurrency of 1, requests are
+        // served one at a time so two agents (e.g. Claude Code + OpenCode)
+        // can't be prefilled together and exhaust Metal RAM — the trigger for
+        // the "generation thread died" out-of-memory crash. A byte cap on the
+        // prompt cache keeps a long session from accumulating 10 full KV caches
+        // and OOMing too. When the user opts into concurrent requests we drop
+        // the caps, at their own risk.
         if !allowConcurrentRequests {
-            args += ["--kv-bits", "4"]
+            args += [
+                "--kv-bits", "4",
+                "--prompt-concurrency", "1",
+                "--decode-concurrency", "1",
+                "--prompt-cache-bytes", "\(promptCacheBytesGB)GB"
+            ]
         }
         args += [
             "--max-tokens", "\(maxTokens)",
@@ -1504,6 +1720,15 @@ final class ServerController: ObservableObject {
     }
 
     private static let weightExtensions = [".safetensors", ".gguf", ".npz", ".bin"]
+
+    /// True when the repo's `blobs/` folder already has bytes on disk — evidence
+    /// of a started (possibly interrupted) download — even though no complete
+    /// snapshot exists yet. Lets the UI offer "Retry download" (hf resumes).
+    private static func modelIsPartiallyDownloaded(repoID: String) -> Bool {
+        let repoName = "models--" + repoID.replacingOccurrences(of: "/", with: "--")
+        let blobsDir = hfHubDir() + "/" + repoName + "/blobs"
+        return directorySize(atPath: blobsDir) > 0
+    }
 
     /// A model is considered cached when some snapshot has both a `config.json`
     /// and at least one weight file.

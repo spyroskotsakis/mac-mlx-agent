@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @ObservedObject var server: ServerController
@@ -27,16 +28,22 @@ struct ContentView: View {
         }
         .onChange(of: server.selectedModel) { _, _ in
             server.checkModelCached()
+            server.autoSyncOpenCodeConfig()
+            server.autoSyncClaudeCodeConfig()
         }
         .onChange(of: server.port) { _, _ in
             server.checkOpenCodeConfig()
+            server.checkLitellmConfigPort()
             server.checkPortConflicts()
         }
         .onChange(of: server.bridgePort) { _, _ in
+            server.checkClaudeCodeProfilePort()
             server.checkPortConflicts()
         }
         .onChange(of: server.maxTokens) { _, newValue in
             maxTokensText = String(newValue)
+            server.autoSyncOpenCodeConfig()
+            server.autoSyncClaudeCodeConfig()
         }
     }
 
@@ -44,6 +51,9 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 14) {
             header
             statusCard
+            if server.mlxOutOfMemory {
+                outOfMemoryWarning
+            }
             controls
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 14) {
@@ -258,13 +268,23 @@ struct ContentView: View {
                 ProgressView().controlSize(.small)
             }
             Spacer()
-            Text("port \(server.port)")
+            Text(verbatim: "port \(server.port)")
                 .font(.callout.monospaced())
                 .foregroundStyle(.secondary)
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary))
+    }
+
+    private var outOfMemoryWarning: some View {
+        Label("The model ran out of memory (Metal OOM) — the server is no longer answering. Stop and restart, then avoid running two agents at once (a 35B model can't fit two large contexts on this much RAM). For concurrent agents, switch to Qwen3-14B.", systemImage: "exclamationmark.triangle.fill")
+            .font(.callout)
+            .foregroundStyle(.orange)
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.orange.opacity(0.12)))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(.orange.opacity(0.4)))
     }
 
     private var requirementsSection: some View {
@@ -299,7 +319,7 @@ struct ContentView: View {
                 showAction: server.modelCached == false,
                 title: "Model files",
                 detail: modelDetail,
-                buttonTitle: "Download",
+                buttonTitle: server.modelPartialDownload ? "Retry download" : "Download",
                 action: server.downloadModel,
                 deleteAction: server.modelCached == true ? { showDeleteModelConfirm = true } : nil,
                 folderAction: { openInFinder(server.modelFolderPath) }
@@ -367,7 +387,10 @@ struct ContentView: View {
 
     private var modelDetail: String {
         if let cached = server.modelCached {
-            return cached ? "downloaded" : "not downloaded — required before first start"
+            if cached { return "downloaded" }
+            return server.modelPartialDownload
+                ? "download interrupted — incomplete (Retry resumes it)"
+                : "not downloaded — required before first start"
         }
         return "checking…"
     }
@@ -531,6 +554,10 @@ struct ContentView: View {
                 Spacer()
             }
 
+            Label("Claude Code sends a ~66k-token system prompt every turn (OpenCode: ~15k), so it's slow locally and its prompt doesn't cache — use OpenCode for everyday agent work.", systemImage: "info.circle")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+
             if server.claudeCodePath == nil {
                 DisclosureGroup("How to install Claude Code") {
                     VStack(alignment: .leading, spacing: 8) {
@@ -563,8 +590,8 @@ struct ContentView: View {
 
             // LiteLLM bridge: Claude Code's Anthropic → OpenAI translator proxy.
             HStack(spacing: 8) {
-                Image(systemName: litellmOk ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(litellmOk ? Color.green : Color.secondary)
+                Image(systemName: server.litellmConfigPortMismatch ? "exclamationmark.triangle.fill" : (litellmOk ? "checkmark.circle.fill" : "circle"))
+                    .foregroundStyle(server.litellmConfigPortMismatch ? Color.orange : (litellmOk ? Color.green : Color.secondary))
                 VStack(alignment: .leading, spacing: 1) {
                     Text("LiteLLM bridge").font(.callout)
                     Text(litellmDetail)
@@ -573,7 +600,7 @@ struct ContentView: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                Button("Set up config") { server.writeLitellmConfig() }
+                Button(server.litellmConfigPortMismatch ? "Update config" : "Set up config") { server.writeLitellmConfig() }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .disabled(server.litellmPath == nil)
@@ -587,6 +614,12 @@ struct ContentView: View {
                 }
                 .buttonStyle(.borderless)
                 .help("Show bridge config folder in Finder")
+            }
+
+            if server.litellmConfigPortMismatch {
+                Label("The bridge config points at a different MLX port — click \"Update config\" so Claude Code still reaches the server.", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
             }
 
             if server.litellmPath != nil && server.litellmVersion == nil {
@@ -617,17 +650,17 @@ struct ContentView: View {
 
             // Profile: a separate env file pointing Claude Code at the LiteLLM bridge.
             HStack(spacing: 8) {
-                Image(systemName: server.claudeCodeProfileWritten ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(server.claudeCodeProfileWritten ? Color.green : Color.secondary)
+                Image(systemName: server.claudeCodeProfilePortMismatch ? "exclamationmark.triangle.fill" : (server.claudeCodeProfileWritten ? "checkmark.circle.fill" : "circle"))
+                    .foregroundStyle(server.claudeCodeProfilePortMismatch ? Color.orange : (server.claudeCodeProfileWritten ? Color.green : Color.secondary))
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Profile").font(.callout)
-                    Text(server.claudeCodeProfileWritten ? "env profile written" : "no env profile yet")
+                    Text(claudeCodeProfileDetail)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
                 Spacer()
-                Button("Set up") { server.writeClaudeCodeConfig() }
+                Button(server.claudeCodeProfilePortMismatch ? "Update" : "Set up") { server.writeClaudeCodeConfig() }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .disabled(server.claudeCodePath == nil)
@@ -639,6 +672,12 @@ struct ContentView: View {
                 }
                 .buttonStyle(.borderless)
                 .help("Show profile folder in Finder")
+            }
+
+            if server.claudeCodeProfilePortMismatch {
+                Label("The profile points at a different bridge port — click \"Update\" so Claude Code reaches the bridge.", systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
             }
 
             if showManualClaudeCode {
@@ -671,15 +710,12 @@ struct ContentView: View {
             // How to launch it — self-contained, no repo required.
             DisclosureGroup("How to start Claude Code") {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("1. Start the MLX server (Start button at the top) — this also starts the bridge.")
+                    Text("1. Click Start Server at the top — it launches the MLX server and the LiteLLM bridge together, so there's no separate bridge step.")
                         .font(.caption)
-                    Text("2. Start the LiteLLM bridge if it didn't auto-start:")
-                        .font(.caption)
-                    codeBlock(title: "bash", code: "litellm --config ~/.config/mlx-local/litellm-mlx.yaml --host 127.0.0.1 --port \(server.bridgePort)")
-                    Text("3. Launch Claude Code pointed at the bridge:")
+                    Text("2. Launch Claude Code pointed at the bridge:")
                         .font(.caption)
                     codeBlock(title: "bash", code: "source ~/.config/mlx-local/claude-code.env && claude")
-                    Text("If you use bash and have `claude-local` set up, `claude-local` does the same.")
+                    Text("If you've set up the `claude-local` shell alias, `claude-local` does the same thing.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -707,6 +743,12 @@ struct ContentView: View {
         return "not installed"
     }
 
+    private var claudeCodeProfileDetail: String {
+        if !server.claudeCodeProfileWritten { return "no env profile yet" }
+        if server.claudeCodeProfilePortMismatch { return "profile points at a different bridge port — update it" }
+        return "env profile written"
+    }
+
     private var litellmOk: Bool {
         server.litellmPath != nil && server.litellmVersion != nil && server.litellmConfigWritten
     }
@@ -716,6 +758,7 @@ struct ContentView: View {
         if server.litellmPath == nil { return "not installed — click Install" }
         if server.litellmVersion == nil { return "installed but missing proxy extras — see below" }
         if !server.litellmConfigWritten { return "installed — no bridge config yet" }
+        if server.litellmConfigPortMismatch { return "config points at a different MLX port — update it" }
         return server.litellmVersion ?? server.litellmPath ?? ""
     }
 
@@ -809,7 +852,7 @@ struct ContentView: View {
                 HStack {
                     Text("Max context").font(.callout)
                     Spacer()
-                    Text("\(server.selectedModel.profile.maxContext.formatted()) tokens")
+                    Text(verbatim: "\(server.selectedModel.profile.maxContext) tokens")
                         .font(.callout.monospaced())
                         .foregroundStyle(.secondary)
                 }
@@ -824,6 +867,12 @@ struct ContentView: View {
                 }
                 .toggleStyle(.switch)
                 .disabled(!server.canSwitchModel || !server.selectedModel.profile.thinkingSupported)
+
+                if server.enableThinking {
+                    Label("Thinking mode is ON — the hidden reasoning is emitted before the answer, which makes Claude Code and OpenCode much slower and can make them stall or return empty text. It's fine for plain chat (curl / the smoke test), but leave it off for coding agents.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
 
                 Divider()
 
@@ -862,7 +911,7 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Stepper(value: $server.topK, in: 0...200) {
                         HStack(spacing: 4) {
-                            Text("Top-k: \(server.topK)").font(.callout)
+                            Text(verbatim: "Top-k: \(server.topK)").font(.callout)
                             infoIcon(for: .topK)
                         }
                     }
@@ -887,7 +936,17 @@ struct ContentView: View {
                             }
                             .disabled(!server.canSwitchModel)
                     }
-                    Text("Up to \(ModelDefaults.maxOutputTokens.formatted()) output tokens per response.")
+                    Text(verbatim: "Up to \(ModelDefaults.maxOutputTokens) output tokens per response. 8192 is right for coding agents. Claude Code ignores this server cap and sends max_tokens=32000; its profile caps output client-side.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Stepper(value: $server.promptCacheBytesGB, in: 1...32) {
+                        Text(verbatim: "Prompt cache: \(server.promptCacheBytesGB) GB").font(.callout)
+                    }
+                    .disabled(!server.canSwitchModel)
+                    Text("Cap on cached prompt/KV memory (--prompt-cache-bytes). It must hold your system prompt's KV cache twice. Claude Code's ~85k-token system prompt needs ~6 GB, so the 6 GB default barely caches it — trim MCP servers/skills, or raise this if the Mac has spare RAM. OpenCode's small prompt caches fine at the default.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -939,12 +998,12 @@ struct ContentView: View {
                     Spacer()
                 }
                 Stepper(value: $server.port, in: 1024...65535) {
-                    Text("MLX server port: \(server.port)")
+                    Text(verbatim: "MLX server port: \(server.port)")
                 }
                 .disabled(!server.canSwitchModel)
 
                 Stepper(value: $server.bridgePort, in: 1024...65535) {
-                    Text("LiteLLM bridge port: \(server.bridgePort)")
+                    Text(verbatim: "LiteLLM bridge port: \(server.bridgePort)")
                 }
                 .disabled(!server.canSwitchModel)
 
@@ -959,13 +1018,23 @@ struct ContentView: View {
                 Toggle(isOn: $server.allowConcurrentRequests) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Allow concurrent requests")
-                        Text("Uses full-precision KV cache so the server can batch requests in parallel. Needs more memory — use only with a smaller model.")
+                        Text("Uses full-precision KV cache and lets the server batch requests in parallel. Needs a small model on a machine with plenty of RAM — the app blocks this when it would run out of memory.")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
                 .toggleStyle(.switch)
-                .disabled(!server.canSwitchModel)
+                .disabled(!server.canSwitchModel || !server.concurrentRequestsSafe)
+
+                if !server.concurrentRequestsSafe {
+                    Label("Concurrent requests is unavailable for \(server.selectedModel.displayName) on this Mac (\(Int(ServerController.physicalRAMGB)) GB RAM) — full-precision KV cache could take the whole machine down. Switch to Qwen3-14B to enable it.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                } else if server.allowConcurrentRequests {
+                    Label("Concurrent requests are ON — a large Claude Code prompt can still run out of memory. Turn this off to restore quantized KV cache (--kv-bits 4) and safe serialization.", systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             }
             .padding(.top, 6)
         }
@@ -976,6 +1045,14 @@ struct ContentView: View {
             HStack {
                 Text("Server log").font(.subheadline).foregroundStyle(.secondary)
                 Spacer()
+                Button("Copy") { copyLog() }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .disabled(server.log.isEmpty)
+                Button("Download") { downloadLog() }
+                    .buttonStyle(.borderless)
+                    .font(.caption)
+                    .disabled(server.log.isEmpty)
                 Button("Clear") { server.clearLog() }
                     .buttonStyle(.borderless)
                     .font(.caption)
@@ -1000,6 +1077,22 @@ struct ContentView: View {
                     }
                 }
             }
+        }
+    }
+
+    private func copyLog() {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(server.log, forType: .string)
+    }
+
+    private func downloadLog() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "mlx-server.log"
+        panel.allowedContentTypes = [UTType(filenameExtension: "log") ?? .plainText]
+        panel.canCreateDirectories = true
+        if panel.runModal() == .OK, let url = panel.url {
+            try? server.log.write(to: url, atomically: true, encoding: .utf8)
         }
     }
 

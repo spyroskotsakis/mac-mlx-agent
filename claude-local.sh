@@ -25,5 +25,11 @@ export CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1
 # thinking mode, which is controlled server-side by the app / start_server.sh
 # (`enable_thinking`). Keep 0 here; local-model reasoning comes from that flag.
 export MAX_THINKING_TOKENS=0
+# Cap Claude Code's output tokens. The server's `--max-tokens` is only a default:
+# Claude Code sends `max_tokens: 32000` explicitly on every request, which
+# overrides the server flag — so cap it here on the client side. Without this, a
+# thinking-heavy response balloons the conversation history and OOMs Metal by
+# the third turn (the "nothing came back" crash).
+export CLAUDE_CODE_MAX_OUTPUT_TOKENS=8192
 
 exec claude "$@"

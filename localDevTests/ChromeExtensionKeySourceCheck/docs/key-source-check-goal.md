@@ -114,3 +114,4 @@ README.md
 | KS-11 | README: install, permissions explained, privacy model, limitations, authorized-use disclaimer |
 
 End your run with: the filled acceptance matrix, the exact commands to build/test/load, and a 5-line "what I would improve next" note. Do not stop early — a passing matrix is the deliverable, not the code.
+
