@@ -106,6 +106,8 @@ final class ServerController: ObservableObject {
     @Published private(set) var claudeCodeProfileWritten: Bool = false
     @Published private(set) var litellmPath: String?
     @Published private(set) var litellmConfigWritten: Bool = false
+    @Published private(set) var bridgeRunning: Bool = false
+    @Published private(set) var portConflictMessage: String?
 
     @Published var selectedModel: ModelOption {
         didSet {
@@ -117,6 +119,11 @@ final class ServerController: ObservableObject {
 
     @Published var port: Int {
         didSet { UserDefaults.standard.set(port, forKey: Keys.port) }
+    }
+
+    /// Port for the LiteLLM bridge (Claude Code's Anthropic → OpenAI proxy).
+    @Published var bridgePort: Int {
+        didSet { UserDefaults.standard.set(bridgePort, forKey: Keys.bridgePort) }
     }
 
     @Published var executablePath: String {
@@ -162,12 +169,14 @@ final class ServerController: ObservableObject {
     }
 
     private var process: Process?
+    private var bridgeProcess: Process?
     private var pollTask: Task<Void, Never>?
     private var downloadPollTask: Task<Void, Never>?
 
     private enum Keys {
         static let model = "mlxServerModel"
         static let port = "mlxServerPort"
+        static let bridgePort = "mlxServerBridgePort"
         static let executable = "mlxServerExecutable"
         static let allowConcurrent = "mlxServerAllowConcurrent"
         static let enableThinking = "mlxServerEnableThinking"
@@ -180,6 +189,9 @@ final class ServerController: ObservableObject {
     init() {
         let savedPort = UserDefaults.standard.integer(forKey: Keys.port)
         self.port = savedPort == 0 ? 8080 : savedPort
+
+        let savedBridgePort = UserDefaults.standard.integer(forKey: Keys.bridgePort)
+        self.bridgePort = savedBridgePort == 0 ? 4001 : savedBridgePort
 
         self.executablePath = UserDefaults.standard.string(forKey: Keys.executable) ?? ""
         self.allowConcurrentRequests = UserDefaults.standard.bool(forKey: Keys.allowConcurrent)
@@ -256,6 +268,11 @@ final class ServerController: ObservableObject {
     // MARK: - Start / stop
 
     func start() {
+        checkPortConflicts()
+        if let conflict = portConflictMessage {
+            state = .failed(conflict)
+            return
+        }
         guard let exe = resolvedExecutable else {
             state = .failed("mlx_lm.server not found. Set its full path in Advanced.")
             return
@@ -297,6 +314,7 @@ final class ServerController: ObservableObject {
         do {
             try proc.run()
             beginHealthPoll()
+            startBridge()
         } catch {
             state = .failed(error.localizedDescription)
             process = nil
@@ -305,6 +323,7 @@ final class ServerController: ObservableObject {
     }
 
     func stop() {
+        stopBridge()
         guard let proc = process else {
             state = .stopped
             return
@@ -333,6 +352,7 @@ final class ServerController: ObservableObject {
     func stopSynchronouslyForQuit() {
         pollTask?.cancel()
         pollTask = nil
+        stopBridge()
 
         if let proc = process {
             let root = proc.processIdentifier
@@ -355,6 +375,7 @@ final class ServerController: ObservableObject {
         // Safety net: also kill anything still listening on our port, tracked or
         // not, so a server from a crashed/previous session can't outlive the app.
         Self.killListeners(on: port)
+        Self.killListeners(on: bridgePort)
     }
 
     // MARK: - Process tree
@@ -459,6 +480,7 @@ final class ServerController: ObservableObject {
 
         if process !== finished { return } // stale process; ignore
         process = nil
+        stopBridge()
 
         let status = finished.terminationStatus
         switch state {
@@ -551,6 +573,7 @@ final class ServerController: ObservableObject {
         checkOpenCodeConfig()
         checkClaudeCode()
         checkLitellm()
+        checkPortConflicts()
     }
 
     /// Whether every prerequisite is met: mlx-lm installed, the selected model
@@ -584,6 +607,25 @@ final class ServerController: ObservableObject {
         if litellmPath == nil { missing.append("LiteLLM") }
         if !litellmConfigWritten { missing.append("LiteLLM config") }
         return missing
+    }
+
+    /// Warns if the MLX server or bridge port is already taken by another process
+    /// (ignoring the app's own running server/bridge). Call before starting.
+    func checkPortConflicts() {
+        var conflicts: [String] = []
+        if isExternalPortInUse(port) { conflicts.append("\(port) (MLX server)") }
+        if isExternalPortInUse(bridgePort) { conflicts.append("\(bridgePort) (LiteLLM bridge)") }
+        portConflictMessage = conflicts.isEmpty
+            ? nil
+            : "Port already in use: " + conflicts.joined(separator: ", ") + " — change it in Advanced."
+    }
+
+    /// Whether `port` is listened on by a process other than the app's own.
+    private func isExternalPortInUse(_ port: Int) -> Bool {
+        let output = Self.runTool("/usr/sbin/lsof", ["-nP", "-iTCP:\(port)", "-sTCP:LISTEN", "-t"])
+        let pids = output.split(separator: "\n").compactMap { Int32($0) }
+        let ours: Set<pid_t> = Set([process?.processIdentifier, bridgeProcess?.processIdentifier].compactMap { $0 })
+        return pids.contains { !ours.contains($0) }
     }
 
     /// Installs `mlx-lm` (plus the `uvicorn`/`fastapi` its server needs) into the
@@ -785,13 +827,13 @@ final class ServerController: ObservableObject {
     }
 
     /// The Claude Code env profile. Points `claude` at the LiteLLM bridge, which
-    /// translates Anthropic → OpenAI to reach the MLX server on :8080.
+    /// translates Anthropic → OpenAI to reach the MLX server on its configured port.
     var claudeCodeConfigText: String {
         """
         # Claude Code → local MLX model via the LiteLLM bridge.
         # Sourced by the `claude-local` / `claude-mlx` shell alias (see ~/.bashrc).
-        # Prerequisites: the MLX server (8080) AND the LiteLLM bridge (4001) running.
-        export ANTHROPIC_BASE_URL="http://127.0.0.1:4001"
+        # Prerequisites: the MLX server (\(port)) AND the LiteLLM bridge (\(bridgePort)) running.
+        export ANTHROPIC_BASE_URL="http://127.0.0.1:\(bridgePort)"
         export ANTHROPIC_AUTH_TOKEN="sk-local-claude"
         export ANTHROPIC_MODEL="default_model"
         export ANTHROPIC_DEFAULT_OPUS_MODEL="default_model"
@@ -854,8 +896,8 @@ final class ServerController: ObservableObject {
         """
         # LiteLLM bridge: Anthropic Messages API (/v1/messages) -> MLX-LM OpenAI API.
         # Written by MLX Server. Start the MLX server first, then this proxy:
-        #   litellm --config ~/.config/mlx-local/litellm-mlx.yaml --host 127.0.0.1 --port 4001
-        # Then point Claude Code at http://127.0.0.1:4001.
+        #   litellm --config ~/.config/mlx-local/litellm-mlx.yaml --host 127.0.0.1 --port \(bridgePort)
+        # Then point Claude Code at http://127.0.0.1:\(bridgePort).
 
         model_list:
           - model_name: default_model
@@ -917,6 +959,83 @@ final class ServerController: ObservableObject {
             self.appendInstallOutput(status == 0 ? "\n[litellm installed]\n" : "\n[install failed (status \(status))]\n")
             self.checkLitellm()
         })
+    }
+
+    // MARK: - LiteLLM bridge process (auto-started with the server)
+
+    /// Starts the LiteLLM bridge on `bridgePort` alongside the MLX server. Writes the
+    /// bridge config first (so its `api_base` always matches the current port),
+    /// then launches `litellm`. No-op if litellm isn't installed or already runs.
+    private func startBridge() {
+        guard let litellm = litellmPath else {
+            appendLog("\n[LiteLLM bridge not started: litellm not installed]\n")
+            return
+        }
+        guard bridgeProcess == nil else { return }
+
+        let configPath = Self.litellmConfigFilePath()
+        let dir = (configPath as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        try? litellmConfigText.write(toFile: configPath, atomically: true, encoding: .utf8)
+        litellmConfigWritten = FileManager.default.fileExists(atPath: configPath)
+
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: litellm)
+        proc.arguments = ["--config", configPath, "--host", "127.0.0.1", "--port", "\(bridgePort)"]
+
+        let outPipe = Pipe()
+        let errPipe = Pipe()
+        proc.standardOutput = outPipe
+        proc.standardError = errPipe
+        outPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            if let text = String(data: data, encoding: .utf8), !text.isEmpty {
+                DispatchQueue.main.async { self?.appendLog("[bridge] " + text) }
+            }
+        }
+        errPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            if let text = String(data: data, encoding: .utf8), !text.isEmpty {
+                DispatchQueue.main.async { self?.appendLog("[bridge] " + text) }
+            }
+        }
+        proc.terminationHandler = { [weak self] finished in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if self.bridgeProcess === finished {
+                    self.bridgeProcess = nil
+                    self.bridgeRunning = false
+                    if finished.terminationStatus != 0 && self.state.isRunning {
+                        self.appendLog("\n[LiteLLM bridge exited (status \(finished.terminationStatus))]\n")
+                    }
+                }
+            }
+        }
+
+        bridgeProcess = proc
+        do {
+            try proc.run()
+            bridgeRunning = true
+            appendLog("\n[LiteLLM bridge starting on port \(bridgePort)]\n")
+        } catch {
+            bridgeProcess = nil
+            bridgeRunning = false
+            appendLog("\n[Failed to launch LiteLLM bridge: \(error.localizedDescription)]\n")
+        }
+    }
+
+    /// Stops the LiteLLM bridge (if running).
+    private func stopBridge() {
+        guard let proc = bridgeProcess else { return }
+        bridgeProcess = nil
+        bridgeRunning = false
+        let tree = Self.processTreePIDs(root: proc.processIdentifier)
+        Self.signal(tree, SIGTERM)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
+            let survivors = tree.filter { kill($0, 0) == 0 }
+            guard !survivors.isEmpty else { return }
+            Self.signal(survivors, SIGKILL)
+        }
     }
 
     /// Writes a global OpenCode config pointing at this server (current port +

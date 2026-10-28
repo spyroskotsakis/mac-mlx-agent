@@ -10,6 +10,22 @@ app attached.
 
 (nothing yet — work in progress goes here before the next release.)
 
+## [1.3.0] — 2026-10-28
+
+### Added
+
+- **Configurable ports**: both the MLX server port and the LiteLLM bridge port are
+  now editable in Advanced (instead of hardcoded 8080 / 4001), and the bridge
+  config, the Claude Code env profile, and the "How to start" commands all follow
+  the configured values.
+- **Pre-start port-conflict warning**: the app checks both ports before starting
+  (and whenever either is changed) and warns in Advanced if another process is
+  already listening, pointing the user to change the port.
+
+### Changed
+
+- Stopping the app now also frees the configured bridge port (not just 4001).
+
 ## [1.2.0] — 2026-10-28
 
 ### Added
@@ -86,6 +102,7 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.3.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.3.0
 [1.2.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.2.0
 [1.1.1]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.1.1
 [1.1.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.1.0

@@ -30,6 +30,10 @@ struct ContentView: View {
         }
         .onChange(of: server.port) { _, _ in
             server.checkOpenCodeConfig()
+            server.checkPortConflicts()
+        }
+        .onChange(of: server.bridgePort) { _, _ in
+            server.checkPortConflicts()
         }
         .onChange(of: server.maxTokens) { _, newValue in
             maxTokensText = String(newValue)
@@ -620,11 +624,11 @@ struct ContentView: View {
             // How to launch it — self-contained, no repo required.
             DisclosureGroup("How to start Claude Code") {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("1. Start the MLX server (Start button at the top).")
+                    Text("1. Start the MLX server (Start button at the top) — this also starts the bridge.")
                         .font(.caption)
-                    Text("2. Start the LiteLLM bridge (kept running in a terminal):")
+                    Text("2. Start the LiteLLM bridge if it didn't auto-start:")
                         .font(.caption)
-                    codeBlock(title: "bash", code: "litellm --config ~/.config/mlx-local/litellm-mlx.yaml --host 127.0.0.1 --port 4001")
+                    codeBlock(title: "bash", code: "litellm --config ~/.config/mlx-local/litellm-mlx.yaml --host 127.0.0.1 --port \(server.bridgePort)")
                     Text("3. Launch Claude Code pointed at the bridge:")
                         .font(.caption)
                     codeBlock(title: "bash", code: "source ~/.config/mlx-local/claude-code.env && claude")
@@ -661,6 +665,7 @@ struct ContentView: View {
     }
 
     private var litellmDetail: String {
+        if server.bridgeRunning { return "running on 127.0.0.1:\(server.bridgePort)" }
         if server.litellmPath == nil { return "not installed — click Install" }
         if !server.litellmConfigWritten { return "installed — no bridge config yet" }
         return server.litellmPath ?? ""
@@ -886,9 +891,20 @@ struct ContentView: View {
                     Spacer()
                 }
                 Stepper(value: $server.port, in: 1024...65535) {
-                    Text("Port: \(server.port)")
+                    Text("MLX server port: \(server.port)")
                 }
                 .disabled(!server.canSwitchModel)
+
+                Stepper(value: $server.bridgePort, in: 1024...65535) {
+                    Text("LiteLLM bridge port: \(server.bridgePort)")
+                }
+                .disabled(!server.canSwitchModel)
+
+                if let conflict = server.portConflictMessage {
+                    Label(conflict, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
 
                 Divider()
 
