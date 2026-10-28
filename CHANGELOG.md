@@ -29,11 +29,13 @@ First tagged release of the **MLX Server** menu-bar app.
   truth for the per-model limit.
 - **OpenCode setup**: automatic config writer (writes
   `~/.config/opencode/opencode.jsonc` with the right `limit.context` /
-  `limit.output`) plus a manual view; install instructions shown when the
-  `opencode` CLI is missing.
+  `limit.output`) plus a manual view; when the `opencode` CLI is missing, a
+  fold-out panel shows the install commands.
 - **Connect** tab (base URL, endpoints, copyable `curl`/Python examples).
 - Model download with live progress, plus delete-from-cache.
-- Requirements check with one-click `mlx-lm` install.
+- Requirements check with one-click `mlx-lm` install, plus a **Check status**
+  button that re-verifies every prerequisite and reports "ready to go" (or what's
+  still missing).
 - "Show in Finder" buttons for the config and model folders.
 - Reset-to-defaults for model settings.
 - Version + build number in the panel footer.

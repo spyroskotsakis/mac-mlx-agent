@@ -58,7 +58,7 @@ final class ServerController: ObservableObject {
         }
     }
 
-    enum OpenCodeConfigStatus {
+    enum OpenCodeConfigStatus: Equatable {
         case checking
         case notConfigured
         case portMismatch(foundPort: Int)
@@ -529,6 +529,35 @@ final class ServerController: ObservableObject {
     /// Re-resolves the `mlx_lm.server` binary (used after an install finishes).
     func refreshExecutableResolution() {
         resolvedExecutable = Self.resolveExecutable(override: executablePath)
+    }
+
+    /// Re-runs every prerequisite check (mlx-lm binary, model cache, OpenCode CLI,
+    /// and OpenCode config) in one go, so "Check status" can re-verify readiness
+    /// after the user installs a missing piece.
+    func checkAllPrerequisites() {
+        refreshExecutableResolution()
+        checkModelCached()
+        checkOpenCode()
+        checkOpenCodeConfig()
+    }
+
+    /// Whether every prerequisite is met: mlx-lm installed, the selected model
+    /// downloaded, OpenCode installed, and its config pointing at this server.
+    var isReady: Bool {
+        resolvedExecutable != nil &&
+        modelCached == true &&
+        openCodePath != nil &&
+        openCodeConfigStatus == .configured
+    }
+
+    /// The prerequisite names still missing (empty when `isReady`).
+    var missingPrerequisites: [String] {
+        var missing: [String] = []
+        if resolvedExecutable == nil { missing.append("mlx-lm") }
+        if modelCached != true { missing.append("model files") }
+        if openCodePath == nil { missing.append("OpenCode") }
+        if openCodeConfigStatus != .configured { missing.append("OpenCode config") }
+        return missing
     }
 
     /// Installs `mlx-lm` (plus the `uvicorn`/`fastapi` its server needs) into the

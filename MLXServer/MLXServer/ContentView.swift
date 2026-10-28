@@ -255,7 +255,15 @@ struct ContentView: View {
 
     private var requirementsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Requirements").font(.subheadline).foregroundStyle(.secondary)
+            HStack {
+                Text("Requirements").font(.subheadline).foregroundStyle(.secondary)
+                Spacer()
+                Button("Check status") { server.checkAllPrerequisites() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+            }
+
+            readinessLine
 
             requirementRow(
                 ok: server.resolvedExecutable != nil,
@@ -312,6 +320,22 @@ struct ContentView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("This removes the model from the local HuggingFace cache and frees \(selectedModelSizeText) of disk space. You can download it again later.")
+        }
+    }
+
+    /// A single "ready to go / N things left" line, so after installing a missing
+    /// piece the user can click "Check status" and see whether they're done.
+    @ViewBuilder
+    private var readinessLine: some View {
+        if server.isReady {
+            Label("Ready to go — all prerequisites met.", systemImage: "checkmark.seal.fill")
+                .font(.caption)
+                .foregroundStyle(.green)
+        } else {
+            Label("Not ready — \(server.missingPrerequisites.joined(separator: ", ")) still needed.",
+                  systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
         }
     }
 
