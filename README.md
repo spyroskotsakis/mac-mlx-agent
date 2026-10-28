@@ -16,7 +16,7 @@ Everything runs on your own hardware. Your code never leaves your Mac.
 > **Just want it to work?** Download the **MLX Server** menu-bar app from the
 > [latest release](https://github.com/spyroskotsakis/mac-mlx-agent/releases/latest)
 > and run it — it installs `mlx-lm`, downloads the model, and sets up OpenCode
-> automatically, so you can skip the manual steps below. See
+> and Claude Code automatically, so you can skip the manual steps below. See
 > [Use the menu-bar app](#use-the-menu-bar-app-recommended).
 
 ---
@@ -199,10 +199,12 @@ This repo also ships a native macOS **menu-bar app** (`MLXServer/`) that
 2. Unzip and drop `MLXServer.app` into `/Applications`.
 3. Run it. The app then **installs `mlx-lm`** for you (one click when it's
    missing), **downloads the selected model** into the HuggingFace cache (with a
-   live progress bar — or auto-downloads on first Start), and **sets up OpenCode**
+   live progress bar — or auto-downloads on first Start), **sets up OpenCode**
    automatically (writes `~/.config/opencode/opencode.jsonc` pointing at the
-   server, with the right per-model `limit.context`) — or shows you the exact
-   config to write by hand.
+   server, with the right per-model `limit.context`), and **sets up Claude Code**
+   with a separate env profile (`~/.config/mlx-local/claude-code.env`) pointing at
+   the LiteLLM bridge on port 4001 — or shows you the exact config to write by
+   hand.
 
 So **Steps 1–3 below are optional** — they're kept to explain what the app does
 under the hood and for people who prefer the terminal. The app defaults to the
