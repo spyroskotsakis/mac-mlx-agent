@@ -3,9 +3,7 @@
 Run a fully **local** agentic AI stack on an Apple Silicon Mac — no cloud, no API
 keys — and use it as the model behind your coding agents and Xcode itself.
 
-This is a from-scratch setup based on Apple's **WWDC26 session "Run local
-agentic AI on the Mac using MLX"**
-([video](https://www.youtube.com/watch?v=wykPErJ8M-8)). It works with:
+It works with:
 
 - **Xcode** (its "Add an ACP Agent" flow, through OpenCode's `acp` server)
 - **Claude Code** (the CLI, pointed at the local model through a bridge)
@@ -63,7 +61,7 @@ Code's CLI, and OpenCode, with nothing round-tripping to a cloud provider.
 The honest tradeoff: a local 35B MoE is not a frontier cloud model — for the
 hardest problems a hosted model can still win. But for most day-to-day coding,
 "private, free, offline, and yours" is a strong offer. See
-[Performance notes](#performance-notes-from-the-video) and
+[Performance notes](#performance-notes) and
 [Caveats](#caveats-be-realistic) for the realistic picture.
 
 ---
@@ -126,7 +124,7 @@ RAM; 4-bit weights ≈ (parameters in billions) × 0.55 GB.
 
 | Model | Size (4-bit) | Notes |
 |-------|-------------|-------|
-| `mlx-community/Qwen3.5-35B-A3B-4bit` | ~19 GB | **Default.** MoE coder (3B active → fast). The model the WWDC26 demo used; its tool calls parse reliably. |
+| `mlx-community/Qwen3.5-35B-A3B-4bit` | ~19 GB | **Default.** MoE coder (3B active → fast); its tool calls parse reliably. |
 | `mlx-community/Qwen3.6-35B-A3B-4bit` | ~20 GB | MoE coder (3B active), newer sibling of the default. |
 | `mlx-community/Qwen3.8-27B-4bit` | ~16 GB | 27B mid-size option. |
 | `mlx-community/Qwen3-14B-4bit` | ~8.3 GB | **Smallest option.** Qwen3 instruct — less RAM, and the natural pick for "concurrent requests" mode. |
@@ -281,9 +279,8 @@ configured OpenCode first (both covered below).
 
 ### B. Agent-driven development (build the app for you)
 
-This is what the video's "drawing iPad app from scratch" demo actually did: an
-**agent** writes the code and runs `xcodebuild` to compile and fix it, while the
-project is open in Xcode.
+An **agent** writes the code and runs `xcodebuild` to compile and fix it, while
+the project is open in Xcode.
 
 1. Open (or create) your Xcode project.
 2. Launch the agent on the local model — OpenCode (`opencode run`) pointed at
@@ -477,7 +474,7 @@ or `~/.claude/settings.json`, your normal Claude Code login is left untouched.
 
 ---
 
-## Performance notes (from the video)
+## Performance notes
 
 - **Neural accelerators** (M5): MLX targets them automatically — ~4× faster
   matrix multiplication vs M4, which translates almost 1:1 to faster prompt
@@ -485,9 +482,7 @@ or `~/.claude/settings.json`, your normal Claude Code login is left untouched.
 - **Continuous batching**: the server batches concurrent requests on the GPU, so
   parallel sub-agents don't queue — they're served concurrently.
 - **Distributed inference** (advanced): MLX can spread a model across multiple
-  Macs over Thunderbolt/Ethernet to run models too large for one machine. This
-  is covered in Apple's separate session "Explore Distributed Inference and
-  Training with MLX".
+  Macs over Thunderbolt/Ethernet to run models too large for one machine.
 
 ---
 
