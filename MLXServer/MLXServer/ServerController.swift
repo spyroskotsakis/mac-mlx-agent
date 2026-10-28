@@ -101,6 +101,8 @@ final class ServerController: ObservableObject {
     @Published private(set) var openCodeConfigStatus: OpenCodeConfigStatus = .checking
     @Published private(set) var setupMessage: String = ""
     @Published private(set) var openCodePath: String?
+    @Published private(set) var claudeCodePath: String?
+    @Published private(set) var claudeCodeProfileWritten: Bool = false
 
     @Published var selectedModel: ModelOption {
         didSet {
@@ -190,6 +192,8 @@ final class ServerController: ObservableObject {
         self.topK = UserDefaults.standard.object(forKey: Keys.topK) as? Int ?? ModelDefaults.topK
         self.maxTokens = UserDefaults.standard.object(forKey: Keys.maxTokens) as? Int ?? ModelDefaults.maxTokens
         self.openCodePath = Self.resolveOpenCode()
+        self.claudeCodePath = Self.resolveClaudeCode()
+        self.claudeCodeProfileWritten = FileManager.default.fileExists(atPath: Self.claudeCodeEnvFilePath())
 
         self.resolvedExecutable = Self.resolveExecutable(override: self.executablePath)
     }
@@ -539,6 +543,7 @@ final class ServerController: ObservableObject {
         checkModelCached()
         checkOpenCode()
         checkOpenCodeConfig()
+        checkClaudeCode()
     }
 
     /// Whether every prerequisite is met: mlx-lm installed, the selected model
@@ -731,6 +736,73 @@ final class ServerController: ObservableObject {
         openCodePath = Self.resolveOpenCode()
     }
 
+    // MARK: - Claude Code (separate profile via the LiteLLM bridge)
+
+    /// Path to Claude Code's env profile (sourced by the `claude-local` /
+    /// `claude-mlx` shell alias). Separate from OpenCode's config because Claude
+    /// Code speaks the Anthropic API and reaches the model through the LiteLLM
+    /// bridge rather than the OpenAI endpoint directly.
+    func claudeCodeEnvPath() -> String {
+        Self.claudeCodeEnvFilePath()
+    }
+
+    /// Folder containing Claude Code's env profile (for "Show in Finder").
+    var claudeCodeEnvFolderPath: String {
+        (Self.claudeCodeEnvFilePath() as NSString).deletingLastPathComponent
+    }
+
+    private static func claudeCodeEnvFilePath() -> String {
+        FileManager.default.homeDirectoryForCurrentUser.path + "/.config/mlx-local/claude-code.env"
+    }
+
+    /// Re-resolves the Claude Code CLI and re-checks whether its env profile exists.
+    func checkClaudeCode() {
+        claudeCodePath = Self.resolveClaudeCode()
+        claudeCodeProfileWritten = FileManager.default.fileExists(atPath: Self.claudeCodeEnvFilePath())
+    }
+
+    /// The Claude Code env profile. Points `claude` at the LiteLLM bridge, which
+    /// translates Anthropic → OpenAI to reach the MLX server on :8080.
+    var claudeCodeConfigText: String {
+        """
+        # Claude Code → local MLX model via the LiteLLM bridge.
+        # Sourced by the `claude-local` / `claude-mlx` shell alias (see ~/.bashrc).
+        # Prerequisites: the MLX server (8080) AND the LiteLLM bridge (4001) running.
+        export ANTHROPIC_BASE_URL="http://127.0.0.1:4001"
+        export ANTHROPIC_AUTH_TOKEN="sk-local-claude"
+        export ANTHROPIC_MODEL="default_model"
+        export ANTHROPIC_DEFAULT_OPUS_MODEL="default_model"
+        export ANTHROPIC_DEFAULT_SONNET_MODEL="default_model"
+        export ANTHROPIC_DEFAULT_HAIKU_MODEL="default_model"
+        export CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1
+        """
+    }
+
+    /// Writes the Claude Code env profile (backing up any existing file first).
+    func writeClaudeCodeConfig() {
+        let path = claudeCodeEnvPath()
+        let dir = (path as NSString).deletingLastPathComponent
+        do {
+            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+
+            if FileManager.default.fileExists(atPath: path) {
+                let df = DateFormatter()
+                df.dateFormat = "yyyyMMdd-HHmmss"
+                let backup = path + ".bak-" + df.string(from: Date())
+                try FileManager.default.moveItem(atPath: path, toPath: backup)
+                setupMessage = "Backed up existing Claude Code profile to \(backup)\n"
+            } else {
+                setupMessage = ""
+            }
+
+            try claudeCodeConfigText.write(toFile: path, atomically: true, encoding: .utf8)
+            setupMessage += "Wrote \(path)\n"
+            checkClaudeCode()
+        } catch {
+            setupMessage = "Failed to write Claude Code profile: \(error.localizedDescription)\n"
+        }
+    }
+
     /// Writes a global OpenCode config pointing at this server (current port +
     /// selected model), backing up any existing file first.
     func writeOpenCodeConfig() {
@@ -920,6 +992,30 @@ final class ServerController: ObservableObject {
             return candidate
         }
         return resolveViaLoginShell(command: "opencode")
+    }
+
+    /// Finds the Claude Code CLI, preferring common npm/nvm and Homebrew locations.
+    private static func resolveClaudeCode() -> String? {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let candidates = [
+            home + "/.local/bin/claude",
+            "/opt/homebrew/bin/claude",
+            "/usr/local/bin/claude"
+        ]
+        for candidate in candidates where FileManager.default.isExecutableFile(atPath: candidate) {
+            return candidate
+        }
+
+        // npm-global installs under nvm live at ~/.nvm/versions/node/<v>/bin/claude.
+        let nvmNodes = home + "/.nvm/versions/node"
+        if let versions = try? FileManager.default.contentsOfDirectory(atPath: nvmNodes) {
+            for version in versions.sorted() {
+                let bin = nvmNodes + "/" + version + "/bin/claude"
+                if FileManager.default.isExecutableFile(atPath: bin) { return bin }
+            }
+        }
+
+        return resolveViaLoginShell(command: "claude")
     }
 
     private static func resolveViaLoginShell(command: String) -> String? {

@@ -10,6 +10,16 @@ app attached.
 
 (nothing yet — work in progress goes here before the next release.)
 
+## [1.1.0] — 2026-10-28
+
+### Added
+
+- **Claude Code integration** — check the `claude` CLI (with fold-out install
+  steps when missing) and set up a separate env profile
+  (`~/.config/mlx-local/claude-code.env`) pointing Claude Code at the LiteLLM
+  bridge, so `claude-local` / `claude-mlx` route to the local model as
+  `default_model`.
+
 ## [1.0.0] — 2026-10-28
 
 First tagged release of the **MLX Server** menu-bar app.
@@ -45,4 +55,5 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.1.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.1.0
 [1.0.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.0.0

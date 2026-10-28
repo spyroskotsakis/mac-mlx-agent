@@ -4,6 +4,7 @@ import AppKit
 struct ContentView: View {
     @ObservedObject var server: ServerController
     @State private var showManualConfig = false
+    @State private var showManualClaudeCode = false
     @State private var showDeleteModelConfirm = false
     @State private var samplingInfo: SamplingInfo?
     @State private var maxTokensText = ""
@@ -479,6 +480,107 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .textSelection(.enabled)
             }
+
+            claudeCodeSection
+        }
+    }
+
+    /// Claude Code integration. Like OpenCode it's an agent front-end, but it
+    /// speaks the Anthropic API, so it needs the LiteLLM bridge and its own env
+    /// profile (sourced by the `claude-local` shell alias) instead of the OpenCode
+    /// config file.
+    private var claudeCodeSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // CLI: detect whether `claude` is installed.
+            HStack(spacing: 8) {
+                Image(systemName: server.claudeCodePath != nil ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .foregroundStyle(server.claudeCodePath != nil ? Color.green : Color.orange)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Claude Code").font(.callout)
+                    Text(server.claudeCodePath ?? "not installed")
+                        .font(.caption2)
+                        .foregroundStyle(server.claudeCodePath == nil ? .orange : .secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer()
+            }
+
+            if server.claudeCodePath == nil {
+                DisclosureGroup("How to install Claude Code") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("1. Install the CLI:")
+                            .font(.caption)
+                        codeBlock(title: "bash", code: "npm install -g @anthropic-ai/claude-code")
+                        Text("Or the official installer:")
+                            .font(.caption)
+                        codeBlock(title: "bash", code: "curl -fsSL https://claude.ai/install.sh | bash")
+                        Text("2. Reopen this panel (or click Check status) so it re-detects Claude Code.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 4)
+                }
+                .font(.caption2)
+            }
+
+            // Profile: a separate env file pointing Claude Code at the LiteLLM bridge.
+            HStack(spacing: 8) {
+                Image(systemName: server.claudeCodeProfileWritten ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(server.claudeCodeProfileWritten ? Color.green : Color.secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Profile").font(.callout)
+                    Text(server.claudeCodeProfileWritten ? "env profile written" : "no env profile yet")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Button("Set up") { server.writeClaudeCodeConfig() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(server.claudeCodePath == nil)
+                Button(showManualClaudeCode ? "Hide" : "Manual") { showManualClaudeCode.toggle() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                Button { openInFinder(server.claudeCodeEnvFolderPath) } label: {
+                    Image(systemName: "folder")
+                }
+                .buttonStyle(.borderless)
+                .help("Show profile folder in Finder")
+            }
+
+            if showManualClaudeCode {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Write this to \(server.claudeCodeEnvPath()) — or source it before running `claude`.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                    ScrollView {
+                        Text(server.claudeCodeConfigText)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                    .frame(height: 150)
+                    .padding(8)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .windowBackgroundColor)))
+                    HStack(spacing: 8) {
+                        Button("Copy profile") { copy(server.claudeCodeConfigText) }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        Button("Verify") { server.checkClaudeCode() }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    }
+                }
+            }
+
+            Text("Claude Code also needs the LiteLLM bridge running: `.venv-litellm/bin/litellm --config litellm-mlx.yaml --host 127.0.0.1 --port 4001`.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
