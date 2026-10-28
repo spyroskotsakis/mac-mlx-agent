@@ -109,6 +109,7 @@ final class ServerController: ObservableObject {
     @Published private(set) var litellmConfigWritten: Bool = false
     @Published private(set) var bridgeRunning: Bool = false
     @Published private(set) var portConflictMessage: String?
+    @Published private(set) var mlxLMHealthy: Bool = true
 
     @Published var selectedModel: ModelOption {
         didSet {
@@ -252,6 +253,7 @@ final class ServerController: ObservableObject {
     // MARK: - Lifecycle
 
     func onAppear() {
+        checkMLXLM()
         // If a server is already listening on our port (started by a previous
         // launch or a shell script), reflect that instead of launching a second
         // one on top of it.
@@ -565,6 +567,19 @@ final class ServerController: ObservableObject {
         resolvedExecutable = Self.resolveExecutable(override: executablePath)
     }
 
+    /// Runs `mlx_lm.server --help` to confirm the mlx-lm install actually imports
+    /// (a broken install — e.g. a transformers/huggingface_hub conflict — exits
+    /// non-zero). Off the main thread so the UI doesn't stall.
+    func checkMLXLM() {
+        guard let exe = resolvedExecutable else { return }
+        DispatchQueue.global(qos: .utility).async {
+            let healthy = Self.mlxLMHealth(at: exe)
+            DispatchQueue.main.async {
+                self.mlxLMHealthy = healthy
+            }
+        }
+    }
+
     /// Re-runs every prerequisite check (mlx-lm binary, model cache, OpenCode CLI,
     /// and OpenCode config) in one go, so "Check status" can re-verify readiness
     /// after the user installs a missing piece.
@@ -576,6 +591,7 @@ final class ServerController: ObservableObject {
         checkClaudeCode()
         checkLitellm()
         checkPortConflicts()
+        checkMLXLM()
     }
 
     /// Whether every prerequisite is met: mlx-lm installed, the selected model
@@ -583,6 +599,7 @@ final class ServerController: ObservableObject {
     /// runnable with its bridge profile and the LiteLLM bridge config written.
     var isReady: Bool {
         resolvedExecutable != nil &&
+        mlxLMHealthy == true &&
         modelCached == true &&
         openCodePath != nil &&
         openCodeConfigStatus == .configured &&
@@ -597,7 +614,11 @@ final class ServerController: ObservableObject {
     /// The prerequisite names still missing (empty when `isReady`).
     var missingPrerequisites: [String] {
         var missing: [String] = []
-        if resolvedExecutable == nil { missing.append("mlx-lm") }
+        if resolvedExecutable == nil {
+            missing.append("mlx-lm")
+        } else if !mlxLMHealthy {
+            missing.append("mlx-lm (broken)")
+        }
         if modelCached != true { missing.append("model files") }
         if openCodePath == nil { missing.append("OpenCode") }
         if openCodeConfigStatus != .configured { missing.append("OpenCode config") }
@@ -654,6 +675,7 @@ final class ServerController: ObservableObject {
             self.isInstalling = false
             self.appendInstallOutput(status == 0 ? "\n[mlx-lm installed]\n" : "\n[install failed (status \(status))]\n")
             self.refreshExecutableResolution()
+            self.checkMLXLM()
         })
     }
 
@@ -947,15 +969,43 @@ final class ServerController: ObservableObject {
         }
     }
 
-    /// Installs `litellm` into the discovered Python environment.
+    /// Installs `litellm[proxy]` into its own venv (`.venv-litellm`), never into
+    /// the mlx-lm environment: litellm pins `tokenizers==0.22.2` while mlx_lm's
+    /// transformers needs `>=0.23.1`, so they cannot share a Python environment.
     func installLitellm() {
         guard !isInstalling else { return }
         guard let python = Self.findPython() else {
-            installOutput = "Could not find a Python interpreter to install into.\n"
+            installOutput = "Could not find a Python interpreter to bootstrap litellm.\n"
             return
         }
         isInstalling = true
         installOutput = ""
+
+        let venvDir = Self.litellmVenvFolderPath()
+        let venvPython = venvDir + "/bin/python"
+        let venvLitellm = venvDir + "/bin/litellm"
+
+        if FileManager.default.isExecutableFile(atPath: venvLitellm) {
+            installLitellmIntoVenv(python: venvPython)
+        } else {
+            appendInstallOutput("$ \(python) -m venv \(venvDir)\n\n")
+            runStreaming(executable: python,
+                         arguments: ["-m", "venv", venvDir],
+                         sink: { [weak self] in self?.appendInstallOutput($0) },
+                         completion: { [weak self] status in
+                guard let self else { return }
+                guard status == 0 else {
+                    self.isInstalling = false
+                    self.appendInstallOutput("\n[Failed to create the litellm venv (status \(status))]\n")
+                    self.checkLitellm()
+                    return
+                }
+                self.installLitellmIntoVenv(python: venvPython)
+            })
+        }
+    }
+
+    private func installLitellmIntoVenv(python: String) {
         appendInstallOutput("$ \(python) -m pip install --upgrade 'litellm[proxy]'\n\n")
         runStreaming(executable: python,
                      arguments: ["-m", "pip", "install", "--upgrade", "litellm[proxy]"],
@@ -963,7 +1013,7 @@ final class ServerController: ObservableObject {
                      completion: { [weak self] status in
             guard let self else { return }
             self.isInstalling = false
-            self.appendInstallOutput(status == 0 ? "\n[litellm installed]\n" : "\n[install failed (status \(status))]\n")
+            self.appendInstallOutput(status == 0 ? "\n[litellm installed in its own venv]\n" : "\n[install failed (status \(status))]\n")
             self.checkLitellm()
         })
     }
@@ -1238,10 +1288,14 @@ final class ServerController: ObservableObject {
 
     /// Finds the LiteLLM CLI (the bridge Claude Code needs), preferring common
     /// venv / Homebrew / conda locations, then the login shell's PATH.
+    private static func litellmVenvFolderPath() -> String {
+        FileManager.default.homeDirectoryForCurrentUser.path + "/.config/mlx-local/.venv-litellm"
+    }
+
     private static func resolveLitellm() -> String? {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let candidates = [
-            home + "/.config/mlx-local/.venv-litellm/bin/litellm",
+            litellmVenvFolderPath() + "/bin/litellm",
             home + "/.local/bin/litellm",
             "/opt/homebrew/bin/litellm",
             "/usr/local/bin/litellm",
@@ -1322,6 +1376,23 @@ final class ServerController: ObservableObject {
             return (version?.isEmpty == false) ? version : nil
         } catch {
             return nil
+        }
+    }
+
+    /// Runs `mlx_lm.server --help`; a healthy install exits 0, a broken one (e.g.
+    /// a transformers/huggingface_hub conflict) exits non-zero.
+    private static func mlxLMHealth(at path: String) -> Bool {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: path)
+        proc.arguments = ["--help"]
+        proc.standardOutput = FileHandle.nullDevice
+        proc.standardError = FileHandle.nullDevice
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+            return proc.terminationStatus == 0
+        } catch {
+            return false
         }
     }
 

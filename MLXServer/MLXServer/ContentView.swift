@@ -280,13 +280,19 @@ struct ContentView: View {
             readinessLine
 
             requirementRow(
-                ok: server.resolvedExecutable != nil,
-                showAction: server.resolvedExecutable == nil,
+                ok: server.resolvedExecutable != nil && server.mlxLMHealthy,
+                showAction: server.resolvedExecutable == nil || !server.mlxLMHealthy,
                 title: "mlx-lm (mlx_lm.server)",
-                detail: server.resolvedExecutable ?? "not installed",
-                buttonTitle: "Install",
+                detail: mlxLMDetail,
+                buttonTitle: server.resolvedExecutable == nil ? "Install" : "Repair",
                 action: server.installMLX
             )
+
+            if server.resolvedExecutable != nil && !server.mlxLMHealthy {
+                Text("mlx_lm.server won't import — usually a conflicting transformers / huggingface_hub. Click Repair, and make sure LiteLLM uses its own venv (see Integrations).")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+            }
 
             requirementRow(
                 ok: server.modelCached == true,
@@ -351,6 +357,12 @@ struct ContentView: View {
                 .font(.caption)
                 .foregroundStyle(.orange)
         }
+    }
+
+    private var mlxLMDetail: String {
+        if server.resolvedExecutable == nil { return "not installed" }
+        if !server.mlxLMHealthy { return "installed but broken — dependency conflict" }
+        return server.resolvedExecutable ?? ""
     }
 
     private var modelDetail: String {

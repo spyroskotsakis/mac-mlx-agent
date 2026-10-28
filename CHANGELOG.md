@@ -10,6 +10,22 @@ app attached.
 
 (nothing yet — work in progress goes here before the next release.)
 
+## [1.4.1] — 2026-10-28
+
+### Fixed
+
+- **LiteLLM now installs into its own venv** (`~/.config/mlx-local/.venv-litellm`)
+  instead of the mlx-lm environment. litellm pins `tokenizers==0.22.2` while
+  mlx-lm's transformers needs `>=0.23.1`, so sharing an environment breaks
+  `mlx_lm.server` with an `ImportError` on `huggingface_hub`. This no longer
+  happens on any machine.
+
+### Added
+
+- **mlx-lm health check** — the app now runs `mlx_lm.server --help` to confirm the
+  install actually imports, and flags a broken install as "dependency conflict"
+  with a Repair button instead of failing at start time.
+
 ## [1.4.0] — 2026-10-28
 
 ### Added
@@ -121,6 +137,7 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.4.1]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.4.1
 [1.4.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.4.0
 [1.3.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.3.0
 [1.2.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.2.0
