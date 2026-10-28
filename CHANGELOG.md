@@ -10,6 +10,19 @@ app attached.
 
 (nothing yet — work in progress goes here before the next release.)
 
+## [1.1.1] — 2026-10-28
+
+### Fixed
+
+- Claude Code detection now finds npm/nvm installs (the `bin/claude` shim exists
+  even when its target isn't executable) and tries both bash and zsh when
+  resolving CLIs, so an `~/.bash_profile`-based nvm setup is detected.
+
+### Changed
+
+- "Check status" readiness now also requires Claude Code and its bridge profile,
+  and lists them in the missing-prerequisites line.
+
 ## [1.1.0] — 2026-10-28
 
 ### Added
@@ -55,5 +68,6 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.1.1]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.1.1
 [1.1.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.1.0
 [1.0.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.0.0

@@ -547,12 +547,15 @@ final class ServerController: ObservableObject {
     }
 
     /// Whether every prerequisite is met: mlx-lm installed, the selected model
-    /// downloaded, OpenCode installed, and its config pointing at this server.
+    /// downloaded, OpenCode installed + configured, and Claude Code installed
+    /// with its bridge profile written.
     var isReady: Bool {
         resolvedExecutable != nil &&
         modelCached == true &&
         openCodePath != nil &&
-        openCodeConfigStatus == .configured
+        openCodeConfigStatus == .configured &&
+        claudeCodePath != nil &&
+        claudeCodeProfileWritten
     }
 
     /// The prerequisite names still missing (empty when `isReady`).
@@ -562,6 +565,8 @@ final class ServerController: ObservableObject {
         if modelCached != true { missing.append("model files") }
         if openCodePath == nil { missing.append("OpenCode") }
         if openCodeConfigStatus != .configured { missing.append("OpenCode config") }
+        if claudeCodePath == nil { missing.append("Claude Code") }
+        if !claudeCodeProfileWritten { missing.append("Claude Code profile") }
         return missing
     }
 
@@ -994,11 +999,14 @@ final class ServerController: ObservableObject {
         return resolveViaLoginShell(command: "opencode")
     }
 
-    /// Finds the Claude Code CLI, preferring common npm/nvm and Homebrew locations.
+    /// Finds the Claude Code CLI, preferring the platform-native binary, then the
+    /// npm/nvm shim, then common Homebrew / native-installer locations.
     private static func resolveClaudeCode() -> String? {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let candidates = [
             home + "/.local/bin/claude",
+            home + "/.claude/local/claude",
+            home + "/.claude/bin/claude",
             "/opt/homebrew/bin/claude",
             "/usr/local/bin/claude"
         ]
@@ -1007,11 +1015,13 @@ final class ServerController: ObservableObject {
         }
 
         // npm-global installs under nvm live at ~/.nvm/versions/node/<v>/bin/claude.
+        // That path is a symlink to a shim whose target can be non-executable when
+        // npm's postinstall didn't run, so accept it if it merely exists.
         let nvmNodes = home + "/.nvm/versions/node"
         if let versions = try? FileManager.default.contentsOfDirectory(atPath: nvmNodes) {
-            for version in versions.sorted() {
+            for version in versions.sorted(by: >) {
                 let bin = nvmNodes + "/" + version + "/bin/claude"
-                if FileManager.default.isExecutableFile(atPath: bin) { return bin }
+                if FileManager.default.fileExists(atPath: bin) { return bin }
             }
         }
 
@@ -1019,23 +1029,27 @@ final class ServerController: ObservableObject {
     }
 
     private static func resolveViaLoginShell(command: String) -> String? {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        proc.arguments = ["-ic", "command -v \(command)"]
-        let out = Pipe()
-        proc.standardOutput = out
-        proc.standardError = Pipe()
-        do {
-            try proc.run()
-            proc.waitUntilExit()
-            let data = out.fileHandleForReading.readDataToEndOfFile()
-            let path = String(data: data, encoding: .utf8)?
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if let path, !path.isEmpty, FileManager.default.isExecutableFile(atPath: path) {
-                return path
+        for shell in ["/bin/bash", "/bin/zsh"] {
+            for flags in [["-lc"], ["-ic"]] {
+                let proc = Process()
+                proc.executableURL = URL(fileURLWithPath: shell)
+                proc.arguments = flags + ["command -v \(command)"]
+                let out = Pipe()
+                proc.standardOutput = out
+                proc.standardError = Pipe()
+                do {
+                    try proc.run()
+                    proc.waitUntilExit()
+                    let data = out.fileHandleForReading.readDataToEndOfFile()
+                    let path = String(data: data, encoding: .utf8)?
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let path, !path.isEmpty, FileManager.default.isExecutableFile(atPath: path) {
+                        return path
+                    }
+                } catch {
+                    // try the next shell/flags
+                }
             }
-        } catch {
-            // fall through to nil
         }
         return nil
     }
