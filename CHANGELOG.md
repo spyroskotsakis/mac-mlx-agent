@@ -10,6 +10,24 @@ app attached.
 
 (nothing yet — work in progress goes here before the next release.)
 
+## [1.2.0] — 2026-10-28
+
+### Added
+
+- **LiteLLM bridge setup** for Claude Code: the app now checks `litellm`, can
+  install it, and writes `~/.config/mlx-local/litellm-mlx.yaml` — so a user with
+  only the downloaded `.app` (no repo clone) still gets a working bridge config.
+- **"How to start Claude Code"** fold-out with the exact three commands (MLX
+  server → LiteLLM bridge → `claude`), using app-written paths instead of repo
+  paths.
+
+### Changed
+
+- Claude Code status now distinguishes *installed and runnable* (runs
+  `claude --version`) from *installed but broken* (a shim without its native
+  binary), with a reinstall hint for the broken case.
+- Readiness now also requires `litellm` and the bridge config.
+
 ## [1.1.1] — 2026-10-28
 
 ### Fixed
@@ -68,6 +86,7 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.2.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.2.0
 [1.1.1]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.1.1
 [1.1.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.1.0
 [1.0.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.0.0

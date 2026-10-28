@@ -491,15 +491,15 @@ struct ContentView: View {
     /// config file.
     private var claudeCodeSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // CLI: detect whether `claude` is installed.
+            // CLI: detect whether `claude` is installed and actually runs.
             HStack(spacing: 8) {
-                Image(systemName: server.claudeCodePath != nil ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                    .foregroundStyle(server.claudeCodePath != nil ? Color.green : Color.orange)
+                Image(systemName: claudeCodeIcon)
+                    .foregroundStyle(claudeCodeColor)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("Claude Code").font(.callout)
-                    Text(server.claudeCodePath ?? "not installed")
+                    Text(claudeCodeDetail)
                         .font(.caption2)
-                        .foregroundStyle(server.claudeCodePath == nil ? .orange : .secondary)
+                        .foregroundStyle(server.claudeCodeVersion == nil ? .orange : .secondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -522,6 +522,46 @@ struct ContentView: View {
                     .padding(.top, 4)
                 }
                 .font(.caption2)
+            } else if server.claudeCodeVersion == nil {
+                // Installed but the binary doesn't run — a broken npm install.
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Claude Code is installed but not runnable — usually a broken npm install (a shim without its native binary).")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                    codeBlock(title: "bash", code: "npm install -g @anthropic-ai/claude-code")
+                    Text("Then reopen this panel (or click Check status) to re-verify.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 4)
+            }
+
+            // LiteLLM bridge: Claude Code's Anthropic → OpenAI translator proxy.
+            HStack(spacing: 8) {
+                Image(systemName: litellmOk ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(litellmOk ? Color.green : Color.secondary)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("LiteLLM bridge").font(.callout)
+                    Text(litellmDetail)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Button("Set up config") { server.writeLitellmConfig() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(server.litellmPath == nil)
+                if server.litellmPath == nil {
+                    Button("Install") { server.installLitellm() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                }
+                Button { openInFinder(server.litellmConfigFolderPath) } label: {
+                    Image(systemName: "folder")
+                }
+                .buttonStyle(.borderless)
+                .help("Show bridge config folder in Finder")
             }
 
             // Profile: a separate env file pointing Claude Code at the LiteLLM bridge.
@@ -577,11 +617,53 @@ struct ContentView: View {
                 }
             }
 
-            Text("Claude Code also needs the LiteLLM bridge running: `.venv-litellm/bin/litellm --config litellm-mlx.yaml --host 127.0.0.1 --port 4001`.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            // How to launch it — self-contained, no repo required.
+            DisclosureGroup("How to start Claude Code") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("1. Start the MLX server (Start button at the top).")
+                        .font(.caption)
+                    Text("2. Start the LiteLLM bridge (kept running in a terminal):")
+                        .font(.caption)
+                    codeBlock(title: "bash", code: "litellm --config ~/.config/mlx-local/litellm-mlx.yaml --host 127.0.0.1 --port 4001")
+                    Text("3. Launch Claude Code pointed at the bridge:")
+                        .font(.caption)
+                    codeBlock(title: "bash", code: "source ~/.config/mlx-local/claude-code.env && claude")
+                    Text("If you use bash and have `claude-local` set up, `claude-local` does the same.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 4)
+            }
+            .font(.caption2)
         }
+    }
+
+    private var claudeCodeColor: Color {
+        server.claudeCodeVersion != nil ? .green : .orange
+    }
+
+    private var claudeCodeIcon: String {
+        server.claudeCodeVersion != nil ? "checkmark.circle.fill" : "exclamationmark.triangle.fill"
+    }
+
+    private var claudeCodeDetail: String {
+        if let path = server.claudeCodePath {
+            if let version = server.claudeCodeVersion {
+                return "\(version) — \(path)"
+            }
+            return "installed but not runnable — \(path)"
+        }
+        return "not installed"
+    }
+
+    private var litellmOk: Bool {
+        server.litellmPath != nil && server.litellmConfigWritten
+    }
+
+    private var litellmDetail: String {
+        if server.litellmPath == nil { return "not installed — click Install" }
+        if !server.litellmConfigWritten { return "installed — no bridge config yet" }
+        return server.litellmPath ?? ""
     }
 
     private var configSymbol: String {

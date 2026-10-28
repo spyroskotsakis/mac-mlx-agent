@@ -102,7 +102,10 @@ final class ServerController: ObservableObject {
     @Published private(set) var setupMessage: String = ""
     @Published private(set) var openCodePath: String?
     @Published private(set) var claudeCodePath: String?
+    @Published private(set) var claudeCodeVersion: String?
     @Published private(set) var claudeCodeProfileWritten: Bool = false
+    @Published private(set) var litellmPath: String?
+    @Published private(set) var litellmConfigWritten: Bool = false
 
     @Published var selectedModel: ModelOption {
         didSet {
@@ -193,7 +196,10 @@ final class ServerController: ObservableObject {
         self.maxTokens = UserDefaults.standard.object(forKey: Keys.maxTokens) as? Int ?? ModelDefaults.maxTokens
         self.openCodePath = Self.resolveOpenCode()
         self.claudeCodePath = Self.resolveClaudeCode()
+        self.claudeCodeVersion = self.claudeCodePath.flatMap { Self.claudeVersion(at: $0) }
         self.claudeCodeProfileWritten = FileManager.default.fileExists(atPath: Self.claudeCodeEnvFilePath())
+        self.litellmPath = Self.resolveLitellm()
+        self.litellmConfigWritten = FileManager.default.fileExists(atPath: Self.litellmConfigFilePath())
 
         self.resolvedExecutable = Self.resolveExecutable(override: self.executablePath)
     }
@@ -544,18 +550,22 @@ final class ServerController: ObservableObject {
         checkOpenCode()
         checkOpenCodeConfig()
         checkClaudeCode()
+        checkLitellm()
     }
 
     /// Whether every prerequisite is met: mlx-lm installed, the selected model
-    /// downloaded, OpenCode installed + configured, and Claude Code installed
-    /// with its bridge profile written.
+    /// downloaded, OpenCode installed + configured, and Claude Code installed +
+    /// runnable with its bridge profile and the LiteLLM bridge config written.
     var isReady: Bool {
         resolvedExecutable != nil &&
         modelCached == true &&
         openCodePath != nil &&
         openCodeConfigStatus == .configured &&
         claudeCodePath != nil &&
-        claudeCodeProfileWritten
+        claudeCodeVersion != nil &&
+        claudeCodeProfileWritten &&
+        litellmPath != nil &&
+        litellmConfigWritten
     }
 
     /// The prerequisite names still missing (empty when `isReady`).
@@ -565,8 +575,14 @@ final class ServerController: ObservableObject {
         if modelCached != true { missing.append("model files") }
         if openCodePath == nil { missing.append("OpenCode") }
         if openCodeConfigStatus != .configured { missing.append("OpenCode config") }
-        if claudeCodePath == nil { missing.append("Claude Code") }
+        if claudeCodePath == nil {
+            missing.append("Claude Code")
+        } else if claudeCodeVersion == nil {
+            missing.append("Claude Code (broken)")
+        }
         if !claudeCodeProfileWritten { missing.append("Claude Code profile") }
+        if litellmPath == nil { missing.append("LiteLLM") }
+        if !litellmConfigWritten { missing.append("LiteLLM config") }
         return missing
     }
 
@@ -760,9 +776,11 @@ final class ServerController: ObservableObject {
         FileManager.default.homeDirectoryForCurrentUser.path + "/.config/mlx-local/claude-code.env"
     }
 
-    /// Re-resolves the Claude Code CLI and re-checks whether its env profile exists.
+    /// Re-resolves the Claude Code CLI, confirms it runs (`--version`), and
+    /// re-checks whether its env profile exists.
     func checkClaudeCode() {
         claudeCodePath = Self.resolveClaudeCode()
+        claudeCodeVersion = claudeCodePath.flatMap { Self.claudeVersion(at: $0) }
         claudeCodeProfileWritten = FileManager.default.fileExists(atPath: Self.claudeCodeEnvFilePath())
     }
 
@@ -806,6 +824,99 @@ final class ServerController: ObservableObject {
         } catch {
             setupMessage = "Failed to write Claude Code profile: \(error.localizedDescription)\n"
         }
+    }
+
+    // MARK: - LiteLLM bridge (Claude Code needs it; written here so repo-less users get it too)
+
+    /// Path to the LiteLLM bridge config the app writes for Claude Code.
+    func litellmConfigPath() -> String {
+        Self.litellmConfigFilePath()
+    }
+
+    /// Folder containing the LiteLLM bridge config (for "Show in Finder").
+    var litellmConfigFolderPath: String {
+        (Self.litellmConfigFilePath() as NSString).deletingLastPathComponent
+    }
+
+    private static func litellmConfigFilePath() -> String {
+        FileManager.default.homeDirectoryForCurrentUser.path + "/.config/mlx-local/litellm-mlx.yaml"
+    }
+
+    /// Re-resolves the `litellm` CLI and re-checks whether the bridge config exists.
+    func checkLitellm() {
+        litellmPath = Self.resolveLitellm()
+        litellmConfigWritten = FileManager.default.fileExists(atPath: Self.litellmConfigFilePath())
+    }
+
+    /// The LiteLLM bridge config. Maps `default_model` to the MLX server's OpenAI
+    /// endpoint so Claude Code (Anthropic API) can reach the local model.
+    var litellmConfigText: String {
+        """
+        # LiteLLM bridge: Anthropic Messages API (/v1/messages) -> MLX-LM OpenAI API.
+        # Written by MLX Server. Start the MLX server first, then this proxy:
+        #   litellm --config ~/.config/mlx-local/litellm-mlx.yaml --host 127.0.0.1 --port 4001
+        # Then point Claude Code at http://127.0.0.1:4001.
+
+        model_list:
+          - model_name: default_model
+            litellm_params:
+              model: custom_openai/default_model
+              api_base: http://127.0.0.1:\(port)/v1
+              api_key: sk-no-key-needed
+              use_chat_completions_api: true
+
+        litellm_settings:
+          drop_params: true
+
+        general_settings:
+          master_key: sk-local-claude
+        """
+    }
+
+    /// Writes the LiteLLM bridge config (backing up any existing file first).
+    func writeLitellmConfig() {
+        let path = litellmConfigPath()
+        let dir = (path as NSString).deletingLastPathComponent
+        do {
+            try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+
+            if FileManager.default.fileExists(atPath: path) {
+                let df = DateFormatter()
+                df.dateFormat = "yyyyMMdd-HHmmss"
+                let backup = path + ".bak-" + df.string(from: Date())
+                try FileManager.default.moveItem(atPath: path, toPath: backup)
+                setupMessage = "Backed up existing LiteLLM config to \(backup)\n"
+            } else {
+                setupMessage = ""
+            }
+
+            try litellmConfigText.write(toFile: path, atomically: true, encoding: .utf8)
+            setupMessage += "Wrote \(path)\n"
+            checkLitellm()
+        } catch {
+            setupMessage = "Failed to write LiteLLM config: \(error.localizedDescription)\n"
+        }
+    }
+
+    /// Installs `litellm` into the discovered Python environment.
+    func installLitellm() {
+        guard !isInstalling else { return }
+        guard let python = Self.findPython() else {
+            installOutput = "Could not find a Python interpreter to install into.\n"
+            return
+        }
+        isInstalling = true
+        installOutput = ""
+        appendInstallOutput("$ \(python) -m pip install --upgrade litellm\n\n")
+        runStreaming(executable: python,
+                     arguments: ["-m", "pip", "install", "--upgrade", "litellm"],
+                     sink: { [weak self] in self?.appendInstallOutput($0) },
+                     completion: { [weak self] status in
+            guard let self else { return }
+            self.isInstalling = false
+            self.appendInstallOutput(status == 0 ? "\n[litellm installed]\n" : "\n[install failed (status \(status))]\n")
+            self.checkLitellm()
+        })
     }
 
     /// Writes a global OpenCode config pointing at this server (current port +
@@ -999,6 +1110,24 @@ final class ServerController: ObservableObject {
         return resolveViaLoginShell(command: "opencode")
     }
 
+    /// Finds the LiteLLM CLI (the bridge Claude Code needs), preferring common
+    /// venv / Homebrew / conda locations, then the login shell's PATH.
+    private static func resolveLitellm() -> String? {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let candidates = [
+            home + "/.config/mlx-local/.venv-litellm/bin/litellm",
+            home + "/.local/bin/litellm",
+            "/opt/homebrew/bin/litellm",
+            "/usr/local/bin/litellm",
+            "/opt/anaconda3/bin/litellm",
+            "/opt/miniconda3/bin/litellm"
+        ]
+        for candidate in candidates where FileManager.default.isExecutableFile(atPath: candidate) {
+            return candidate
+        }
+        return resolveViaLoginShell(command: "litellm")
+    }
+
     /// Finds the Claude Code CLI, preferring the platform-native binary, then the
     /// npm/nvm shim, then common Homebrew / native-installer locations.
     private static func resolveClaudeCode() -> String? {
@@ -1026,6 +1155,27 @@ final class ServerController: ObservableObject {
         }
 
         return resolveViaLoginShell(command: "claude")
+    }
+
+    /// Runs `claude --version` to confirm the binary actually works — a broken
+    /// npm install leaves a non-executable shim or a stub that exits non-zero.
+    private static func claudeVersion(at path: String) -> String? {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: path)
+        proc.arguments = ["--version"]
+        let out = Pipe()
+        proc.standardOutput = out
+        proc.standardError = Pipe()
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+            guard proc.terminationStatus == 0 else { return nil }
+            let data = out.fileHandleForReading.readDataToEndOfFile()
+            let version = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (version?.isEmpty == false) ? version : nil
+        } catch {
+            return nil
+        }
     }
 
     private static func resolveViaLoginShell(command: String) -> String? {
