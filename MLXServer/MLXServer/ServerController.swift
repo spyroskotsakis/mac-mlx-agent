@@ -105,6 +105,7 @@ final class ServerController: ObservableObject {
     @Published private(set) var claudeCodeVersion: String?
     @Published private(set) var claudeCodeProfileWritten: Bool = false
     @Published private(set) var litellmPath: String?
+    @Published private(set) var litellmVersion: String?
     @Published private(set) var litellmConfigWritten: Bool = false
     @Published private(set) var bridgeRunning: Bool = false
     @Published private(set) var portConflictMessage: String?
@@ -211,6 +212,7 @@ final class ServerController: ObservableObject {
         self.claudeCodeVersion = self.claudeCodePath.flatMap { Self.claudeVersion(at: $0) }
         self.claudeCodeProfileWritten = FileManager.default.fileExists(atPath: Self.claudeCodeEnvFilePath())
         self.litellmPath = Self.resolveLitellm()
+        self.litellmVersion = self.litellmPath.flatMap { Self.litellmVersion(at: $0) }
         self.litellmConfigWritten = FileManager.default.fileExists(atPath: Self.litellmConfigFilePath())
 
         self.resolvedExecutable = Self.resolveExecutable(override: self.executablePath)
@@ -588,6 +590,7 @@ final class ServerController: ObservableObject {
         claudeCodeVersion != nil &&
         claudeCodeProfileWritten &&
         litellmPath != nil &&
+        litellmVersion != nil &&
         litellmConfigWritten
     }
 
@@ -604,7 +607,11 @@ final class ServerController: ObservableObject {
             missing.append("Claude Code (broken)")
         }
         if !claudeCodeProfileWritten { missing.append("Claude Code profile") }
-        if litellmPath == nil { missing.append("LiteLLM") }
+        if litellmPath == nil {
+            missing.append("LiteLLM")
+        } else if litellmVersion == nil {
+            missing.append("LiteLLM (broken)")
+        }
         if !litellmConfigWritten { missing.append("LiteLLM config") }
         return missing
     }
@@ -887,6 +894,7 @@ final class ServerController: ObservableObject {
     /// Re-resolves the `litellm` CLI and re-checks whether the bridge config exists.
     func checkLitellm() {
         litellmPath = Self.resolveLitellm()
+        litellmVersion = litellmPath.flatMap { Self.litellmVersion(at: $0) }
         litellmConfigWritten = FileManager.default.fileExists(atPath: Self.litellmConfigFilePath())
     }
 
@@ -905,7 +913,6 @@ final class ServerController: ObservableObject {
               model: custom_openai/default_model
               api_base: http://127.0.0.1:\(port)/v1
               api_key: sk-no-key-needed
-              use_chat_completions_api: true
 
         litellm_settings:
           drop_params: true
@@ -949,9 +956,9 @@ final class ServerController: ObservableObject {
         }
         isInstalling = true
         installOutput = ""
-        appendInstallOutput("$ \(python) -m pip install --upgrade litellm\n\n")
+        appendInstallOutput("$ \(python) -m pip install --upgrade 'litellm[proxy]'\n\n")
         runStreaming(executable: python,
-                     arguments: ["-m", "pip", "install", "--upgrade", "litellm"],
+                     arguments: ["-m", "pip", "install", "--upgrade", "litellm[proxy]"],
                      sink: { [weak self] in self?.appendInstallOutput($0) },
                      completion: { [weak self] status in
             guard let self else { return }
@@ -1279,6 +1286,27 @@ final class ServerController: ObservableObject {
     /// Runs `claude --version` to confirm the binary actually works — a broken
     /// npm install leaves a non-executable shim or a stub that exits non-zero.
     private static func claudeVersion(at path: String) -> String? {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: path)
+        proc.arguments = ["--version"]
+        let out = Pipe()
+        proc.standardOutput = out
+        proc.standardError = Pipe()
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+            guard proc.terminationStatus == 0 else { return nil }
+            let data = out.fileHandleForReading.readDataToEndOfFile()
+            let version = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            return (version?.isEmpty == false) ? version : nil
+        } catch {
+            return nil
+        }
+    }
+
+    /// Runs `litellm --version` to confirm the binary actually works — a partial
+    /// install (missing the `[proxy]` extras such as `boto3`) exits non-zero.
+    private static func litellmVersion(at path: String) -> String? {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: path)
         proc.arguments = ["--version"]

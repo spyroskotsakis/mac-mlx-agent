@@ -10,6 +10,25 @@ app attached.
 
 (nothing yet — work in progress goes here before the next release.)
 
+## [1.4.0] — 2026-10-28
+
+### Added
+
+- **LiteLLM dependency check**: the app now verifies `litellm` actually runs (via
+  `litellm --version`), so a partial install that's missing its proxy extras is
+  reported as "broken" instead of silently failing to start the bridge.
+- **LiteLLM install instructions** and a Repair button for the broken case; the
+  one-click installer now installs `litellm[proxy]` (which pulls in `boto3` and
+  the other proxy runtime deps) rather than bare `litellm`.
+- **Two-column layout** for the Server tab, so unfolding the setup fold-outs no
+  longer pushes the log and footer off-screen.
+
+### Fixed
+
+- Removed `use_chat_completions_api` from the bridge config — it is rejected by
+  current LiteLLM and caused every Claude Code request to fail with a 500 before
+  the bridge could even reach the MLX server.
+
 ## [1.3.0] — 2026-10-28
 
 ### Added
@@ -102,6 +121,7 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.4.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.4.0
 [1.3.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.3.0
 [1.2.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.2.0
 [1.1.1]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.1.1

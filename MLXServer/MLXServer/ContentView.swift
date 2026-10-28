@@ -17,7 +17,7 @@ struct ContentView: View {
             connectTab
                 .tabItem { Label("Connect", systemImage: "link") }
         }
-        .frame(width: 470)
+        .frame(width: 890)
         .onAppear {
             server.onAppear()
             server.checkModelCached()
@@ -44,13 +44,22 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 14) {
             header
             statusCard
-            requirementsSection
-            integrationsSection
-            modelSection
-            modelSettingsSection
             controls
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 14) {
+                    requirementsSection
+                    integrationsSection
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                VStack(alignment: .leading, spacing: 14) {
+                    modelSection
+                    modelSettingsSection
+                    advancedSection
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
             Divider()
-            advancedSection
             logSection
             footer
         }
@@ -556,8 +565,8 @@ struct ContentView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .disabled(server.litellmPath == nil)
-                if server.litellmPath == nil {
-                    Button("Install") { server.installLitellm() }
+                if server.litellmPath == nil || server.litellmVersion == nil {
+                    Button(server.litellmPath == nil ? "Install" : "Repair") { server.installLitellm() }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                 }
@@ -566,6 +575,32 @@ struct ContentView: View {
                 }
                 .buttonStyle(.borderless)
                 .help("Show bridge config folder in Finder")
+            }
+
+            if server.litellmPath != nil && server.litellmVersion == nil {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("litellm is installed but its proxy extras are missing (e.g. boto3).")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                    codeBlock(title: "bash", code: "pip install 'litellm[proxy]'")
+                    Text("Then reopen this panel (or click Check status) to re-verify.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.top, 4)
+            } else if server.litellmPath == nil {
+                DisclosureGroup("How to install LiteLLM") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("1. Install LiteLLM with its proxy extras:")
+                            .font(.caption)
+                        codeBlock(title: "bash", code: "pip install 'litellm[proxy]'")
+                        Text("2. Reopen this panel (or click Check status) so it re-detects LiteLLM.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 4)
+                }
+                .font(.caption2)
             }
 
             // Profile: a separate env file pointing Claude Code at the LiteLLM bridge.
@@ -661,14 +696,15 @@ struct ContentView: View {
     }
 
     private var litellmOk: Bool {
-        server.litellmPath != nil && server.litellmConfigWritten
+        server.litellmPath != nil && server.litellmVersion != nil && server.litellmConfigWritten
     }
 
     private var litellmDetail: String {
         if server.bridgeRunning { return "running on 127.0.0.1:\(server.bridgePort)" }
         if server.litellmPath == nil { return "not installed — click Install" }
+        if server.litellmVersion == nil { return "installed but missing proxy extras — see below" }
         if !server.litellmConfigWritten { return "installed — no bridge config yet" }
-        return server.litellmPath ?? ""
+        return server.litellmVersion ?? server.litellmPath ?? ""
     }
 
     private var configSymbol: String {
