@@ -12,9 +12,10 @@ A small native macOS **menu-bar app** that starts and stops the local
   or Qwen3-14B, with a single place to add more.
 - Shows a **live log** of the server (model load progress, requests, errors).
 - Lets you override the **port** and the **`mlx_lm.server` path** under *Advanced*.
-- **Model settings** — toggle **thinking mode** and tune temperature, top-p,
-  top-k, and max tokens (applied on the next Start); **Reset to defaults**
-  restores the shipped values.
+- **Model settings** — per-model **thinking mode** toggle and **max context**
+  (read from each model's profile), plus temperature, top-p, top-k, and max
+  tokens (applied on the next Start); **Reset to defaults** restores the shipped
+  values.
 - A **folder** button next to the model files and the OpenCode config opens that
   folder in Finder (the model cache, or `~/.config/opencode`).
 - **OpenCode setup, automatic or manual** — writes (or shows you) a global
@@ -80,9 +81,10 @@ this server (`~/.config/opencode/opencode.jsonc`):
   yourself (or click **Copy config**). Click **Verify** to re-check it.
 
 The config sets `model: "mlx/default_model"`,
-`baseURL: http://127.0.0.1:<port>/v1`, and a `limit.output` matching the app's
-configured **Max tokens** (so a mid-generation disconnect can't wedge the single
-generation thread — see the main repo `README.md`).
+`baseURL: http://127.0.0.1:<port>/v1`, a `limit.context` matching the selected
+model's **max context** (from its profile), and a `limit.output` matching the
+app's configured **Max tokens** (so a mid-generation disconnect can't wedge the
+single generation thread — see the main repo `README.md`).
 
 Because the config is **port-specific**, the status re-checks the current port
 every time the panel opens (and whenever you change the port):
@@ -185,17 +187,38 @@ Edit `ServerController.availableModels` in `MLXServer/ServerController.swift`:
 ```swift
 static let availableModels: [ModelOption] = [
     ModelOption(repoID: "mlx-community/Qwen3.5-35B-A3B-4bit",
-                displayName: "Qwen3.5-35B-A3B (4-bit)"),
+                displayName: "Qwen3.5-35B-A3B (4-bit)",
+                profile: ModelProfile(maxContext: 262_144, thinkingSupported: true)),
     ModelOption(repoID: "mlx-community/Qwen3.6-35B-A3B-4bit",
-                displayName: "Qwen3.6-35B-A3B (4-bit)"),
+                displayName: "Qwen3.6-35B-A3B (4-bit)",
+                profile: ModelProfile(maxContext: 262_144, thinkingSupported: true)),
     ModelOption(repoID: "mlx-community/Qwen3.8-27B-4bit",
-                displayName: "Qwen3.8-27B (4-bit)"),
+                displayName: "Qwen3.8-27B (4-bit)",
+                profile: ModelProfile(maxContext: 262_144, thinkingSupported: true)),
     ModelOption(repoID: "mlx-community/Qwen3-14B-4bit",
-                displayName: "Qwen3-14B (4-bit)"),
+                displayName: "Qwen3-14B (4-bit)",
+                profile: ModelProfile(maxContext: 40_960, thinkingSupported: true)),
     ModelOption(repoID: "mlx-community/Your-New-Model-4bit",
-                displayName: "Your New Model (4-bit)"),
+                displayName: "Your New Model (4-bit)",
+                profile: ModelProfile(maxContext: 32768, thinkingSupported: false)),
 ]
 ```
+
+Each model carries a **profile** with two fields for now:
+
+- `maxContext` — the model's maximum context length (its
+  `max_position_embeddings`); this is shown in **Model settings** and written to
+  the OpenCode config's `limit.context`. This is the single per-model "max".
+- `thinkingSupported` — whether the model's chat template accepts
+  `enable_thinking`; when false the **Thinking mode** toggle is disabled for that
+  model.
+
+The **Max tokens** output limit is *not* per-model — every Qwen3-family model
+generates at most 32,768 tokens per response, so it lives as a single constant
+(`ModelDefaults.maxOutputTokens`).
+
+`thinking` (on/off) is a **per-model** preference: each model remembers its own
+toggle state independently, defaulting to **off**.
 
 Download the model first (the server also auto-downloads on first launch). The
 selected model is remembered across launches.

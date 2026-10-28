@@ -17,6 +17,16 @@ set -euo pipefail
 MODEL="${1:-mlx-community/Qwen3.5-35B-A3B-4bit}"
 PORT="${PORT:-8080}"
 
+# The same four models the menu-bar app (MLXServer/) ships, for `./start_server.sh <id>`:
+#   mlx-community/Qwen3.5-35B-A3B-4bit   (default)  max context 262144
+#   mlx-community/Qwen3.6-35B-A3B-4bit               max context 262144
+#   mlx-community/Qwen3.8-27B-4bit                   max context 262144
+#   mlx-community/Qwen3-14B-4bit                     max context  40960
+# The server reads each model's own max context from its config, so no context
+# flag is needed here. Only the client needs the matching per-model value
+# (OpenCode's `limit.context`) — the app writes that for you; set it by hand
+# only if you configure OpenCode without the app.
+
 echo "Starting MLX-LM server for: $MODEL"
 echo "Listening on http://127.0.0.1:${PORT}  (OpenAI API at /v1)"
 echo "Smoke test:"
@@ -30,9 +40,12 @@ echo
 # prompts — "Insufficient Memory" -> "generation thread died").
 # Override with KV_BITS=8 if quality suffers (and it still fits in RAM).
 KV_BITS="${KV_BITS:-4}"
+
 # Cap output at 8192 tokens. Agents spend tokens on reasoning before their tool
 # call; lower caps truncate the tool call mid-generation ("No function provided"),
-# which breaks OpenCode's agent loop.
+# which breaks OpenCode's agent loop. All Qwen3-family models here generate at
+# most 32768 tokens per response — the same ceiling the app's Max tokens field
+# enforces — so keep this at or below 32768.
 MAX_TOKENS="${MAX_TOKENS:-8192}"
 
 # Sampling params. mlx_lm.server IGNORES the model's generation_config.json and
@@ -46,9 +59,15 @@ TEMP="${TEMP:-0.2}"
 TOP_P="${TOP_P:-0.8}"
 TOP_K="${TOP_K:-20}"
 
+# Thinking mode — the same toggle as the menu-bar app, default off. The
+# Qwen3.5/3.6/3.8/14B chat templates accept `enable_thinking`; off answers
+# directly instead of emitting a long <think>…</think> preamble.
+ENABLE_THINKING="${ENABLE_THINKING:-false}"
+
 exec mlx_lm.server --model "$MODEL" --port "$PORT" \
   --kv-bits "$KV_BITS" \
   --max-tokens "$MAX_TOKENS" \
   --temp "$TEMP" \
   --top-p "$TOP_P" \
-  --top-k "$TOP_K"
+  --top-k "$TOP_K" \
+  --chat-template-args "{\"enable_thinking\":${ENABLE_THINKING}}"

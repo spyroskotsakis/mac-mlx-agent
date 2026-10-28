@@ -5,6 +5,9 @@ struct ContentView: View {
     @ObservedObject var server: ServerController
     @State private var showManualConfig = false
     @State private var showDeleteModelConfirm = false
+    @State private var samplingInfo: SamplingInfo?
+    @State private var maxTokensText = ""
+    @FocusState private var maxTokensFocused: Bool
 
     var body: some View {
         TabView {
@@ -19,12 +22,16 @@ struct ContentView: View {
             server.checkModelCached()
             server.checkOpenCodeConfig()
             server.checkOpenCode()
+            maxTokensText = String(server.maxTokens)
         }
         .onChange(of: server.selectedModel) { _, _ in
             server.checkModelCached()
         }
         .onChange(of: server.port) { _, _ in
             server.checkOpenCodeConfig()
+        }
+        .onChange(of: server.maxTokens) { _, newValue in
+            maxTokensText = String(newValue)
         }
     }
 
@@ -136,6 +143,65 @@ struct ContentView: View {
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+    }
+
+    /// Parses the Max tokens text field and clamps it to the valid range.
+    private func commitMaxTokens() {
+        let parsed = Int(maxTokensText.trimmingCharacters(in: .whitespacesAndNewlines))
+        let value = min(max(256, parsed ?? server.maxTokens), ModelDefaults.maxOutputTokens)
+        server.maxTokens = value
+        maxTokensText = String(value)
+    }
+
+    /// Which sampling setting the user tapped "(i)" on — drives the popover.
+    private enum SamplingInfo: String, Identifiable {
+        case temperature, topP, topK
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .temperature: return "Temperature"
+            case .topP: return "Top-p"
+            case .topK: return "Top-k"
+            }
+        }
+
+        var detail: String {
+            switch self {
+            case .temperature:
+                return "Controls how random the output is. Lower (near 0) = focused and deterministic; higher (near 2) = creative and varied. Too high makes the model ramble or wander off-topic."
+            case .topP:
+                return "Nucleus sampling: at each step the model only picks from the smallest set of most-likely tokens whose combined probability reaches p. Lower = safer and more predictable; higher = more diverse. Works together with Top-k."
+            case .topK:
+                return "Caps each step to the K most-likely next tokens. Lower = more conservative and coherent; higher = more variety but riskier. 0 disables the filter."
+            }
+        }
+    }
+
+    /// A small blue "i" badge that toggles an inline explanation below the control.
+    /// Built from text (not an SF Symbol) so it always renders, including in the
+    /// menu-bar popover.
+    private func infoIcon(for field: SamplingInfo) -> some View {
+        Button {
+            samplingInfo = (samplingInfo == field) ? nil : field
+        } label: {
+            Text("i")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 16, height: 16)
+                .background(Circle().fill(samplingInfo == field ? Color.accentColor.opacity(0.5) : Color.accentColor))
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Inline explanation shown under a sampling control when its "(i)" is open.
+    private func infoDetail(_ field: SamplingInfo) -> some View {
+        Text(field.detail)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .windowBackgroundColor)))
     }
 
     /// Opens `path` in Finder, falling back to the nearest existing ancestor so
@@ -332,10 +398,21 @@ struct ContentView: View {
             }
 
             if server.openCodePath == nil {
-                Text("Install OpenCode, then reopen this panel:\ncurl -fsSL https://opencode.ai/install | bash")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
+                DisclosureGroup("How to install OpenCode") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("1. Install the CLI (official installer):")
+                            .font(.caption)
+                        codeBlock(title: "bash", code: "curl -fsSL https://opencode.ai/install | bash")
+                        Text("Or with Homebrew:")
+                            .font(.caption)
+                        codeBlock(title: "bash", code: "brew install sst/tap/opencode")
+                        Text("2. Reopen this panel (or restart the app) so it re-detects OpenCode.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 4)
+                }
+                .font(.caption2)
             }
 
             // Config: automatic or manual. The config is port-specific, so the
@@ -468,6 +545,14 @@ struct ContentView: View {
     private var modelSettingsSection: some View {
         DisclosureGroup("Model settings") {
             VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Max context").font(.callout)
+                    Spacer()
+                    Text("\(server.selectedModel.profile.maxContext.formatted()) tokens")
+                        .font(.callout.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+
                 Toggle(isOn: $server.enableThinking) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Thinking mode")
@@ -477,13 +562,14 @@ struct ContentView: View {
                     }
                 }
                 .toggleStyle(.switch)
-                .disabled(!server.canSwitchModel)
+                .disabled(!server.canSwitchModel || !server.selectedModel.profile.thinkingSupported)
 
                 Divider()
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text("Temperature").font(.callout)
+                        infoIcon(for: .temperature)
                         Spacer()
                         Text(String(format: "%.2f", server.temperature))
                             .font(.callout.monospaced())
@@ -491,11 +577,15 @@ struct ContentView: View {
                     }
                     Slider(value: $server.temperature, in: 0...2, step: 0.05)
                         .disabled(!server.canSwitchModel)
+                    if samplingInfo == .temperature {
+                        infoDetail(.temperature)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text("Top-p").font(.callout)
+                        infoIcon(for: .topP)
                         Spacer()
                         Text(String(format: "%.2f", server.topP))
                             .font(.callout.monospaced())
@@ -503,17 +593,43 @@ struct ContentView: View {
                     }
                     Slider(value: $server.topP, in: 0...1, step: 0.05)
                         .disabled(!server.canSwitchModel)
+                    if samplingInfo == .topP {
+                        infoDetail(.topP)
+                    }
                 }
 
-                Stepper(value: $server.topK, in: 0...200) {
-                    Text("Top-k: \(server.topK)").font(.callout)
+                VStack(alignment: .leading, spacing: 4) {
+                    Stepper(value: $server.topK, in: 0...200) {
+                        HStack(spacing: 4) {
+                            Text("Top-k: \(server.topK)").font(.callout)
+                            infoIcon(for: .topK)
+                        }
+                    }
+                    .disabled(!server.canSwitchModel)
+                    if samplingInfo == .topK {
+                        infoDetail(.topK)
+                    }
                 }
-                .disabled(!server.canSwitchModel)
 
-                Stepper(value: $server.maxTokens, in: 256...32768, step: 256) {
-                    Text("Max tokens: \(server.maxTokens)").font(.callout)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Max tokens").font(.callout)
+                        Spacer()
+                        TextField("Max tokens", text: $maxTokensText)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 90)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($maxTokensFocused)
+                            .onSubmit { commitMaxTokens() }
+                            .onChange(of: maxTokensFocused) { _, focused in
+                                if !focused { commitMaxTokens() }
+                            }
+                            .disabled(!server.canSwitchModel)
+                    }
+                    Text("Up to \(ModelDefaults.maxOutputTokens.formatted()) output tokens per response.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
                 }
-                .disabled(!server.canSwitchModel)
 
                 HStack {
                     Spacer()
@@ -616,15 +732,31 @@ struct ContentView: View {
     }
 
     private var footer: some View {
-        HStack {
-            Text("⌘Q to quit").font(.caption2).foregroundStyle(.tertiary)
-            Spacer()
-            Button("Quit MLX Server") {
-                NSApplication.shared.terminate(nil)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text("⌘Q to quit").font(.caption2).foregroundStyle(.tertiary)
+                Spacer()
+                Button("Quit MLX Server") {
+                    NSApplication.shared.terminate(nil)
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
             }
-            .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
+            Text("v\(appVersion) (\(appBuild))")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
         }
+    }
+
+    /// The marketing version (CFBundleShortVersionString) and build number
+    /// (CFBundleVersion) from the app's Info.plist, shown in the footer so you
+    /// can tell which release you're running.
+    private var appVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+    }
+
+    private var appBuild: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
     }
 }
 

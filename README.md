@@ -13,6 +13,12 @@ agentic AI on the Mac using MLX"**
 
 Everything runs on your own hardware. Your code never leaves your Mac.
 
+> **Just want it to work?** Download the **MLX Server** menu-bar app from the
+> [latest release](https://github.com/spyroskotsakis/mac-mlx-agent/releases/latest)
+> and run it — it installs `mlx-lm`, downloads the model, and sets up OpenCode
+> automatically, so you can skip the manual steps below. See
+> [Use the menu-bar app](#use-the-menu-bar-app-recommended).
+
 ---
 
 ## What is MLX — and why this is interesting
@@ -152,12 +158,13 @@ It runs:
 ```bash
 mlx_lm.server --model "$MODEL" --port "$PORT" \
   --kv-bits "$KV_BITS" --max-tokens "$MAX_TOKENS" \
-  --temp "$TEMP" --top-p "$TOP_P" --top-k "$TOP_K"
+  --temp "$TEMP" --top-p "$TOP_P" --top-k "$TOP_K" \
+  --chat-template-args '{"enable_thinking":false}'
 ```
 
 The server loads the model and listens on `http://127.0.0.1:8080` (port `8080`
 by default). Useful flags: `--host`, `--port`, `--max-tokens`, `--temp`,
-`--kv-bits`.
+`--kv-bits`, and `--chat-template-args` (thinking mode).
 
 > **35B-A3B MoE on a 36 GB Mac — KV-cache fix.** The MoE's ~19 GB weights fit in
 > RAM, but its full-precision (16-bit) KV cache overflows Metal GPU memory during
@@ -182,23 +189,41 @@ Endpoints exposed:
 
 ---
 
-## Start it from the menu bar (optional)
+## Use the menu-bar app (recommended)
 
-This repo also ships a small native macOS **menu bar app** (`MLXServer/`) that
-starts and stops the server for you and lets you switch models — no terminal
-needed. It lives next to the clock and defaults to `start_server.sh`'s flags —
-`--kv-bits 4 --max-tokens 8192 --temp 0.2 --top-p 0.8 --top-k 20` — all editable
-in its **Model settings** section, plus a **Thinking mode** toggle.
+This repo also ships a native macOS **menu-bar app** (`MLXServer/`) that
+**installs itself** — it replaces all the manual steps below with one download:
+
+1. Download `MLXServer-<version>.zip` from the
+   [latest release](https://github.com/spyroskotsakis/mac-mlx-agent/releases/latest).
+2. Unzip and drop `MLXServer.app` into `/Applications`.
+3. Run it. The app then **installs `mlx-lm`** for you (one click when it's
+   missing), **downloads the selected model** into the HuggingFace cache (with a
+   live progress bar — or auto-downloads on first Start), and **sets up OpenCode**
+   automatically (writes `~/.config/opencode/opencode.jsonc` pointing at the
+   server, with the right per-model `limit.context`) — or shows you the exact
+   config to write by hand.
+
+So **Steps 1–3 below are optional** — they're kept to explain what the app does
+under the hood and for people who prefer the terminal. The app defaults to the
+same flags as `start_server.sh` — `--kv-bits 4 --max-tokens 8192 --temp 0.2
+--top-p 0.8 --top-k 20` — all editable in its **Model settings** section, plus a
+per-model **Thinking mode** toggle and a per-model **Max context** display.
+
+> **First launch on a downloaded build:** the app is ad-hoc signed (not
+> notarized), so macOS Gatekeeper may block it. Right-click `MLXServer.app` →
+> **Open**, or run `xattr -dr com.apple.quarantine MLXServer.app` first.
 
 - Click the **MLX Server** icon in the menu bar to open the control panel.
 - **Start / Stop** the server, pick the model, and watch the live log.
 - Add models later in `MLXServer/MLXServer/ServerController.swift`
   (`ServerController.availableModels`).
 
-Open `MLXServer/MLXServer.xcodeproj` and press **Run**, or:
+To build from source instead, open `MLXServer/MLXServer.xcodeproj` and press
+**Run**, or:
 
 ```bash
-xcodebuild -project MLXServer/MLXServer.xcodeproj -target MLXServer -configuration Debug build
+xcodebuild -project MLXServer/MLXServer.xcodeproj -target MLXServer -configuration Release build
 ```
 
 See `MLXServer/README.md` for details.
@@ -290,7 +315,7 @@ at the local server with a config file — `~/.config/opencode/opencode.jsonc`
       "models": {
         "default_model": {
           "name": "Qwen3.5-35B-A3B (local)",
-          "limit": { "context": 32768, "output": 8192 }
+          "limit": { "context": 262144, "output": 8192 }
         }
       }
     }
@@ -313,6 +338,11 @@ through your local model.
 > disconnects mid-generation. Setting `limit.output: 8192` caps OpenCode's
 > requests to match the server. Without it, the agent can wedge the single
 > generation thread and the server stops responding until restarted.
+>
+> **`limit.context` should match the model.** Set it to the model's maximum
+> context length (262144 for the Qwen3.5/3.6/3.8 models, 40960 for Qwen3-14B) so
+> OpenCode knows how much it can send. The menu-bar app writes this for you from
+> each model's profile; this sample shows the Qwen3.5 value.
 
 ---
 
@@ -503,3 +533,4 @@ or `~/.claude/settings.json`, your normal Claude Code login is left untouched.
 - `litellm-mlx.yaml` — LiteLLM config for the Anthropic→OpenAI bridge.
 - `claude-local.sh` — launches Claude Code pointed at the local bridge.
 - `MLXServer/` — native menu-bar app to start/stop the server and switch models.
+- `CHANGELOG.md` — release history (versions, features, and fixes).

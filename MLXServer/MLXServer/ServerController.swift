@@ -4,9 +4,20 @@ import Darwin
 
 /// One selectable model. `repoID` is the HuggingFace `mlx-community/…` id passed
 /// to `mlx_lm.server --model`; `displayName` is what the picker shows.
+/// Per-model capabilities. `maxContext` is the model's maximum context length
+/// (from its config's `max_position_embeddings`); `thinkingSupported` says
+/// whether its chat template accepts `enable_thinking`.
+struct ModelProfile: Hashable {
+    let maxContext: Int
+    let thinkingSupported: Bool
+}
+
+/// One selectable model. `repoID` is the HuggingFace `mlx-community/…` id passed
+/// to `mlx_lm.server --model`; `displayName` is what the picker shows.
 struct ModelOption: Identifiable, Hashable {
     let repoID: String
     let displayName: String
+    let profile: ModelProfile
     var id: String { repoID }
 }
 
@@ -18,6 +29,10 @@ enum ModelDefaults {
     static let topP = 0.8
     static let topK = 20
     static let maxTokens = 8192
+    /// Hard cap for the output-tokens setting; Qwen3-family models generate at
+    /// most this many tokens in a single response (same for every model, so it
+    /// lives here rather than in each model's profile).
+    static let maxOutputTokens = 32768
 }
 
 /// Owns the `mlx_lm.server` subprocess: starts/stops it, streams its output into
@@ -59,13 +74,17 @@ final class ServerController: ObservableObject {
     /// first entry is the default selection.
     static let availableModels: [ModelOption] = [
         ModelOption(repoID: "mlx-community/Qwen3.5-35B-A3B-4bit",
-                    displayName: "Qwen3.5-35B-A3B (4-bit)"),
+                    displayName: "Qwen3.5-35B-A3B (4-bit)",
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true)),
         ModelOption(repoID: "mlx-community/Qwen3.6-35B-A3B-4bit",
-                    displayName: "Qwen3.6-35B-A3B (4-bit)"),
+                    displayName: "Qwen3.6-35B-A3B (4-bit)",
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true)),
         ModelOption(repoID: "mlx-community/Qwen3.8-27B-4bit",
-                    displayName: "Qwen3.8-27B (4-bit)"),
+                    displayName: "Qwen3.8-27B (4-bit)",
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true)),
         ModelOption(repoID: "mlx-community/Qwen3-14B-4bit",
-                    displayName: "Qwen3-14B (4-bit)")
+                    displayName: "Qwen3-14B (4-bit)",
+                    profile: ModelProfile(maxContext: 40_960, thinkingSupported: true))
     ]
 
     @Published private(set) var state: ServerState = .stopped
@@ -84,7 +103,11 @@ final class ServerController: ObservableObject {
     @Published private(set) var openCodePath: String?
 
     @Published var selectedModel: ModelOption {
-        didSet { UserDefaults.standard.set(selectedModel.repoID, forKey: Keys.model) }
+        didSet {
+            UserDefaults.standard.set(selectedModel.repoID, forKey: Keys.model)
+            // Reflect this model's own thinking preference in the UI.
+            enableThinking = Self.loadThinking(for: selectedModel.repoID)
+        }
     }
 
     @Published var port: Int {
@@ -107,9 +130,10 @@ final class ServerController: ObservableObject {
 
     /// When true, the server passes `--chat-template-args '{"enable_thinking":true}'`
     /// so Qwen3-family models emit a hidden reasoning step before answering.
-    /// Only takes effect on the next Start.
+    /// Per-model (stored under the selected model's repo id); only takes effect
+    /// on the next Start.
     @Published var enableThinking: Bool {
-        didSet { UserDefaults.standard.set(enableThinking, forKey: Keys.enableThinking) }
+        didSet { UserDefaults.standard.set(enableThinking, forKey: Self.thinkingKey(for: selectedModel.repoID)) }
     }
 
     /// Sampling temperature (0–2).
@@ -154,16 +178,18 @@ final class ServerController: ObservableObject {
 
         self.executablePath = UserDefaults.standard.string(forKey: Keys.executable) ?? ""
         self.allowConcurrentRequests = UserDefaults.standard.bool(forKey: Keys.allowConcurrent)
-        self.enableThinking = UserDefaults.standard.bool(forKey: Keys.enableThinking)
+
+        let savedModel = UserDefaults.standard.string(forKey: Keys.model)
+        let initialModel = Self.availableModels.first(where: { $0.repoID == savedModel })
+            ?? Self.availableModels.first!
+        self.selectedModel = initialModel
+
+        self.enableThinking = Self.loadThinking(for: initialModel.repoID)
         self.temperature = UserDefaults.standard.object(forKey: Keys.temperature) as? Double ?? ModelDefaults.temperature
         self.topP = UserDefaults.standard.object(forKey: Keys.topP) as? Double ?? ModelDefaults.topP
         self.topK = UserDefaults.standard.object(forKey: Keys.topK) as? Int ?? ModelDefaults.topK
         self.maxTokens = UserDefaults.standard.object(forKey: Keys.maxTokens) as? Int ?? ModelDefaults.maxTokens
         self.openCodePath = Self.resolveOpenCode()
-
-        let savedModel = UserDefaults.standard.string(forKey: Keys.model)
-        self.selectedModel = Self.availableModels.first(where: { $0.repoID == savedModel })
-            ?? Self.availableModels.first!
 
         self.resolvedExecutable = Self.resolveExecutable(override: self.executablePath)
     }
@@ -488,6 +514,18 @@ final class ServerController: ObservableObject {
         maxTokens = ModelDefaults.maxTokens
     }
 
+    // MARK: - Per-model settings
+
+    /// UserDefaults key that stores a model's thinking preference.
+    private static func thinkingKey(for repoID: String) -> String {
+        Keys.enableThinking + "." + repoID
+    }
+
+    /// Loads a model's thinking preference (default: off).
+    private static func loadThinking(for repoID: String) -> Bool {
+        UserDefaults.standard.bool(forKey: thinkingKey(for: repoID))
+    }
+
     /// Re-resolves the `mlx_lm.server` binary (used after an install finishes).
     func refreshExecutableResolution() {
         resolvedExecutable = Self.resolveExecutable(override: executablePath)
@@ -711,7 +749,7 @@ final class ServerController: ObservableObject {
                     "models": [
                         "default_model": [
                             "name": selectedModel.displayName,
-                            "limit": ["context": 32768, "output": maxTokens]
+                            "limit": ["context": selectedModel.profile.maxContext, "output": maxTokens]
                         ]
                     ]
                 ]
