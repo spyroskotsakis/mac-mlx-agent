@@ -35,8 +35,6 @@ loaded under the alias `default_model`** on `http://127.0.0.1:8080/v1`.
 - `litellm-mlx.yaml` — LiteLLM config translating Anthropic → OpenAI for the bridge.
 - `.venv-litellm/` — (gitignored) isolated venv for `litellm[proxy]`.
 - `README.md` — full user docs. `CHANGELOG.md` — release history.
-- `localDevTests/` — scratch/experiments (a Chrome extension + a Swift drawing app),
-  not part of the product.
 
 ## Two ways to run it
 
@@ -75,8 +73,8 @@ emit tool calls the server can't parse and stall the loop.
   (+ `--max-tokens 8192`). Full-precision KV OOMs on long agent prompts.
 - **LiteLLM lives in its own venv** (`.venv-litellm`): it pins `tokenizers==0.22.2`
   while mlx-lm's transformers needs `>=0.23.1`.
-- **Ports.** MLX server = `8080`; LiteLLM bridge = `4001` (NOT 4000 — that's taken
-  by `~/Coding-Agent-Infra/litellm`).
+- **Ports.** MLX server = `8080`; LiteLLM bridge = `4001` (NOT 4000 — that's
+  commonly taken by another LiteLLM instance).
 - **Thinking mode off for agents** — it emits a hidden `<think>…</think>` preamble
   instead of the answer, so Claude Code/OpenCode stall or return empty.
 - **OpenCode `limit.output` must match the server's max tokens** (8192). OpenCode

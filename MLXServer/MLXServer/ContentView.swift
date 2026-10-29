@@ -24,6 +24,11 @@ struct ContentView: View {
             server.checkModelCached()
             server.checkOpenCodeConfig()
             server.checkOpenCode()
+            // The installer fold-outs tell users to reopen the panel to re-detect
+            // Claude Code / LiteLLM after installing them, so re-run those checks
+            // here alongside the OpenCode ones.
+            server.checkClaudeCode()
+            server.checkLitellm()
             maxTokensText = String(server.maxTokens)
         }
         .onChange(of: server.selectedModel) { _, _ in
@@ -554,9 +559,9 @@ struct ContentView: View {
                 Spacer()
             }
 
-            Label("Claude Code sends a ~66k-token system prompt every turn (OpenCode: ~15k), so it's slow locally and its prompt doesn't cache — use OpenCode for everyday agent work.", systemImage: "info.circle")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            Label("Claude Code is problematic with local models: it is slow and can stall or return empty replies. On Macs with limited RAM or compute it performs especially poorly — OpenCode is recommended for local agent work.", systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.orange)
 
             if server.claudeCodePath == nil {
                 DisclosureGroup("How to install Claude Code") {

@@ -3,8 +3,8 @@
 # Usage: ./start_server.sh [model]
 set -euo pipefail
 
-# Default is the Qwen3.5-35B-A3B MoE — the model the WWDC26 demo ran for its
-# OpenCode/Xcode agent loop. It emits the `<tool_call>\n<function=…>` XML tool
+# Default is the Qwen3.5-35B-A3B MoE, chosen for its reliable OpenCode/Xcode
+# agent loop. It emits the `<tool_call>\n<function=…>` XML tool
 # format that mlx_lm.server's qwen3_coder parser is built for, and its chat
 # template carries an explicit "<IMPORTANT>: MUST be nested within <tool_call>"
 # reminder, so structured tool calls come out reliably.

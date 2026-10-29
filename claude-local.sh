@@ -7,9 +7,8 @@
 #                                            # same 8080 endpoint)
 #   .venv-litellm/bin/litellm --config litellm-mlx.yaml --host 127.0.0.1 --port 4001
 #
-# Port 4001 (not 4000): port 4000 is used by a separate LiteLLM instance
-# (~/Coding-Agent-Infra/litellm). Keep this bridge on its own port so the two
-# never collide.
+# Port 4001 (not 4000): port 4000 is commonly taken by another LiteLLM instance.
+# Keep this bridge on its own port so the two never collide.
 #
 # Usage: ./claude-local.sh [claude args...]
 set -euo pipefail

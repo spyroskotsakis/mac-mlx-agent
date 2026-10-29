@@ -318,7 +318,7 @@ configured OpenCode first (both covered below).
 1. Start the MLX-LM server (Step 3) and leave it running.
 2. Configure OpenCode to use `mlx/default_model` (see "Use it in OpenCode").
 3. In Xcode, open the **Add an ACP Agent** dialog and fill in:
-   - **Executable**: `/Users/spyroskotsakis/.opencode/bin/opencode` (your OpenCode
+   - **Executable**: `/path/to/opencode` (your OpenCode
      binary — find it with `which opencode`)
    - **Arguments**: `acp`
    - **Interpreter**: (empty)
@@ -445,9 +445,9 @@ general_settings:
 .venv-litellm/bin/litellm --config litellm-mlx.yaml --host 127.0.0.1 --port 4001
 ```
 
-> **Why port 4001, not 4000?** Port 4000 is used by a separate LiteLLM instance
-> (`~/Coding-Agent-Infra/litellm`). Keeping this bridge on 4001 avoids a
-> bind collision, so the two can run at the same time.
+> **Why port 4001, not 4000?** Port 4000 is commonly taken by another LiteLLM
+> instance. Keeping this bridge on 4001 avoids a bind collision, so the two can
+> run at the same time.
 
 ### 3. Verify the bridge before touching Claude Code
 
@@ -613,3 +613,9 @@ default.**
 - `claude-local.sh` — launches Claude Code pointed at the local bridge.
 - `MLXServer/` — native menu-bar app to start/stop the server and switch models.
 - `CHANGELOG.md` — release history (versions, features, and fixes).
+
+---
+
+## License
+
+This project is MIT-licensed. See the [`LICENSE`](LICENSE) file for details.
