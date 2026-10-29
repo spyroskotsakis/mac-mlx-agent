@@ -6,6 +6,16 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.7.1] — 2026-10-29
+
+### Fixed
+
+- **Panel opens instantly** — the OpenCode / Claude Code / LiteLLM detection
+  checks (which run `claude --version`, `litellm --version`, and login-shell
+  `command -v` lookups) no longer block the main thread when the menu-bar panel
+  opens. They now probe in the background with a one-at-a-time guard, so the
+  window appears immediately and the status lines fill in a moment later.
+
 ## [1.7.0] — 2026-10-29
 
 ### Added
@@ -217,6 +227,7 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.7.1]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.7.1
 [1.7.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.7.0
 [1.6.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.6.0
 [1.5.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.5.0

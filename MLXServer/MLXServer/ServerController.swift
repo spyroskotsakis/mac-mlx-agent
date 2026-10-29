@@ -100,6 +100,13 @@ final class ServerController: ObservableObject {
                     profile: ModelProfile(maxContext: 40_960, thinkingSupported: true, weightGB: 7))
     ]
 
+    /// Guards the CLI-detection probes so opening the panel in quick succession
+    /// (or an `onAppear` racing a "Check status") never stacks duplicate
+    /// `--version` subprocesses. Read/written on the main thread only.
+    private static var openCodeProbeInFlight = false
+    private static var claudeCodeProbeInFlight = false
+    private static var litellmProbeInFlight = false
+
     @Published private(set) var state: ServerState = .stopped
     @Published private(set) var log: String = ""
     @Published private(set) var resolvedExecutable: String?
@@ -1104,9 +1111,20 @@ final class ServerController: ObservableObject {
         return found != port
     }
 
-    /// Re-resolves the OpenCode CLI (nil if not installed).
+    /// Re-resolves the OpenCode CLI (nil if not installed). The probe runs off
+    /// the main thread — resolving can shell out to a login shell — so opening
+    /// the panel never stalls; the path fills in a moment later.
     func checkOpenCode() {
-        openCodePath = Self.resolveOpenCode()
+        guard !Self.openCodeProbeInFlight else { return }
+        Self.openCodeProbeInFlight = true
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let path = Self.resolveOpenCode()
+            DispatchQueue.main.async {
+                Self.openCodeProbeInFlight = false
+                guard let self else { return }
+                self.openCodePath = path
+            }
+        }
     }
 
     // MARK: - Claude Code (separate profile via the LiteLLM bridge)
@@ -1129,12 +1147,25 @@ final class ServerController: ObservableObject {
     }
 
     /// Re-resolves the Claude Code CLI, confirms it runs (`--version`), and
-    /// re-checks whether its env profile exists.
+    /// re-checks whether its env profile exists. The profile/exists checks are
+    /// cheap file reads and stay synchronous; the path resolution + `--version`
+    /// subprocess (a cold Node start) runs off the main thread so the panel
+    /// doesn't stall on open.
     func checkClaudeCode() {
-        claudeCodePath = Self.resolveClaudeCode()
-        claudeCodeVersion = claudeCodePath.flatMap { Self.claudeVersion(at: $0) }
         claudeCodeProfileWritten = FileManager.default.fileExists(atPath: Self.claudeCodeEnvFilePath())
         claudeCodeProfilePortMismatch = Self.configPortMismatch(atPath: Self.claudeCodeEnvFilePath(), port: bridgePort)
+        guard !Self.claudeCodeProbeInFlight else { return }
+        Self.claudeCodeProbeInFlight = true
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let path = Self.resolveClaudeCode()
+            let version = path.flatMap { Self.claudeVersion(at: $0) }
+            DispatchQueue.main.async {
+                Self.claudeCodeProbeInFlight = false
+                guard let self else { return }
+                self.claudeCodePath = path
+                self.claudeCodeVersion = version
+            }
+        }
     }
 
     /// Lightweight re-check of just the profile's bridge port (no subprocess) —
@@ -1227,12 +1258,25 @@ final class ServerController: ObservableObject {
         FileManager.default.homeDirectoryForCurrentUser.path + "/.config/mlx-local/litellm-mlx.yaml"
     }
 
-    /// Re-resolves the `litellm` CLI and re-checks whether the bridge config exists.
+    /// Re-resolves the `litellm` CLI and re-checks whether the bridge config
+    /// exists. The config-file checks are cheap and stay synchronous; the path
+    /// resolution + `litellm --version` (a cold Python import) run off the main
+    /// thread so opening the panel doesn't stall.
     func checkLitellm() {
-        litellmPath = Self.resolveLitellm()
-        litellmVersion = litellmPath.flatMap { Self.litellmVersion(at: $0) }
         litellmConfigWritten = FileManager.default.fileExists(atPath: Self.litellmConfigFilePath())
         litellmConfigPortMismatch = Self.configPortMismatch(atPath: Self.litellmConfigFilePath(), port: port)
+        guard !Self.litellmProbeInFlight else { return }
+        Self.litellmProbeInFlight = true
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let path = Self.resolveLitellm()
+            let version = path.flatMap { Self.litellmVersion(at: $0) }
+            DispatchQueue.main.async {
+                Self.litellmProbeInFlight = false
+                guard let self else { return }
+                self.litellmPath = path
+                self.litellmVersion = version
+            }
+        }
     }
 
     /// Lightweight re-check of just the bridge config's MLX port (no subprocess)
