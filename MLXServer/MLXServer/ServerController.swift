@@ -306,12 +306,12 @@ final class ServerController: ObservableObject {
         return "Max tokens \(maxTokens) is above the safe \(ModelDefaults.maxTokens) for \(selectedModel.displayName) on this \(Int(Self.physicalRAMGB)) GB Mac — long replies fill the KV cache and can exhaust memory. Keep it at \(ModelDefaults.maxTokens), or free RAM / switch to a smaller model."
     }
 
-    /// Warning for the thinking toggle. Always flags the agent-stall problem; on a
-    /// memory-tight machine it also warns about the extra memory the hidden
-    /// reasoning tokens cost.
+    /// Warning for the thinking toggle. With mlx-lm ≥ 0.32 the reasoning arrives in
+    /// a separate `reasoning` field, so agents still get a clean answer — but each
+    /// turn is slower and, on a memory-tight machine, the extra tokens cost KV cache.
     var thinkingWarning: String? {
         guard enableThinking else { return nil }
-        var msg = "Thinking mode is ON — the hidden reasoning is emitted before the answer, which makes Claude Code and OpenCode much slower and can make them stall or return empty text. It's fine for plain chat (curl / the smoke test), but leave it off for coding agents."
+        var msg = "Thinking mode is ON — the model reasons in a separate step before answering. Claude Code and OpenCode still get a clean answer, but each turn is slower because it first emits those extra reasoning tokens."
         if selectedModelIsMemoryTight {
             msg += " On this \(Int(Self.physicalRAMGB)) GB Mac, \(selectedModel.displayName) is memory-tight, so those extra reasoning tokens can also exhaust memory."
         }

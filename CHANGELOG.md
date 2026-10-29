@@ -6,6 +6,18 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [Unreleased]
+
+### Fixed
+
+- **Thinking mode no longer breaks agents.** With mlx-lm ≥ 0.32, enabling
+  thinking emits the reasoning in a separate `reasoning` field (not an inline
+  `<think>…</think>` preamble), so the answer stays clean and both OpenCode
+  (reads `reasoning`/`reasoning_content`) and Claude Code (LiteLLM maps
+  `reasoning` → `reasoning_content`) still work. The toggle stays **off by
+  default** — it's now just slower, not broken. Updated the in-app warning and
+  docs to match.
+
 ## [1.6.0] — 2026-10-29
 
 ### Added

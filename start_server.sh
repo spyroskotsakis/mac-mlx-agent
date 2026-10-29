@@ -60,8 +60,10 @@ TOP_P="${TOP_P:-0.8}"
 TOP_K="${TOP_K:-20}"
 
 # Thinking mode — the same toggle as the menu-bar app, default off. The
-# Qwen3.5/3.6/3.8/14B chat templates accept `enable_thinking`; off answers
-# directly instead of emitting a long <think>…</think> preamble.
+# Qwen3.5/3.6/3.8/14B chat templates accept `enable_thinking`. mlx-lm ≥ 0.32
+# keeps the answer clean either way: with thinking on it emits the reasoning in a
+# separate `reasoning` field, so agents still see a clean answer. It just burns
+# extra reasoning tokens per turn (slower + more KV cache), so it stays off.
 ENABLE_THINKING="${ENABLE_THINKING:-false}"
 
 exec mlx_lm.server --model "$MODEL" --port "$PORT" \

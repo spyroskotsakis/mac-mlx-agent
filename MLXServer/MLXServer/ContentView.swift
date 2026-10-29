@@ -893,7 +893,7 @@ struct ContentView: View {
                 Toggle(isOn: $server.enableThinking) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Thinking mode")
-                        Text("Qwen3 models reason in a hidden thinking step before answering.")
+                        Text("Qwen3 models reason first, then answer — the reply stays clean either way.")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }

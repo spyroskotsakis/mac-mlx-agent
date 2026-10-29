@@ -79,8 +79,12 @@ emit tool calls the server can't parse and stall the loop.
   while mlx-lm's transformers needs `>=0.23.1`.
 - **Ports.** MLX server = `8080`; LiteLLM bridge = `4001` (NOT 4000 — that's
   commonly taken by another LiteLLM instance).
-- **Thinking mode off for agents** — it emits a hidden `<think>…</think>` preamble
-  instead of the answer, so Claude Code/OpenCode stall or return empty.
+- **Thinking mode stays off by default** (and that's fine). mlx-lm ≥ 0.32 keeps
+  the answer clean when thinking is on — it emits the reasoning in a separate
+  `reasoning` field, not inline — so OpenCode (reads `reasoning`/`reasoning_content`
+  directly) and Claude Code (LiteLLM maps `reasoning` → `reasoning_content`) both
+  still get a clean answer. It just costs extra reasoning tokens per turn, so keep
+  it off unless you want the longer reasoning pass.
 - **OpenCode `limit.output` must match the server's max tokens** (8192). OpenCode
   otherwise hard-codes 32000 and can wedge the single generation thread.
 - **Sampling params matter.** `mlx_lm.server` ignores `generation_config.json` and
