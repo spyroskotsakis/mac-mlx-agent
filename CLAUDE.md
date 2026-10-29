@@ -30,6 +30,7 @@ loaded under the alias `default_model`** on `http://127.0.0.1:8080/v1`.
   - `MLXServer/MLXServer/MLXServerApp.swift` — app entry / menu-bar lifecycle.
   - `MLXServer/MLXServer.xcodeproj` — the Xcode project.
   - `MLXServer/build/` — (gitignored) build products, signed `.app`, and release `.zip`.
+- `setup.sh` — one-command terminal setup: check/install prerequisites, download a model, write OpenCode + Claude Code configs.
 - `start_server.sh` — terminal launcher for `mlx_lm.server` (KV-cache + sampling fixes).
 - `claude-local.sh` — launches Claude Code pointed at the local LiteLLM bridge.
 - `litellm-mlx.yaml` — LiteLLM config translating Anthropic → OpenAI for the bridge.
@@ -41,7 +42,8 @@ loaded under the alias `default_model`** on `http://127.0.0.1:8080/v1`.
 1. **Menu-bar app (recommended):** build `MLXServer/`, run it, click **Start**. It
    installs mlx-lm, downloads the model, writes OpenCode + Claude Code config, and
    starts the server + bridge.
-2. **Terminal:** `./start_server.sh` (server on 8080), then for Claude Code:
+2. **Terminal:** `./setup.sh` installs the prerequisites and downloads a model,
+   then `./start_server.sh` (server on 8080); for Claude Code:
    `.venv-litellm/bin/litellm --config litellm-mlx.yaml --host 127.0.0.1 --port 4001`
    and `./claude-local.sh`.
 
@@ -63,14 +65,16 @@ emit tool calls the server can't parse and stall the loop.
 ## Critical invariants (do not violate)
 
 - **Memory safety / whole-machine OOM.** The 35B model combined with "Allow
-  concurrent requests" (full-precision KV cache, no byte cap) exhausts 36 GB of
-  unified memory and can take the *entire Mac* down — not just the server. The app
+  concurrent requests" (full-precision KV cache, no byte cap) can exhaust the
+  *entire Mac's* unified memory and take the whole machine down — not just the
+  server. The app
   enforces this in `ServerController`: `concurrentRequestsSafe` requires
   `model.weightGB <= physicalRAMGB / 4`; `start()` hard-blocks otherwise, the
   toggle is disabled for too-large models, and launching auto-clamps the setting.
   Keep this guard intact.
-- **KV-cache quantization is load-bearing.** 35B on 36 GB needs `--kv-bits 4`
-  (+ `--max-tokens 8192`). Full-precision KV OOMs on long agent prompts.
+- **KV-cache quantization is load-bearing.** The 35B needs `--kv-bits 4`
+  (+ `--max-tokens 8192`) to fit in unified memory. Full-precision KV OOMs on
+  long agent prompts.
 - **LiteLLM lives in its own venv** (`.venv-litellm`): it pins `tokenizers==0.22.2`
   while mlx-lm's transformers needs `>=0.23.1`.
 - **Ports.** MLX server = `8080`; LiteLLM bridge = `4001` (NOT 4000 — that's
@@ -93,7 +97,7 @@ The local model can drive several agents, but they are **not interchangeable**:
 their prompt sizes differ by ~10×, which decides speed and whether the prompt
 cache works at all.
 
-| Agent | Prompt / turn | Speed (35B, M4 Max) | Verdict |
+| Agent | Prompt / turn | Speed (35B, Apple Silicon) | Verdict |
 |---|---|---|---|
 | **OpenCode** | small (a few k tokens) | fast — prompt caches well | **Recommended for local agent work.** |
 | **Xcode (via OpenCode `acp`)** | small | fast | Same OpenCode path. |

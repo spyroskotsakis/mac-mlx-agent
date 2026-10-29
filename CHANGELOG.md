@@ -6,6 +6,31 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.6.0] — 2026-10-29
+
+### Added
+
+- **One-command terminal setup** — `setup.sh` checks every prerequisite, installs
+  whatever is missing, and downloads + configures a model through an interactive
+  picker (the shell equivalent of the app's Install buttons + model picker).
+- **`hf` (Hugging Face CLI) prerequisite** — detected at startup, with an in-app
+  Install button and manual instructions, so `hf download` works for the CLI path.
+- **RAM-adaptive warnings** — the Thinking-mode and Max-tokens warnings now scale
+  from the Mac's actual RAM rather than a fixed number.
+- **Reset to defaults** — one button restores model, sampling, KV-cache, and
+  concurrency settings.
+- **Stale-server reclamation** — launching or opening the app, or pressing Start,
+  now kills any leftover `mlx_lm.server`/LiteLLM bridge on *any* port (matched by
+  command line, not port), so instances never pile up and compete for memory.
+
+### Changed
+
+- **De-hardcoded** — removed machine-specific 36 GB / M4 Max / macOS version
+  references from the docs and app so the project is generic for any Apple Silicon
+  Mac.
+- **Generic bundle identifier** — `com.mlxserver.MLXServer`.
+- **Open-source release** — added the MIT license and removed test projects.
+
 ## [1.5.0] — 2026-10-28
 
 ### Known issue

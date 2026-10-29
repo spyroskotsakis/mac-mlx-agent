@@ -36,8 +36,8 @@ echo "    -d '{\"model\":\"default_model\",\"messages\":[{\"role\":\"user\",\"co
 echo
 
 # Quantize the KV cache to 4 bits. Needed for the 35B-A3B MoE (its
-# full-precision KV cache overflows Metal memory on 36 GB Macs during long agent
-# prompts — "Insufficient Memory" -> "generation thread died").
+# full-precision KV cache overflows Metal memory on Macs where the model and its
+# KV cache don't both fit — "Insufficient Memory" -> "generation thread died").
 # Override with KV_BITS=8 if quality suffers (and it still fits in RAM).
 KV_BITS="${KV_BITS:-4}"
 

@@ -8,6 +8,10 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Reclaim anything a previous session left running before we show any UI,
+        // so launching the app never leaves stale servers competing for memory.
+        ServerController.shared.killAllServers()
+
         // Build a minimal menu with just a Quit item so Cmd+Q works everywhere.
         let mainMenu = NSMenu()
         let appMenuItem = NSMenuItem()

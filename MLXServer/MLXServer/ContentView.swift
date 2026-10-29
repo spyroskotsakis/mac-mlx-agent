@@ -320,6 +320,29 @@ struct ContentView: View {
             }
 
             requirementRow(
+                ok: server.hfPath != nil,
+                showAction: server.hfPath == nil,
+                title: "Hugging Face CLI (hf)",
+                detail: hfDetail,
+                buttonTitle: "Install",
+                action: server.installHF
+            )
+
+            if server.hfPath == nil {
+                DisclosureGroup("How to install the Hugging Face CLI") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("The `hf` tool ships with `huggingface_hub`. Install it into the same Python environment as mlx-lm:")
+                            .font(.caption)
+                        codeBlock(title: "bash", code: "python3 -m pip install --upgrade huggingface_hub")
+                        Text("Then click \"Check status\" (or reopen the panel) so it re-detects `hf`.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 4)
+                }
+            }
+
+            requirementRow(
                 ok: server.modelCached == true,
                 showAction: server.modelCached == false,
                 title: "Model files",
@@ -388,6 +411,11 @@ struct ContentView: View {
         if server.resolvedExecutable == nil { return "not installed" }
         if !server.mlxLMHealthy { return "installed but broken — dependency conflict" }
         return server.resolvedExecutable ?? ""
+    }
+
+    private var hfDetail: String {
+        if server.hfPath == nil { return "not installed — needed to download models" }
+        return server.hfPath ?? ""
     }
 
     private var modelDetail: String {
@@ -873,8 +901,8 @@ struct ContentView: View {
                 .toggleStyle(.switch)
                 .disabled(!server.canSwitchModel || !server.selectedModel.profile.thinkingSupported)
 
-                if server.enableThinking {
-                    Label("Thinking mode is ON — the hidden reasoning is emitted before the answer, which makes Claude Code and OpenCode much slower and can make them stall or return empty text. It's fine for plain chat (curl / the smoke test), but leave it off for coding agents.", systemImage: "exclamationmark.triangle.fill")
+                if let warning = server.thinkingWarning {
+                    Label(warning, systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
                         .foregroundStyle(.orange)
                 }
@@ -944,6 +972,12 @@ struct ContentView: View {
                     Text(verbatim: "Up to \(ModelDefaults.maxOutputTokens) output tokens per response. 8192 is right for coding agents. Claude Code ignores this server cap and sends max_tokens=32000; its profile caps output client-side.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
+
+                    if let warning = server.maxTokensWarning {
+                        Label(warning, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 4) {

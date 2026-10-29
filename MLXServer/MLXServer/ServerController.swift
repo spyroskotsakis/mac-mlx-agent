@@ -118,6 +118,7 @@ final class ServerController: ObservableObject {
     @Published private(set) var claudeCodeProfileWritten: Bool = false
     @Published private(set) var claudeCodeProfilePortMismatch: Bool = false
     @Published private(set) var litellmPath: String?
+    @Published private(set) var hfPath: String?
     @Published private(set) var litellmVersion: String?
     @Published private(set) var litellmConfigWritten: Bool = false
     @Published private(set) var litellmConfigPortMismatch: Bool = false
@@ -238,6 +239,7 @@ final class ServerController: ObservableObject {
         self.claudeCodeProfileWritten = FileManager.default.fileExists(atPath: Self.claudeCodeEnvFilePath())
         self.claudeCodeProfilePortMismatch = Self.configPortMismatch(atPath: Self.claudeCodeEnvFilePath(), port: self.bridgePort)
         self.litellmPath = Self.resolveLitellm()
+        self.hfPath = Self.findHF()
         self.litellmVersion = self.litellmPath.flatMap { Self.litellmVersion(at: $0) }
         self.litellmConfigWritten = FileManager.default.fileExists(atPath: Self.litellmConfigFilePath())
         self.litellmConfigPortMismatch = Self.configPortMismatch(atPath: Self.litellmConfigFilePath(), port: self.port)
@@ -288,6 +290,34 @@ final class ServerController: ObservableObject {
         }
     }
 
+    /// True when the selected model's weight footprint is a large share of this
+    /// Mac's RAM — the same `weightGB > RAM/4` line the concurrent-requests guard
+    /// uses. On such a machine, high output caps and thinking mode are what tip it
+    /// into OOM, so the UI warns about both (RAM-dependent: a bigger Mac shows no
+    /// warning for the same model).
+    var selectedModelIsMemoryTight: Bool {
+        selectedModel.profile.weightGB > Self.physicalRAMGB / 4
+    }
+
+    /// Warning for the Max tokens field when the cap is raised beyond the safe
+    /// default on a memory-tight machine.
+    var maxTokensWarning: String? {
+        guard maxTokens > ModelDefaults.maxTokens, selectedModelIsMemoryTight else { return nil }
+        return "Max tokens \(maxTokens) is above the safe \(ModelDefaults.maxTokens) for \(selectedModel.displayName) on this \(Int(Self.physicalRAMGB)) GB Mac — long replies fill the KV cache and can exhaust memory. Keep it at \(ModelDefaults.maxTokens), or free RAM / switch to a smaller model."
+    }
+
+    /// Warning for the thinking toggle. Always flags the agent-stall problem; on a
+    /// memory-tight machine it also warns about the extra memory the hidden
+    /// reasoning tokens cost.
+    var thinkingWarning: String? {
+        guard enableThinking else { return nil }
+        var msg = "Thinking mode is ON — the hidden reasoning is emitted before the answer, which makes Claude Code and OpenCode much slower and can make them stall or return empty text. It's fine for plain chat (curl / the smoke test), but leave it off for coding agents."
+        if selectedModelIsMemoryTight {
+            msg += " On this \(Int(Self.physicalRAMGB)) GB Mac, \(selectedModel.displayName) is memory-tight, so those extra reasoning tokens can also exhaust memory."
+        }
+        return msg
+    }
+
     var primaryLabel: String {
         switch state {
         case .stopped, .failed: return "Start Server"
@@ -316,25 +346,42 @@ final class ServerController: ObservableObject {
     // MARK: - Lifecycle
 
     func onAppear() {
+        // Reclaim any stale server/bridge processes (from a previous crash or a
+        // manual `start_server.sh`) so the app is the single owner of the model and
+        // multiple instances never pile up competing for unified memory.
+        killAllServers()
         checkMLXLM()
-        // If a server is already listening on our port (started by a previous
-        // launch or a shell script), reflect that instead of launching a second
-        // one on top of it.
-        Task { [weak self] in
-            guard let self else { return }
-            if await self.isServerUp() {
-                await MainActor.run {
-                    guard self.state == .stopped else { return }
-                    self.state = .running
-                    self.appendLog("[Detected an already-running server on port \(self.port)]\n")
-                }
-            }
+    }
+
+    /// Kills every `mlx_lm.server` process and the app's own LiteLLM bridge,
+    /// wherever they were started from — any port, any model — excluding the
+    /// app's own tracked process/bridge. Matching is by command line (not port),
+    /// so a stale instance left running on a *different* port is caught too.
+    /// Synchronous: waits briefly for a clean SIGTERM exit, then SIGKILLs, so a
+    /// Start right after this has the port free.
+    func killAllServers() {
+        let ownPIDs: Set<pid_t> = Set([process?.processIdentifier, bridgeProcess?.processIdentifier].compactMap { $0 })
+        let targets = Array(Set(Self.pidsMatching("mlx_lm\\.server") + Self.pidsMatching("litellm-mlx\\.yaml")))
+            .filter { $0 > 0 && !ownPIDs.contains($0) }
+        guard !targets.isEmpty else { return }
+
+        appendLog("[Stopping \(targets.count) stale server/bridge process(es)]\n")
+        Self.signal(targets, SIGTERM)
+        var remaining = targets
+        for _ in 0..<10 {                       // up to ~1s of grace for uvicorn
+            remaining = remaining.filter { kill($0, 0) == 0 }
+            if remaining.isEmpty { break }
+            usleep(100_000)
+        }
+        if !remaining.isEmpty {
+            Self.signal(remaining, SIGKILL)
         }
     }
 
     // MARK: - Start / stop
 
     func start() {
+        killAllServers()
         checkPortConflicts()
         if let conflict = portConflictMessage {
             state = .failed(conflict)
@@ -478,6 +525,13 @@ final class ServerController: ObservableObject {
         for pid in pids { kill(pid, signal) }
     }
 
+    /// PIDs whose full command line matches `pattern` (via `pgrep -f`). Empty on
+    /// failure or no match.
+    private static func pidsMatching(_ pattern: String) -> [pid_t] {
+        let output = runTool("/usr/bin/pgrep", ["-f", pattern])
+        return output.split(separator: "\n").compactMap { Int32($0) }
+    }
+
     /// Kills any process currently listening on `port`. A last-resort sweep.
     private static func killListeners(on port: Int) {
         let output = runTool("/usr/sbin/lsof", ["-nP", "-iTCP:\(port)", "-sTCP:LISTEN", "-t"])
@@ -614,7 +668,8 @@ final class ServerController: ObservableObject {
     }
 
     /// Restores every model setting to its default (the values `start_server.sh`
-    /// shipped with). Takes effect on the next Start.
+    /// shipped with), including the concurrent-requests memory-safety toggle.
+    /// Takes effect on the next Start.
     func resetModelSettings() {
         enableThinking = ModelDefaults.enableThinking
         temperature = ModelDefaults.temperature
@@ -622,6 +677,7 @@ final class ServerController: ObservableObject {
         topK = ModelDefaults.topK
         maxTokens = ModelDefaults.maxTokens
         promptCacheBytesGB = ModelDefaults.promptCacheBytesGB
+        allowConcurrentRequests = false
     }
 
     // MARK: - Per-model settings
@@ -654,6 +710,11 @@ final class ServerController: ObservableObject {
         }
     }
 
+    /// Re-resolves the HuggingFace `hf` CLI (nil if not installed).
+    func checkHF() {
+        hfPath = Self.findHF()
+    }
+
     /// Re-runs every prerequisite check (mlx-lm binary, model cache, OpenCode CLI,
     /// and OpenCode config) in one go, so "Check status" can re-verify readiness
     /// after the user installs a missing piece.
@@ -664,6 +725,7 @@ final class ServerController: ObservableObject {
         checkOpenCodeConfig()
         checkClaudeCode()
         checkLitellm()
+        checkHF()
         checkPortConflicts()
         checkMLXLM()
     }
@@ -674,6 +736,7 @@ final class ServerController: ObservableObject {
     var isReady: Bool {
         resolvedExecutable != nil &&
         mlxLMHealthy == true &&
+        hfPath != nil &&
         modelCached == true &&
         openCodePath != nil &&
         openCodeConfigStatus == .configured &&
@@ -693,6 +756,7 @@ final class ServerController: ObservableObject {
         } else if !mlxLMHealthy {
             missing.append("mlx-lm (broken)")
         }
+        if hfPath == nil { missing.append("Hugging Face CLI (hf)") }
         if modelCached != true { missing.append("model files") }
         if openCodePath == nil { missing.append("OpenCode") }
         if openCodeConfigStatus != .configured { missing.append("OpenCode config") }
@@ -740,9 +804,9 @@ final class ServerController: ObservableObject {
         }
         isInstalling = true
         installOutput = ""
-        appendInstallOutput("$ \(python) -m pip install --upgrade mlx-lm uvicorn fastapi\n\n")
+        appendInstallOutput("$ \(python) -m pip install --upgrade mlx-lm uvicorn fastapi huggingface_hub\n\n")
         runStreaming(executable: python,
-                     arguments: ["-m", "pip", "install", "--upgrade", "mlx-lm", "uvicorn", "fastapi"],
+                     arguments: ["-m", "pip", "install", "--upgrade", "mlx-lm", "uvicorn", "fastapi", "huggingface_hub"],
                      sink: { [weak self] in self?.appendInstallOutput($0) },
                      completion: { [weak self] status in
             guard let self else { return }
@@ -750,6 +814,28 @@ final class ServerController: ObservableObject {
             self.appendInstallOutput(status == 0 ? "\n[mlx-lm installed]\n" : "\n[install failed (status \(status))]\n")
             self.refreshExecutableResolution()
             self.checkMLXLM()
+        })
+    }
+
+    /// Installs `huggingface_hub` (which provides the `hf` download CLI) into the
+    /// discovered Python environment, streaming output to `installOutput`.
+    func installHF() {
+        guard !isInstalling else { return }
+        guard let python = Self.findPython() else {
+            installOutput = "Could not find a Python interpreter to install into.\n"
+            return
+        }
+        isInstalling = true
+        installOutput = ""
+        appendInstallOutput("$ \(python) -m pip install --upgrade huggingface_hub\n\n")
+        runStreaming(executable: python,
+                     arguments: ["-m", "pip", "install", "--upgrade", "huggingface_hub"],
+                     sink: { [weak self] in self?.appendInstallOutput($0) },
+                     completion: { [weak self] status in
+            guard let self else { return }
+            self.isInstalling = false
+            self.appendInstallOutput(status == 0 ? "\n[huggingface_hub (hf) installed]\n" : "\n[install failed (status \(status))]\n")
+            self.checkHF()
         })
     }
 
@@ -1680,7 +1766,7 @@ final class ServerController: ObservableObject {
             let p = bin + "/hf"
             if FileManager.default.isExecutableFile(atPath: p) { return p }
         }
-        return nil
+        return resolveViaLoginShell(command: "hf")
     }
 
     /// The local HuggingFace cache `hub/` directory (respects `HF_HOME`).

@@ -141,11 +141,31 @@ can use it.
 
 ## Prerequisites
 
-- **Apple Silicon Mac** (M1 or newer). This was set up on an **M4 Max, 36 GB RAM**,
-  macOS 26.5.
+- **Apple Silicon Mac** (M1 or newer) with enough unified memory for the model
+  you pick (see the RAM guidance in Step 2). The defaults are tuned for typical
+  Apple Silicon machines, and the app adapts its warnings to your Mac's actual RAM.
 - **Xcode 26** or newer (for the Xcode integration; Xcode 26.2+ recommended).
 - **Python 3.10+** with `pip` (`mlx-lm` needs it).
 - ~19 GB free disk for the default Qwen3.5-35B-A3B MoE (4-bit).
+
+---
+
+## Quick start — one command (non-GUI)
+
+Skip the manual steps below: `setup.sh` checks every prerequisite, installs
+what's missing (`mlx-lm`, `hf`/`huggingface_hub`, `uvicorn`/`fastapi`, the
+LiteLLM venv, and the OpenCode CLI), then downloads a model of your choice and
+writes the OpenCode + Claude Code configs that point at it.
+
+```bash
+./setup.sh                                          # check + install + pick a model (interactive menu)
+./setup.sh --check                                  # only report status, install nothing
+./setup.sh --yes                                    # non-interactive: install everything + the default model
+./setup.sh --model mlx-community/Qwen3-14B-4bit     # a specific model
+```
+
+The menu offers the same four models as the app (see the table in Step 2).
+Everything below is the manual, step-by-step version of what `setup.sh` does.
 
 ---
 
@@ -182,10 +202,14 @@ your RAM; 4-bit weights ≈ (parameters in billions) × 0.55 GB.
 > both emit tool calls mlx_lm.server can't parse, which stalls the OpenCode/Xcode
 > loop.
 
-Download (or skip this — the server auto-downloads on first launch):
+Download the model you picked (or run `./setup.sh`, which does this for you —
+the server also auto-downloads on first launch):
 
 ```bash
-hf download mlx-community/Qwen3.5-35B-A3B-4bit
+hf download mlx-community/Qwen3.5-35B-A3B-4bit   # default, ~19 GB
+hf download mlx-community/Qwen3.6-35B-A3B-4bit   # ~20 GB
+hf download mlx-community/Qwen3.8-27B-4bit       # ~16 GB
+hf download mlx-community/Qwen3-14B-4bit         # ~8.3 GB (smallest)
 ```
 
 ---
@@ -212,13 +236,13 @@ The server loads the model and listens on `http://127.0.0.1:8080` (port `8080`
 by default). Useful flags: `--host`, `--port`, `--max-tokens`, `--temp`,
 `--kv-bits`, and `--chat-template-args` (thinking mode).
 
-> **35B-A3B MoE on a 36 GB Mac — KV-cache fix.** The MoE's ~19 GB weights fit in
-> RAM, but its full-precision (16-bit) KV cache overflows Metal GPU memory during
-> long agent prompts — the server dies with `[METAL] … Insufficient Memory` →
-> `generation thread died`. `start_server.sh` sets `--kv-bits 4` (and
-> `--max-tokens 8192`) to stay in budget. If output quality suffers, try
-> `KV_BITS=8 ./start_server.sh …`, but that doubles KV memory and may re-trigger
-> the OOM on long prompts.
+> **35B-A3B MoE — KV-cache fix.** The MoE's ~19 GB weights fit in RAM on most
+> Apple Silicon Macs, but its full-precision (16-bit) KV cache overflows Metal
+> GPU memory during long agent prompts — the server dies with
+> `[METAL] … Insufficient Memory` → `generation thread died`. `start_server.sh`
+> sets `--kv-bits 4` (and `--max-tokens 8192`) to stay in budget. If output
+> quality suffers, try `KV_BITS=8 ./start_server.sh …`, but that doubles KV memory
+> and may re-trigger the OOM on long prompts.
 
 **Smoke-test it** in another terminal:
 
@@ -535,7 +559,7 @@ or `~/.claude/settings.json`, your normal Claude Code login is left untouched.
 The same local model drives every agent, but they're **not interchangeable** —
 the prompt each one sends decides speed and whether caching helps.
 
-| Agent | Prompt per turn | Speed (35B on M4 Max) | Use it for |
+| Agent | Prompt per turn | Speed (35B, Apple Silicon) | Use it for |
 |-------|----------------|------------------------|------------|
 | **OpenCode** | small — ~15k tokens | fast, prompt caches well | **Everyday local agent work — the recommended choice.** |
 | **Xcode** (via OpenCode `acp`) | small | fast | In-editor assistant and agent-driven app building. |
@@ -577,8 +601,9 @@ default.**
   faster.
 - **`generation thread died` / `[METAL] Insufficient Memory`** — the model's KV
   cache overflowed GPU memory during a long prompt (common with the 35B-A3B MoE
-  on a 36 GB Mac). Relaunch with `--kv-bits 4` (or `8`) — `start_server.sh`
-  already does this. Reduce the client's context/`max_tokens` if it persists.
+  on Macs where the model and its KV cache don't both fit). Relaunch with
+  `--kv-bits 4` (or `8`) — `start_server.sh` already does this. Reduce the
+  client's context/`max_tokens` if it persists.
 - **Tool calls malformed** — use a model whose tool-call format mlx_lm.server
   actually parses. The default Qwen3.5-35B-A3B emits `<tool_call>\n<function=…>`
   (the `qwen3_coder` parser). The older Qwen3-Coder-30B drops the `<tool_call>`
@@ -608,6 +633,7 @@ default.**
 
 ## Related files in this repo
 
+- `setup.sh` — one-command terminal setup: check/install prerequisites, download a model, write configs.
 - `start_server.sh` — launches the MLX-LM server with the KV-cache + sampling fixes.
 - `litellm-mlx.yaml` — LiteLLM config for the Anthropic→OpenAI bridge.
 - `claude-local.sh` — launches Claude Code pointed at the local bridge.
