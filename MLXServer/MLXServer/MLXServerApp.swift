@@ -12,6 +12,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // so launching the app never leaves stale servers competing for memory.
         ServerController.shared.killAllServers()
 
+        // Set up update checking: register for notifications, ask permission, and
+        // check for a newer release now (then periodically while the app runs).
+        ServerController.shared.startUpdateChecking()
+
         // Build a minimal menu with just a Quit item so Cmd+Q works everywhere.
         let mainMenu = NSMenu()
         let appMenuItem = NSMenuItem()

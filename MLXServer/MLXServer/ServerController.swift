@@ -1,5 +1,7 @@
 import Foundation
 import SwiftUI
+import AppKit
+import UserNotifications
 import Darwin
 
 /// One selectable model. `repoID` is the HuggingFace `mlx-community/…` id passed
@@ -126,6 +128,28 @@ final class ServerController: ObservableObject {
     @Published private(set) var portConflictMessage: String?
     @Published private(set) var mlxLMHealthy: Bool = true
     @Published private(set) var mlxOutOfMemory: Bool = false
+
+    // MARK: - Update checking
+
+    /// The GitHub release feed polled to detect newer versions. This is the
+    /// project's own public repo; change it if the project ever relocates.
+    private static let updateFeedURL = URL(string: "https://api.github.com/repos/spyroskotsakis/mac-mlx-agent/releases/latest")!
+
+    /// True when the feed reports a release newer than this build.
+    @Published private(set) var updateAvailable = false
+    /// The latest release's semantic version (tag without the leading "v").
+    @Published private(set) var latestVersion: String?
+    /// The latest release's page, opened when the user taps the notification/banner.
+    @Published private(set) var releaseURL: URL?
+    /// True while a feed request is in flight (drives the Check spinner).
+    @Published private(set) var isCheckingForUpdates = false
+
+    private var updateCheckTimer: Timer?
+
+    /// This build's marketing version (CFBundleShortVersionString), e.g. "1.6.0".
+    static var currentAppVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+    }
 
     @Published var selectedModel: ModelOption {
         didSet {
@@ -376,6 +400,77 @@ final class ServerController: ObservableObject {
         if !remaining.isEmpty {
             Self.signal(remaining, SIGKILL)
         }
+    }
+
+    // MARK: - Update checking
+
+    /// Sets up update checking once per launch: registers the notification
+    /// delegate, asks for notification permission, runs an immediate check, and
+    /// schedules a periodic re-check. Called from the AppDelegate before any UI.
+    func startUpdateChecking() {
+        UNUserNotificationCenter.current().delegate = UpdateNotificationDelegate.shared
+        UpdateNotificationDelegate.shared.requestPermissionIfNeeded()
+        checkForUpdates()
+        scheduleUpdateChecks()
+    }
+
+    /// Queries the GitHub release feed for the latest tag and, if it's newer than
+    /// this build, flips `updateAvailable` and posts a system notification (once
+    /// per version).
+    func checkForUpdates() {
+        guard !isCheckingForUpdates else { return }
+        isCheckingForUpdates = true
+        let url = Self.updateFeedURL
+        URLSession.shared.dataTask(with: url) { [weak self] data, _, error in
+            guard let self = self else { return }
+            defer { DispatchQueue.main.async { self.isCheckingForUpdates = false } }
+            guard error == nil,
+                  let data,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let tag = json["tag_name"] as? String,
+                  let htmlURL = json["html_url"] as? String,
+                  let releaseURL = URL(string: htmlURL) else { return }
+            let version = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
+            let isNew = Self.isNewer(version, than: Self.currentAppVersion)
+            DispatchQueue.main.async {
+                self.latestVersion = version
+                self.releaseURL = releaseURL
+                if isNew && !self.updateAvailable {
+                    self.notifyUpdate(version: version, url: releaseURL)
+                }
+                self.updateAvailable = isNew
+            }
+        }.resume()
+    }
+
+    /// Re-checks for updates every few hours while the app stays running, so a
+    /// menu-bar app left open all week still notices a release.
+    private func scheduleUpdateChecks() {
+        guard updateCheckTimer == nil else { return }
+        let timer = Timer(timeInterval: 6 * 3600, repeats: true) { [weak self] _ in
+            self?.checkForUpdates()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        updateCheckTimer = timer
+    }
+
+    /// Posts an "update available" system notification, at most once per version.
+    private func notifyUpdate(version: String, url: URL) {
+        let key = "lastNotifiedVersion"
+        if UserDefaults.standard.string(forKey: key) == version { return }
+        UserDefaults.standard.set(version, forKey: key)
+
+        let content = UNMutableNotificationContent()
+        content.title = "MLX Server update available"
+        content.body = "Version \(version) is out — click to open the release."
+        content.sound = .default
+        content.userInfo = ["releaseURL": url.absoluteString]
+        let request = UNNotificationRequest(
+            identifier: "mlx-server-update-\(version)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
     }
 
     // MARK: - Start / stop
@@ -1550,6 +1645,24 @@ final class ServerController: ObservableObject {
         String(format: "%.4g", value)
     }
 
+    /// Splits "1.6.0" / "v1.6.0" into (major, minor, patch), tolerating missing
+    /// or non-numeric components.
+    private static func parseVersion(_ raw: String) -> (Int, Int, Int) {
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        let noV = trimmed.hasPrefix("v") ? String(trimmed.dropFirst()) : trimmed
+        let parts = noV.split(separator: ".", omittingEmptySubsequences: false)
+        func component(_ i: Int) -> Int { i < parts.count ? (Int(parts[i]) ?? 0) : 0 }
+        return (component(0), component(1), component(2))
+    }
+
+    /// True when `lhs` is a strictly newer semantic version than `rhs`.
+    static func isNewer(_ lhs: String, than rhs: String) -> Bool {
+        let a = parseVersion(lhs), b = parseVersion(rhs)
+        if a.0 != b.0 { return a.0 > b.0 }
+        if a.1 != b.1 { return a.1 > b.1 }
+        return a.2 > b.2
+    }
+
     private static func resolveExecutable(override: String) -> String? {
         if !override.isEmpty {
             return FileManager.default.isExecutableFile(atPath: override) ? override : nil
@@ -1830,5 +1943,27 @@ final class ServerController: ObservableObject {
             if hasConfig && hasWeights { return true }
         }
         return false
+    }
+}
+
+/// Handles a tap on the "update available" notification by opening the release
+/// page, and asks for alert/sound permission once at launch.
+final class UpdateNotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
+    static let shared = UpdateNotificationDelegate()
+
+    func requestPermissionIfNeeded() {
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        if let urlString = response.notification.request.content.userInfo["releaseURL"] as? String,
+           let url = URL(string: urlString) {
+            NSWorkspace.shared.open(url)
+        }
+        completionHandler()
     }
 }

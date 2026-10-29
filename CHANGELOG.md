@@ -8,6 +8,15 @@ app attached.
 
 ## [Unreleased]
 
+### Added
+
+- **Version number in the header** — the panel header now shows the running
+  version (e.g. `v1.6.0`) as a badge, alongside the existing footer line.
+- **Update checker** — the app polls the GitHub release feed on launch (and every
+  few hours while it stays open) and posts a system notification when a newer
+  release is out; the panel shows an "Update available" banner with a "View
+  release" button, plus a manual "Check for updates" control.
+
 ### Fixed
 
 - **Thinking mode no longer breaks agents.** With mlx-lm ≥ 0.32, enabling

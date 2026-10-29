@@ -56,6 +56,9 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 14) {
             header
             statusCard
+            if server.updateAvailable {
+                updateBanner
+            }
             if server.mlxOutOfMemory {
                 outOfMemoryWarning
             }
@@ -258,6 +261,13 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            Text("v\(appVersion)")
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(Color(nsColor: .controlBackgroundColor)))
+                .overlay(Capsule().stroke(.quaternary))
         }
     }
 
@@ -290,6 +300,24 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 10).fill(Color.orange.opacity(0.12)))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(.orange.opacity(0.4)))
+    }
+
+    private var updateBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "arrow.down.circle.fill")
+                .foregroundStyle(.green)
+            Text("Update available — v\(server.latestVersion ?? "newer")")
+                .font(.callout.weight(.medium))
+            Spacer()
+            Button("View release") {
+                if let url = server.releaseURL { NSWorkspace.shared.open(url) }
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.green.opacity(0.12)))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(.green.opacity(0.4)))
     }
 
     private var requirementsSection: some View {
@@ -1146,9 +1174,21 @@ struct ContentView: View {
                 .buttonStyle(.borderless)
                 .foregroundStyle(.secondary)
             }
-            Text("v\(appVersion) (\(appBuild))")
+            HStack(spacing: 8) {
+                Text("v\(appVersion) (\(appBuild))")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                Button("Check for updates") {
+                    server.checkForUpdates()
+                }
+                .buttonStyle(.borderless)
                 .font(.caption2)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
+                if server.isCheckingForUpdates {
+                    ProgressView().controlSize(.mini)
+                }
+                Spacer()
+            }
         }
     }
 
