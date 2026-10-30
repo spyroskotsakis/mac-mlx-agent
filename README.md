@@ -330,6 +330,10 @@ same flags as `start_server.sh` — `--kv-bits 4 --max-tokens 8192 --temp 0.2
 --top-p 0.8 --top-k 20` — all editable in its **Model settings** section, plus a
 per-model **Thinking mode** toggle and a per-model **Max context** display.
 
+<p align="center">
+  <img src="docs/mlx-server.png" alt="MLX Server menu-bar app control panel" width="480">
+</p>
+
 > **First launch on a downloaded build:** the app is ad-hoc signed (not
 > notarized), so macOS Gatekeeper may block it. Right-click `MLXServer.app` →
 > **Open**, or run `xattr -dr com.apple.quarantine MLXServer.app` first.
