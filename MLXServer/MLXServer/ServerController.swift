@@ -56,6 +56,16 @@ enum ModelDefaults {
     static let promptCacheBytesGB = 6
 }
 
+/// One missing prerequisite in the startup guide, with a one-line fix hint.
+/// `optional` marks the Claude Code / LiteLLM items that only the optional
+/// Claude Code path needs (OpenCode alone is enough to start).
+struct SetupStep: Identifiable {
+    let id = UUID()
+    let title: String
+    let hint: String
+    let optional: Bool
+}
+
 /// Owns the `mlx_lm.server` subprocess: starts/stops it, streams its output into
 /// a log, and reports readiness by polling the server's own `/v1/models` endpoint.
 final class ServerController: ObservableObject {
@@ -199,6 +209,7 @@ final class ServerController: ObservableObject {
     @Published private(set) var claudeCodeProfilePortMismatch: Bool = false
     @Published private(set) var litellmPath: String?
     @Published private(set) var hfPath: String?
+    @Published private(set) var pythonPath: String?
     @Published private(set) var litellmVersion: String?
     @Published private(set) var litellmConfigWritten: Bool = false
     @Published private(set) var litellmConfigPortMismatch: Bool = false
@@ -350,6 +361,7 @@ final class ServerController: ObservableObject {
         self.claudeCodeProfilePortMismatch = Self.configPortMismatch(atPath: Self.claudeCodeEnvFilePath(), port: self.bridgePort)
         self.litellmPath = Self.resolveLitellm()
         self.hfPath = Self.findHF()
+        self.pythonPath = Self.findPython()
         self.litellmVersion = self.litellmPath.flatMap { Self.litellmVersion(at: $0) }
         self.litellmConfigWritten = FileManager.default.fileExists(atPath: Self.litellmConfigFilePath())
         self.litellmConfigPortMismatch = Self.configPortMismatch(atPath: Self.litellmConfigFilePath(), port: self.port)
@@ -917,6 +929,13 @@ final class ServerController: ObservableObject {
         hfPath = Self.findHF()
     }
 
+    /// Re-resolves the Python interpreter (nil if none found). Everything here —
+    /// mlx-lm, the `hf` CLI, and the server itself — runs on Python, so this is
+    /// the base prerequisite the install buttons depend on.
+    func checkPython() {
+        pythonPath = Self.findPython()
+    }
+
     /// Re-runs every prerequisite check (mlx-lm binary, model cache, OpenCode CLI,
     /// and OpenCode config) in one go, so "Check status" can re-verify readiness
     /// after the user installs a missing piece.
@@ -928,6 +947,7 @@ final class ServerController: ObservableObject {
         checkClaudeCode()
         checkLitellm()
         checkHF()
+        checkPython()
         checkPortConflicts()
         checkMLXLM()
     }
@@ -938,6 +958,7 @@ final class ServerController: ObservableObject {
     var isReady: Bool {
         resolvedExecutable != nil &&
         mlxLMHealthy == true &&
+        pythonPath != nil &&
         hfPath != nil &&
         modelCached == true &&
         openCodePath != nil &&
@@ -953,6 +974,7 @@ final class ServerController: ObservableObject {
     /// The prerequisite names still missing (empty when `isReady`).
     var missingPrerequisites: [String] {
         var missing: [String] = []
+        if pythonPath == nil { missing.append("Python 3") }
         if resolvedExecutable == nil {
             missing.append("mlx-lm")
         } else if !mlxLMHealthy {
@@ -975,6 +997,76 @@ final class ServerController: ObservableObject {
         }
         if !litellmConfigWritten { missing.append("LiteLLM config") }
         return missing
+    }
+
+    /// Ordered, guided view of every prerequisite still missing, each with a
+    /// one-line "what to do" hint. Drives the startup banner so a fresh machine
+    /// sees a path to a working setup, not just a bare list of names.
+    var setupGuide: [SetupStep] {
+        var steps: [SetupStep] = []
+        if pythonPath == nil {
+            steps.append(.init(title: "Python 3",
+                               hint: "Install it — xcode-select --install, or brew install python@3.12 (see “How to install Python”).",
+                               optional: false))
+        }
+        if resolvedExecutable == nil {
+            steps.append(.init(title: "mlx-lm (mlx_lm.server)",
+                               hint: "Click Install in Requirements — runs pip install mlx-lm.",
+                               optional: false))
+        } else if !mlxLMHealthy {
+            steps.append(.init(title: "mlx-lm (broken)",
+                               hint: "Click Repair in Requirements to reinstall and clear the dependency conflict.",
+                               optional: false))
+        }
+        if hfPath == nil {
+            steps.append(.init(title: "Hugging Face CLI (hf)",
+                               hint: "Click Install in Requirements. No Hugging Face account is needed.",
+                               optional: false))
+        }
+        if modelCached != true {
+            steps.append(.init(title: "Model files",
+                               hint: "Click Download in Requirements to fetch the selected model.",
+                               optional: false))
+        }
+        if openCodePath == nil {
+            steps.append(.init(title: "OpenCode",
+                               hint: "Install it — curl -fsSL https://opencode.ai/install | bash (see “How to install OpenCode”).",
+                               optional: false))
+        }
+        if openCodeConfigStatus != .configured {
+            steps.append(.init(title: "OpenCode config",
+                               hint: "Click Set up in Integrations to point OpenCode at the server.",
+                               optional: false))
+        }
+        if claudeCodePath == nil {
+            steps.append(.init(title: "Claude Code",
+                               hint: "Install it — npm install -g @anthropic-ai/claude-code (see “How to install Claude Code”).",
+                               optional: true))
+        } else if claudeCodeVersion == nil {
+            steps.append(.init(title: "Claude Code (broken)",
+                               hint: "Reinstall — npm install -g @anthropic-ai/claude-code.",
+                               optional: true))
+        }
+        if !claudeCodeProfileWritten {
+            steps.append(.init(title: "Claude Code profile",
+                               hint: "Click Set up in Integrations to write the bridge profile.",
+                               optional: true))
+        }
+        if litellmPath == nil {
+            steps.append(.init(title: "LiteLLM",
+                               hint: "Click Install in Integrations — installs into its own venv.",
+                               optional: true))
+        } else if litellmVersion == nil {
+            steps.append(.init(title: "LiteLLM (broken)",
+                               hint: "Click Repair in Integrations.",
+                               optional: true))
+        }
+        if !litellmConfigWritten {
+            steps.append(.init(title: "LiteLLM config",
+                               hint: "Click Set up in Integrations to write the bridge config.",
+                               optional: true))
+        }
+        return steps
     }
 
     /// Warns if the MLX server or bridge port is already taken by another process

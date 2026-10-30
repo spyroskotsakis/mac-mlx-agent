@@ -8,8 +8,9 @@ A small native macOS **menu-bar app** that starts and stops the local
 
 - **Start / Stop** the MLX-LM server (OpenAI-compatible,
   `http://127.0.0.1:8080/v1`).
-- **Pick the model** — Qwen3.5-35B-A3B (default), Qwen3.6-35B-A3B, Qwen3.8-27B,
-  or Qwen3-14B, with a single place to add more.
+- **Pick the model** — 15 models (Qwen3.5/3.6-35B-A3B, Qwen3.8-27B, Qwen3-14B,
+  Qwen3.5-9B/4B/2B, Qwen2.5-Coder-7B, Devstral 24B, Gemma 4, Ministral 3, and
+  Llama 3.2 3B), each with its own profile, description, and highlights.
 - Shows a **live log** of the server (model load progress, requests, errors).
 - Lets you override the **port** and the **`mlx_lm.server` path** under *Advanced*.
 - **Model settings** — per-model **thinking mode** toggle and **max context**
@@ -35,20 +36,30 @@ tokens):
 
 ## Requirements check
 
-The panel shows a **Requirements** list and verifies the two things the server
-needs, with one-click fixes when something is missing:
+When the panel opens it verifies **everything** the stack needs and shows a
+prominent **"Missing prerequisites"** banner at the top listing what's still
+needed, so a fresh machine knows at a glance what to install and where. Each item
+also has its own row in the **Requirements** list with a one-click fix (or an
+install instruction) when it's missing:
 
-- **mlx-lm (`mlx_lm.server`)** — if the binary isn't found, click **Install** to
-  run `python -m pip install --upgrade mlx-lm uvicorn fastapi` into the detected
-  Python environment (the same one the `mlx_lm.server` shebang points at).
-- **Model files** — checks the local HuggingFace cache for the selected model's
-  weights; click **Download** to fetch them with `hf download <repo-id>`, and
-  watch a live **progress bar with the percentage** while it downloads. (You can
-  also just press Start — the server auto-downloads on first launch.) Once a
-  model is cached, a **Delete** button removes it from the cache (after a
-  confirmation) to free disk space; the server must be stopped first.
+| Dependency | Why it's needed | Missing → the app does |
+|---|---|---|
+| **Python 3** | base runtime for mlx-lm, `hf`, and the server | warning + "How to install Python" instructions |
+| **mlx-lm** (`mlx_lm.server`) | the local server | **Install** (`pip install mlx-lm uvicorn fastapi huggingface_hub`) |
+| **`hf` CLI** (`huggingface_hub`) | downloads models | **Install** (`pip install huggingface_hub`) |
+| **Model files** | the weights to serve | **Download** with a live progress bar |
+| **OpenCode** | recommended agent | "How to install OpenCode" fold-out |
+| **OpenCode config** | points OpenCode at the server | **Set up** / **Manual** |
+| **Claude Code** | optional agent | "How to install Claude Code" fold-out |
+| **Claude Code profile** | points Claude Code at the bridge | **Set up** |
+| **LiteLLM** | Anthropic→OpenAI bridge for Claude Code | **Install** into its own venv |
+| **LiteLLM config** | bridge config | **Set up** / **Update** |
 
-The checks run when you open the panel and whenever you switch models.
+The checks run when you open the panel and whenever you switch models, and
+"Check status" re-runs them after you install something. Python is the one item
+the app can't install for you, so its row shows clear install steps
+(`xcode-select --install`, `brew install python@3.12`, or python.org) — no
+Hugging Face account or `hf login` is ever needed, since the models are public.
 
 ## Concurrent requests
 

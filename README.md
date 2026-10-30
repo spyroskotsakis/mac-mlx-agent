@@ -141,12 +141,46 @@ can use it.
 
 ## Prerequisites
 
+Everything the stack needs, grouped by what's **manual** (you install once) vs
+**auto-installed/detected** (the app's one-click buttons or `setup.sh` handle it).
+Both the menu-bar app and `setup.sh` detect each item and tell you exactly what's
+missing, so a fresh machine shows its gaps up front.
+
+**Manual (install yourself):**
+
 - **Apple Silicon Mac** (M1 or newer) with enough unified memory for the model
-  you pick (see the RAM guidance in Step 2). The defaults are tuned for typical
-  Apple Silicon machines, and the app adapts its warnings to your Mac's actual RAM.
+  you pick (see the RAM guidance in Step 2). The app adapts its warnings to your
+  Mac's actual RAM.
+- **macOS 14+** (Sonoma) — the app's minimum.
+- **Python 3.10+** with `pip`. Everything runs on Python — `mlx-lm`, the `hf`
+  download tool, and the server itself. Install with `xcode-select --install`
+  (provides `/usr/bin/python3`), `brew install python@3.12`, or python.org.
 - **Xcode 26** or newer (for the Xcode integration; Xcode 26.2+ recommended).
-- **Python 3.10+** with `pip` (`mlx-lm` needs it).
-- ~19 GB free disk for the default Qwen3.5-35B-A3B MoE (4-bit).
+- **~19 GB free disk** for the default Qwen3.5-35B-A3B MoE (4-bit).
+
+**Auto-installed / detected (each missing item shows a warning + a fix):**
+
+| Dependency | Why it's needed | Missing → the app does |
+|---|---|---|
+| **Python 3** | base runtime for mlx-lm, `hf`, and the server | warning + "How to install Python" instructions |
+| **mlx-lm** (`mlx_lm.server`) | the local server | one-click **Install** (`pip install mlx-lm uvicorn fastapi huggingface_hub`) |
+| **`hf` CLI** (`huggingface_hub`) | downloads models | one-click **Install** (`pip install huggingface_hub`) |
+| **Model files** | the weights to serve | one-click **Download** with a progress bar |
+| **OpenCode** | recommended agent | "How to install OpenCode" fold-out (not pip — manual) |
+| **OpenCode config** | points OpenCode at the server | one-click **Set up** |
+| **Claude Code** | optional agent | "How to install Claude Code" fold-out |
+| **Claude Code profile** | points Claude Code at the bridge | one-click **Set up** |
+| **LiteLLM** | Anthropic→OpenAI bridge for Claude Code | one-click **Install** into its own venv |
+| **LiteLLM config** | bridge config | one-click **Set up / Update** |
+
+- **Node.js is not a direct requirement**, but OpenCode and Claude Code are Node
+  CLIs, so Node gets installed by their installers (`npm`/`nvm`). The app detects
+  those CLIs, not Node itself.
+- **No Hugging Face account is needed.** All models are public `mlx-community`
+  repos; `hf download` works anonymously, and the app never asks for a token.
+
+When the app opens, a **"Missing prerequisites"** banner lists everything still
+needed (Python included) so you know at a glance what to install and where.
 
 ---
 

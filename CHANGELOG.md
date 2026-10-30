@@ -6,6 +6,32 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.9.0] — 2026-10-30
+
+### Added
+
+- **Python 3 is now a first-class prerequisite** — detected on launch, listed in
+  the Requirements list and the startup checklist, with a "How to install Python"
+  fold-out (`xcode-select --install`, Homebrew, or python.org).
+- **Guided "Missing prerequisites" checklist** at the top of the panel — every
+  missing item shows a one-line fix and points at the one-click button / install
+  instructions that resolve it. The Claude Code and LiteLLM items are marked
+  optional, since OpenCode alone is enough to start.
+- **Confirmation before auto-install / auto-config** — installing mlx-lm, `hf`,
+  or LiteLLM, and writing the OpenCode / Claude Code / LiteLLM configs, now asks
+  first (and warns when a config file is about to be overwritten, with the
+  existing file backed up). Nothing touches the Python env or a config silently.
+- **Manual steps for risky operations** — a "How to install mlx-lm manually"
+  command and a Manual (copyable) view for the LiteLLM config, matching the
+  existing OpenCode and Claude Code manual views.
+
+### Changed
+
+- **Dependency docs** — `README.md` and `MLXServer/README.md` now list the full
+  requirement set (manual vs auto-installed) and clarify that Node.js is not a
+  direct requirement and that no Hugging Face account is needed for the public
+  `mlx-community` models.
+
 ## [1.8.0] — 2026-10-30
 
 ### Added
@@ -273,6 +299,7 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.9.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.9.0
 [1.8.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.8.0
 [1.7.1]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.7.1
 [1.7.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.7.0

@@ -6,10 +6,70 @@ struct ContentView: View {
     @ObservedObject var server: ServerController
     @State private var showManualConfig = false
     @State private var showManualClaudeCode = false
+    @State private var showManualLitellm = false
     @State private var showDeleteModelConfirm = false
     @State private var samplingInfo: SamplingInfo?
     @State private var maxTokensText = ""
     @FocusState private var maxTokensFocused: Bool
+    @State private var pendingConfirm: PendingConfirm?
+
+    /// A one-click install/config action awaiting confirmation. Auto-install and
+    /// auto-config buttons modify the Python environment or overwrite a config
+    /// file, so the user confirms each one before it runs.
+    private enum PendingConfirm: String, Identifiable {
+        case installMLX, installHF, installLitellm
+        case writeOpenCode, writeClaudeCode, writeLitellm
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .installMLX: return "Install mlx-lm?"
+            case .installHF: return "Install the Hugging Face CLI?"
+            case .installLitellm: return "Install LiteLLM?"
+            case .writeOpenCode: return "Write the OpenCode config?"
+            case .writeClaudeCode: return "Write the Claude Code profile?"
+            case .writeLitellm: return "Write the LiteLLM config?"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .installMLX:
+                return "This runs pip install into your Python environment (mlx-lm, uvicorn, fastapi, huggingface_hub) and may upgrade existing packages. You can run the same command yourself from “How to install mlx-lm manually”."
+            case .installHF:
+                return "This runs pip install huggingface_hub into your Python environment. No Hugging Face account or token is needed."
+            case .installLitellm:
+                return "This creates an isolated .venv-litellm and installs litellm[proxy] there — it does not touch your mlx-lm environment."
+            case .writeOpenCode:
+                return "This overwrites ~/.config/opencode/opencode.jsonc (your existing file is backed up first). You can instead copy it by hand from “Manual”."
+            case .writeClaudeCode:
+                return "This overwrites ~/.config/mlx-local/claude-code.env (your existing file is backed up first). You can instead copy it by hand from “Manual”."
+            case .writeLitellm:
+                return "This overwrites ~/.config/mlx-local/litellm-mlx.yaml (your existing file is backed up first)."
+            }
+        }
+
+        var actionLabel: String {
+            switch self {
+            case .installMLX: return "Install mlx-lm"
+            case .installHF: return "Install hf"
+            case .installLitellm: return "Install LiteLLM"
+            case .writeOpenCode: return "Write config"
+            case .writeClaudeCode: return "Write profile"
+            case .writeLitellm: return "Write config"
+            }
+        }
+
+        /// Overwriting a user's existing config is treated as destructive; a pip
+        /// install into a Python env is a normal (but still confirmed) action.
+        var destructive: Bool {
+            switch self {
+            case .installMLX, .installHF, .installLitellm: return false
+            case .writeOpenCode, .writeClaudeCode, .writeLitellm: return true
+            }
+        }
+    }
 
     var body: some View {
         TabView {
@@ -19,6 +79,16 @@ struct ContentView: View {
                 .tabItem { Label("Connect", systemImage: "link") }
         }
         .frame(width: 890)
+        .alert(item: $pendingConfirm) { confirm in
+            Alert(
+                title: Text(confirm.title),
+                message: Text(confirm.message),
+                primaryButton: confirm.destructive
+                    ? .destructive(Text(confirm.actionLabel)) { run(confirm) }
+                    : .default(Text(confirm.actionLabel)) { run(confirm) },
+                secondaryButton: .cancel()
+            )
+        }
         .onAppear {
             server.onAppear()
             server.checkModelCached()
@@ -52,10 +122,27 @@ struct ContentView: View {
         }
     }
 
+    /// Dispatches a confirmed action. Every entry point here is also available
+    /// as a manual terminal command or a "Manual" view, so a cautious user can
+    /// do the same thing by hand instead of one-click.
+    private func run(_ confirm: PendingConfirm) {
+        switch confirm {
+        case .installMLX: server.installMLX()
+        case .installHF: server.installHF()
+        case .installLitellm: server.installLitellm()
+        case .writeOpenCode: server.writeOpenCodeConfig()
+        case .writeClaudeCode: server.writeClaudeCodeConfig()
+        case .writeLitellm: server.writeLitellmConfig()
+        }
+    }
+
     private var serverTab: some View {
         VStack(alignment: .leading, spacing: 14) {
             header
             statusCard
+            if !server.isReady {
+                missingPrerequisitesBanner
+            }
             if server.updateAvailable {
                 updateBanner
             }
@@ -302,6 +389,58 @@ struct ContentView: View {
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(.orange.opacity(0.4)))
     }
 
+    /// Prominent, guided setup checklist shown at the top of the panel while
+    /// anything needed to start is missing. Each item carries a one-line fix and
+    /// points at the one-click buttons / install instructions in the sections below.
+    private var missingPrerequisitesBanner: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("Missing prerequisites — \(server.setupGuide.count) left",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.orange)
+                Spacer()
+                Button("Check status") { server.checkAllPrerequisites() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+            }
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(server.setupGuide) { step in
+                        HStack(alignment: .firstTextBaseline, spacing: 6) {
+                            Image(systemName: step.optional ? "circle" : "exclamationmark.circle.fill")
+                                .foregroundStyle(step.optional ? Color.secondary : Color.orange)
+                                .font(.caption)
+                            VStack(alignment: .leading, spacing: 1) {
+                                HStack(spacing: 4) {
+                                    Text(step.title).font(.callout.weight(.medium))
+                                    if step.optional {
+                                        Text("optional")
+                                            .font(.caption2)
+                                            .foregroundStyle(.tertiary)
+                                            .padding(.horizontal, 4)
+                                            .padding(.vertical, 1)
+                                            .background(Capsule().fill(Color(nsColor: .controlBackgroundColor)))
+                                    }
+                                }
+                                Text(step.hint)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 190)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color.orange.opacity(0.12)))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(.orange.opacity(0.4)))
+    }
+
     private var updateBanner: some View {
         HStack(spacing: 8) {
             Image(systemName: "arrow.down.circle.fill")
@@ -333,12 +472,40 @@ struct ContentView: View {
             readinessLine
 
             requirementRow(
+                ok: server.pythonPath != nil,
+                showAction: false,
+                title: "Python 3",
+                detail: pythonDetail,
+                buttonTitle: "",
+                action: {}
+            )
+
+            if server.pythonPath == nil {
+                DisclosureGroup("How to install Python") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Everything here runs on Python — mlx-lm, the `hf` download tool, and the server itself. Install it with one of:")
+                            .font(.caption)
+                        codeBlock(title: "bash", code: "xcode-select --install  # provides /usr/bin/python3 (or install the Command Line Tools)")
+                        Text("Homebrew (recommended):")
+                            .font(.caption)
+                        codeBlock(title: "bash", code: "brew install python@3.12")
+                        Text("Or download from https://www.python.org/downloads/.")
+                            .font(.caption)
+                        Text("Then click \"Check status\" (or reopen the panel) so it re-detects Python.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 4)
+                }
+            }
+
+            requirementRow(
                 ok: server.resolvedExecutable != nil && server.mlxLMHealthy,
                 showAction: server.resolvedExecutable == nil || !server.mlxLMHealthy,
                 title: "mlx-lm (mlx_lm.server)",
                 detail: mlxLMDetail,
                 buttonTitle: server.resolvedExecutable == nil ? "Install" : "Repair",
-                action: server.installMLX
+                action: { pendingConfirm = .installMLX }
             )
 
             if server.resolvedExecutable != nil && !server.mlxLMHealthy {
@@ -347,13 +514,27 @@ struct ContentView: View {
                     .foregroundStyle(.orange)
             }
 
+            if server.resolvedExecutable == nil {
+                DisclosureGroup("How to install mlx-lm manually") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Run this in the terminal (the same Python the rest uses):")
+                            .font(.caption)
+                        codeBlock(title: "bash", code: "python3 -m pip install --upgrade mlx-lm uvicorn fastapi huggingface_hub")
+                        Text("Then click \"Check status\" (or reopen the panel) so it re-detects mlx-lm.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 4)
+                }
+            }
+
             requirementRow(
                 ok: server.hfPath != nil,
                 showAction: server.hfPath == nil,
                 title: "Hugging Face CLI (hf)",
                 detail: hfDetail,
                 buttonTitle: "Install",
-                action: server.installHF
+                action: { pendingConfirm = .installHF }
             )
 
             if server.hfPath == nil {
@@ -433,6 +614,11 @@ struct ContentView: View {
                 .font(.caption)
                 .foregroundStyle(.orange)
         }
+    }
+
+    private var pythonDetail: String {
+        if server.pythonPath == nil { return "not installed — needed for mlx-lm, hf, and the server" }
+        return server.pythonPath ?? ""
     }
 
     private var mlxLMDetail: String {
@@ -563,7 +749,7 @@ struct ContentView: View {
                 }
                 Spacer()
                 if showsAutoSetup {
-                    Button(configButtonTitle) { server.writeOpenCodeConfig() }
+                    Button(configButtonTitle) { pendingConfirm = .writeOpenCode }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .disabled(server.openCodePath == nil)
@@ -661,12 +847,15 @@ struct ContentView: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                Button(server.litellmConfigPortMismatch ? "Update config" : "Set up config") { server.writeLitellmConfig() }
+                Button(server.litellmConfigPortMismatch ? "Update config" : "Set up config") { pendingConfirm = .writeLitellm }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .disabled(server.litellmPath == nil)
+                Button(showManualLitellm ? "Hide" : "Manual") { showManualLitellm.toggle() }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                 if server.litellmPath == nil || server.litellmVersion == nil {
-                    Button(server.litellmPath == nil ? "Install" : "Repair") { server.installLitellm() }
+                    Button(server.litellmPath == nil ? "Install" : "Repair") { pendingConfirm = .installLitellm }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                 }
@@ -681,6 +870,33 @@ struct ContentView: View {
                 Label("The bridge config points at a different MLX port — click \"Update config\" so Claude Code still reaches the server.", systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
                     .foregroundStyle(.orange)
+            }
+
+            if showManualLitellm {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Write this to \(server.litellmConfigPath())")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                    ScrollView {
+                        Text(server.litellmConfigText)
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                    .frame(height: 140)
+                    .padding(8)
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .windowBackgroundColor)))
+                    HStack(spacing: 8) {
+                        Button("Copy config") { copy(server.litellmConfigText) }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                        Button("Verify") { server.checkLitellm() }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    }
+                }
             }
 
             if server.litellmPath != nil && server.litellmVersion == nil {
@@ -721,7 +937,7 @@ struct ContentView: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                Button(server.claudeCodeProfilePortMismatch ? "Update" : "Set up") { server.writeClaudeCodeConfig() }
+                Button(server.claudeCodeProfilePortMismatch ? "Update" : "Set up") { pendingConfirm = .writeClaudeCode }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .disabled(server.claudeCodePath == nil)
