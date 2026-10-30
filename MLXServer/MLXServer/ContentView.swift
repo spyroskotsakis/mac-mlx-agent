@@ -580,6 +580,17 @@ struct ContentView: View {
                     ProgressView().controlSize(.small)
                     Text("Working…").font(.caption).foregroundStyle(.secondary)
                 }
+                if server.downloadRetrySecondsRemaining > 0 {
+                    HStack(spacing: 8) {
+                        Label("Retrying in \(server.downloadRetrySecondsRemaining)s…",
+                              systemImage: "arrow.clockwise")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                        Button("Retry now") { server.retryNow() }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                    }
+                }
                 ScrollView {
                     Text(server.installOutput.isEmpty ? "Waiting…" : server.installOutput)
                         .font(.system(.caption, design: .monospaced))

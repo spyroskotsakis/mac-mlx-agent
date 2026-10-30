@@ -6,6 +6,24 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.11.0] — 2026-10-30
+
+### Added
+
+- **Automatic download retry with a countdown.** When a model download fails or
+  stalls (e.g. the internet drops mid-download), the app now retries on its own —
+  up to 5 attempts, with a 5-second countdown shown in the panel and a
+  **Retry now** button to skip the wait. `hf download` resumes from the bytes
+  already on disk, so each attempt continues rather than restarting from zero.
+
+### Fixed
+
+- **A hung download no longer leaves the app stuck.** `hf download` can hang
+  indefinitely when a connection drops (no new bytes, `isInstalling` stuck true,
+  and the retry button disabled). The progress poll now detects a stalled
+  download (45s with no new bytes), kills the hung process, and hands it to the
+  retry logic instead of waiting forever.
+
 ## [1.10.0] — 2026-10-30
 
 ### Added
@@ -349,6 +367,7 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.11.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.11.0
 [1.10.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.10.0
 [1.9.2]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.9.2
 [1.9.1]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.9.1

@@ -204,6 +204,8 @@ final class ServerController: ObservableObject {
     @Published private(set) var downloadProgress: Double?
     @Published private(set) var downloadTotalBytes: Int64?
     @Published private(set) var downloadBytes: Int64 = 0
+    @Published private(set) var downloadRetryCount = 0
+    @Published private(set) var downloadRetrySecondsRemaining = 0
     @Published private(set) var modelMessage: String = ""
     @Published private(set) var openCodeConfigStatus: OpenCodeConfigStatus = .checking
     @Published private(set) var setupMessage: String = ""
@@ -322,6 +324,17 @@ final class ServerController: ObservableObject {
     private var bridgeProcess: Process?
     private var pollTask: Task<Void, Never>?
     private var downloadPollTask: Task<Void, Never>?
+    private var downloadProcess: Process?
+    private var downloadRetryTask: Task<Void, Never>?
+
+    /// Auto-retry a failed/stalled model download this many times before handing
+    /// back to the manual "Retry download" button.
+    private static let maxDownloadRetries = 5
+    /// Seconds the panel counts down between auto-retry attempts.
+    private static let downloadRetryDelaySeconds = 5
+    /// No new bytes on disk for this long → treat the download as stalled (e.g. a
+    /// dropped connection) and kill the hung `hf download` process.
+    private static let downloadStallTimeoutSeconds = 45.0
 
     private enum Keys {
         static let model = "mlxServerModel"
@@ -1153,29 +1166,56 @@ final class ServerController: ObservableObject {
     }
 
     /// Downloads the currently-selected model into the local HuggingFace cache,
-    /// reporting byte-level progress to `downloadProgress` while it runs.
+    /// reporting byte-level progress to `downloadProgress` while it runs. On a
+    /// failed or stalled download (e.g. a dropped connection) it auto-retries a
+    /// few times, counting down between attempts, then hands back to the manual
+    /// "Retry download" button once those are exhausted.
     func downloadModel() {
         guard !isInstalling else { return }
+        downloadRetryCount = 0
+        downloadRetrySecondsRemaining = 0
+        installOutput = ""
+        performDownload()
+    }
+
+    /// Skips the retry countdown and starts the next download attempt immediately.
+    func retryNow() {
+        downloadRetryTask?.cancel()
+        downloadRetryTask = nil
+        downloadRetrySecondsRemaining = 0
+        performDownload()
+    }
+
+    /// Starts (or restarts) the `hf download` subprocess and the progress poll.
+    /// `isInstalling` is already true here on retries, so the panel stays in
+    /// "downloading" while the countdown runs. `hf` resumes partial downloads, so
+    /// each attempt continues from the bytes already on disk rather than restarting.
+    private func performDownload() {
+        guard downloadProcess == nil else { return } // never stack two downloads
         guard let hf = Self.findHF() else {
             installOutput = "Download tool (`hf`) not found. Install mlx-lm first — it bundles huggingface_hub.\n"
+            isInstalling = false
             return
         }
         isInstalling = true
-        installOutput = ""
         downloadProgress = 0
         downloadTotalBytes = nil
         downloadBytes = 0
         let repo = selectedModel.repoID
-        appendInstallOutput("$ \(hf) download \(repo)\n\n")
+        appendInstallOutput("\n$ \(hf) download \(repo)\n\n")
 
         let blobsDir = Self.hfHubDir() + "/models--" + repo.replacingOccurrences(of: "/", with: "--") + "/blobs"
 
         // Poll the cache's blobs directory to turn bytes-on-disk into a real
         // percentage, instead of trying to parse the CLI's animated progress bar.
+        // Also watches for a stalled download (no new bytes for a while) and kills
+        // the hung process so the retry logic can take over.
         downloadPollTask = Task { [weak self] in
             guard let self else { return }
             let total = await Self.totalDownloadSize(repoID: repo)
             await MainActor.run { self.downloadTotalBytes = total }
+            var lastBytes: Int64 = -1
+            var lastProgress = Date()
             while !Task.isCancelled {
                 let bytes = Self.directorySize(atPath: blobsDir)
                 let fraction: Double?
@@ -1188,24 +1228,98 @@ final class ServerController: ObservableObject {
                     self.downloadBytes = bytes
                     self.downloadProgress = fraction
                 }
+                if bytes != lastBytes {
+                    lastBytes = bytes
+                    lastProgress = Date()
+                }
+                let finished = total.map { bytes >= $0 } ?? false
+                if !finished && Date().timeIntervalSince(lastProgress) > Self.downloadStallTimeoutSeconds {
+                    await MainActor.run { self.killStalledDownload() }
+                    return
+                }
                 try? await Task.sleep(nanoseconds: 500_000_000)
             }
         }
 
-        runStreaming(executable: hf,
-                     arguments: ["download", repo],
-                     sink: { [weak self] in self?.appendInstallOutput($0) },
-                     completion: { [weak self] status in
-            guard let self else { return }
-            self.downloadPollTask?.cancel()
-            self.downloadPollTask = nil
-            self.isInstalling = false
-            self.downloadProgress = nil
-            self.downloadTotalBytes = nil
-            self.downloadBytes = 0
-            self.appendInstallOutput(status == 0 ? "\n[Model downloaded]\n" : "\n[download failed (status \(status))]\n")
-            self.checkModelCached()
+        downloadProcess = runStreaming(executable: hf,
+                                       arguments: ["download", repo],
+                                       sink: { [weak self] in self?.appendInstallOutput($0) },
+                                       completion: { [weak self] status in
+            self?.handleDownloadCompletion(status: status)
         })
+    }
+
+    /// Called when `hf download` exits (or is killed). Success clears the retry
+    /// state; failure schedules the next auto-retry.
+    private func handleDownloadCompletion(status: Int32) {
+        downloadProcess = nil
+        downloadPollTask?.cancel()
+        downloadPollTask = nil
+
+        if status == 0 {
+            downloadRetryCount = 0
+            downloadRetrySecondsRemaining = 0
+            isInstalling = false
+            downloadProgress = nil
+            downloadTotalBytes = nil
+            downloadBytes = 0
+            appendInstallOutput("\n[Model downloaded]\n")
+            checkModelCached()
+        } else {
+            appendInstallOutput("\n[download failed (status \(status))]\n")
+            scheduleDownloadRetry()
+        }
+    }
+
+    /// A stalled download (dropped connection) — kill the hung `hf` process so it
+    /// fails and the retry logic can take over.
+    private func killStalledDownload() {
+        guard let proc = downloadProcess else { return }
+        appendInstallOutput("\n[Download stalled — no progress for \(Int(Self.downloadStallTimeoutSeconds))s, stopping it]\n")
+        proc.terminate() // SIGTERM
+        let pid = proc.processIdentifier
+        // Escalate to SIGKILL if it ignores SIGTERM.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
+            if kill(pid, 0) == 0 { kill(pid, SIGKILL) }
+        }
+    }
+
+    /// Schedules the next auto-retry (with a countdown), or gives up once the max
+    /// number of attempts is reached.
+    private func scheduleDownloadRetry() {
+        guard downloadRetryCount < Self.maxDownloadRetries else {
+            // Exhausted auto-retries: hand back to the manual "Retry download" button.
+            downloadRetryTask?.cancel()
+            downloadRetryTask = nil
+            downloadRetrySecondsRemaining = 0
+            isInstalling = false
+            downloadProgress = nil
+            downloadTotalBytes = nil
+            downloadBytes = 0
+            appendInstallOutput("\n[Download failed after \(Self.maxDownloadRetries) attempts — check your connection and click Retry download]\n")
+            checkModelCached()
+            return
+        }
+        downloadRetryCount += 1
+        downloadRetrySecondsRemaining = Self.downloadRetryDelaySeconds
+        appendInstallOutput("\n[Download failed — retrying in \(Self.downloadRetryDelaySeconds)s (attempt \(downloadRetryCount + 1) of \(Self.maxDownloadRetries))]\n")
+
+        downloadRetryTask?.cancel()
+        downloadRetryTask = Task { [weak self] in
+            guard let self else { return }
+            for _ in 0..<Self.downloadRetryDelaySeconds {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                if Task.isCancelled { return }
+                await MainActor.run {
+                    if self.downloadRetrySecondsRemaining > 0 { self.downloadRetrySecondsRemaining -= 1 }
+                }
+            }
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self.downloadRetryTask = nil
+                self.performDownload()
+            }
+        }
     }
 
     private func appendInstallOutput(_ text: String) {
