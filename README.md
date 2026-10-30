@@ -324,6 +324,19 @@ This repo also ships a native macOS **menu-bar app** (`MLXServer/`) that
    the LiteLLM bridge on port 4001 — or shows you the exact config to write by
    hand.
 
+> **First launch: macOS will block the app.** The build is ad-hoc signed (no
+> Apple Developer ID, not notarized), so Gatekeeper shows *“Apple could not
+> verify MLXServer is free of malware….”* Clear the quarantine flag once, then
+> open it normally:
+>
+> ```bash
+> xattr -cr /Applications/MLXServer.app
+> ```
+>
+> No terminal? Try to open it, click **Done** on the warning, then **System
+> Settings → Privacy & Security → Open Anyway**. (`xattr -cr` is the reliable
+> one-liner — right-click → **Open** isn't usually offered for ad-hoc builds.)
+
 So **Steps 1–3 below are optional** — they're kept to explain what the app does
 under the hood and for people who prefer the terminal. The app defaults to the
 same flags as `start_server.sh` — `--kv-bits 4 --max-tokens 8192 --temp 0.2
@@ -333,19 +346,6 @@ per-model **Thinking mode** toggle and a per-model **Max context** display.
 <p align="center">
   <img src="docs/mlx-server.png" alt="MLX Server menu-bar app control panel" width="480">
 </p>
-
-> **First launch on a downloaded build:** the app is ad-hoc signed (no Apple
-> Developer ID / notarization), so macOS Gatekeeper blocks it with *“MLXServer
-> cannot be verified … may harm your Mac.”* Clear the download flag once, then
-> open it normally:
->
-> ```bash
-> xattr -cr /Applications/MLXServer.app
-> ```
->
-> (Or **System Settings → Privacy & Security → “Open Anyway”**.) The one-liner is
-> the reliable path — right-click → **Open** usually isn't offered for ad-hoc
-> builds.
 
 - Click the **MLX Server** icon in the menu bar to open the control panel.
 - **Start / Stop** the server, pick the model, and watch the live log.
