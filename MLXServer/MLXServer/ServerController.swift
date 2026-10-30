@@ -404,6 +404,7 @@ final class ServerController: ObservableObject {
         self.maxTokens = UserDefaults.standard.object(forKey: Keys.maxTokens) as? Int ?? ModelDefaults.maxTokens
         self.promptCacheBytesGB = UserDefaults.standard.object(forKey: Keys.promptCacheBytes) as? Int ?? ModelDefaults.promptCacheBytesGB
         self.openCodePath = Self.resolveOpenCode()
+        self.openCodeMajor = self.openCodePath.flatMap { Self.openCodeVersion(at: $0)?.major }
         self.claudeCodePath = Self.resolveClaudeCode()
         self.claudeCodeVersion = self.claudeCodePath.flatMap { Self.claudeVersion(at: $0) }
         self.claudeCodeProfileWritten = FileManager.default.fileExists(atPath: Self.claudeCodeEnvFilePath())
@@ -1632,6 +1633,24 @@ final class ServerController: ObservableObject {
         }
     }
 
+    /// Synchronously re-resolves the installed OpenCode major so an imminent
+    /// config write reflects the *current* install rather than a stale async
+    /// probe. This makes the app self-correct when OpenCode is upgraded (or
+    /// first installed) while the app is running, and when the launch-time
+    /// probe hasn't resolved yet. Fast in the common case (`--version` against
+    /// a known path); only falls back to a login-shell lookup if OpenCode isn't
+    /// in a known location.
+    private func refreshOpenCodeMajor() {
+        guard let path = Self.resolveOpenCode() else {
+            openCodeMajor = nil
+            return
+        }
+        if let major = Self.openCodeVersion(at: path)?.major {
+            openCodeMajor = major
+        }
+        // A nil parse keeps the last known major (same rule as checkOpenCode).
+    }
+
     // MARK: - Claude Code (separate profile via the LiteLLM bridge)
 
     /// Path to Claude Code's env profile (sourced by the `claude-local` /
@@ -1970,6 +1989,7 @@ final class ServerController: ObservableObject {
     /// provider is merged into whatever is already there, so other providers,
     /// MCP servers and agent settings the user added are left untouched.
     func writeOpenCodeConfig() {
+        refreshOpenCodeMajor()
         let path = openCodeConfigPath()
         let dir = (path as NSString).deletingLastPathComponent
         do {
@@ -2003,6 +2023,7 @@ final class ServerController: ObservableObject {
     /// configured for this server, so switching models never creates a config the
     /// user didn't ask for. Called when the selected model or Max tokens changes.
     func autoSyncOpenCodeConfig() {
+        refreshOpenCodeMajor()
         checkOpenCodeConfig()
         guard openCodeConfigStatus == .configured else { return }
         let path = openCodeConfigPath()
