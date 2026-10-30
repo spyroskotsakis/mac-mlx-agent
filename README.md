@@ -164,7 +164,7 @@ writes the OpenCode + Claude Code configs that point at it.
 ./setup.sh --model mlx-community/Qwen3-14B-4bit     # a specific model
 ```
 
-The menu offers the same four models as the app (see the table in Step 2).
+The menu offers the same 15 models as the app (see the table in Step 2).
 Everything below is the manual, step-by-step version of what `setup.sh` does.
 
 ---
@@ -186,16 +186,29 @@ This pulls in `mlx`, `mlx-metal`, `mlx-lm`, and its CLI tools.
 ## Step 2 — Pick and download a model
 
 The model must be **MLX format** — i.e. a pre-converted weight from the
-[`mlx-community` organization on Hugging Face](https://huggingface.co/mlx-community)
-— and **support tool calling** so agents can invoke tools. Pick one that fits
-your RAM; 4-bit weights ≈ (parameters in billions) × 0.55 GB.
+[`mlx-community` organization on Hugging Face](https://huggingface.co/mlx-community).
+The Qwen3-family models are the ones that **support tool calling** reliably for
+agents (Xcode / OpenCode / Claude Code); the rest are great for chat and
+generation but aren't the pick for agentic work. Pick one that fits your RAM;
+4-bit weights ≈ (parameters in billions) × 0.55 GB.
 
-| Model | Size (4-bit) | Notes |
-|-------|-------------|-------|
-| `mlx-community/Qwen3.5-35B-A3B-4bit` | ~19 GB | **Default.** MoE coder (3B active → fast); its tool calls parse reliably. |
-| `mlx-community/Qwen3.6-35B-A3B-4bit` | ~20 GB | MoE coder (3B active), newer sibling of the default. |
-| `mlx-community/Qwen3.8-27B-4bit` | ~16 GB | 27B mid-size option. |
-| `mlx-community/Qwen3-14B-4bit` | ~8.3 GB | **Smallest option.** Qwen3 instruct — less RAM, and the natural pick for "concurrent requests" mode. |
+| Model | 4-bit weight (RAM) | Max context | Thinking | Notes |
+|-------|-------------------|-------------|----------|-------|
+| `mlx-community/Qwen3.5-35B-A3B-4bit` | 18 GB | 262,144 | ✅ | **Default.** MoE coder (3B active → fast); tool calls parse reliably. |
+| `mlx-community/Qwen3.6-35B-A3B-4bit` | 18 GB | 262,144 | ✅ | MoE coder (3B active), newer sibling of the default. |
+| `mlx-community/Qwen3.8-27B-4bit` | 14 GB | 262,144 | ✅ | 27B mid-size option. |
+| `mlx-community/Qwen3-14B-4bit` | 7 GB | 40,960 | ✅ | Smaller; natural pick for "concurrent requests" mode. |
+| `mlx-community/Qwen3.5-9B-4bit` | 6 GB | 262,144 | ✅ | Compact daily driver. |
+| `mlx-community/Qwen2.5-Coder-7B-Instruct-4bit` | 4.28 GB | 32,768 | — | Code specialist; no thinking mode. |
+| `mlx-community/Qwen3.5-4B-4bit` | 3.03 GB | 262,144 | ✅ | Tiny + long context. |
+| `mlx-community/Qwen3.5-2B-4bit` | 1.72 GB | 262,144 | ✅ | Smallest Qwen. |
+| `mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit` | 15.10 GB | 393,216 | — | Mistral coding specialist. |
+| `mlx-community/gemma-4-12B-it-qat-4bit` | 10.99 GB | 262,144 | — | Google, multilingual. |
+| `mlx-community/Ministral-3-8B-Instruct-2512-4bit` | 5.60 GB | 262,144 | — | Edge/on-device, multilingual. |
+| `mlx-community/gemma-4-e4b-it-4bit` | 5.15 GB | 131,072 | — | Efficient + vision. |
+| `mlx-community/gemma-4-e2b-it-4bit` | 3.55 GB | 131,072 | — | Small + vision. |
+| `mlx-community/Ministral-3-3B-Instruct-2512-4bit` | 2.75 GB | 262,144 | — | Tiny, multilingual. |
+| `mlx-community/Llama-3.2-3B-Instruct-4bit` | 1.81 GB | 131,072 | — | On-device, multilingual. |
 
 > **Avoid for agent use:** `Qwen3-Coder-30B-A3B` (drops the `<tool_call>` wrapper)
 > and `Qwen2.5-Coder-14B` (wraps its call in `<tools>` instead of `<tool_call>`)
@@ -203,13 +216,11 @@ your RAM; 4-bit weights ≈ (parameters in billions) × 0.55 GB.
 > loop.
 
 Download the model you picked (or run `./setup.sh`, which does this for you —
-the server also auto-downloads on first launch):
+the server also auto-downloads on first launch). The repo ids are in the table
+above; the default is:
 
 ```bash
-hf download mlx-community/Qwen3.5-35B-A3B-4bit   # default, ~19 GB
-hf download mlx-community/Qwen3.6-35B-A3B-4bit   # ~20 GB
-hf download mlx-community/Qwen3.8-27B-4bit       # ~16 GB
-hf download mlx-community/Qwen3-14B-4bit         # ~8.3 GB (smallest)
+hf download mlx-community/Qwen3.5-35B-A3B-4bit   # default
 ```
 
 ---
@@ -334,20 +345,33 @@ Xcode 26 exposes external coding agents through the **Agent Client Protocol
 the current path — the older "Intelligence → Add Sub Provider → Locally Hosted
 Provider" flow is gone in recent Xcode builds.
 
+The model you pick in the app is served under the alias `default_model`, and
+Xcode reaches it through OpenCode's `acp` server. The chain is:
+
+```
+Xcode → OpenCode (acp) → MLX-LM server (127.0.0.1:8080/v1) → default_model
+```
+
 ### A. Register OpenCode as an ACP agent (in-editor assistant)
 
-The ACP agent is OpenCode's `acp` server, so you need the MLX server and a
-configured OpenCode first (both covered below).
+The ACP agent is OpenCode's `acp` server, so set up OpenCode first, then register
+it in Xcode.
 
-1. Start the MLX-LM server (Step 3) and leave it running.
-2. Configure OpenCode to use `mlx/default_model` (see "Use it in OpenCode").
-3. In Xcode, open the **Add an ACP Agent** dialog and fill in:
+1. **Pick and download a model** — select it in the menu-bar app (or run
+   `./setup.sh`), then press **Start**. The server serves *whatever model is
+   loaded* as `default_model` on `http://127.0.0.1:8080/v1`.
+2. **Point OpenCode at it** — the app's Install / `setup.sh` already write
+   `~/.config/opencode/opencode.jsonc` using `mlx/default_model` (see "Use it in
+   OpenCode" below). If you switch models, re-run that setup so the context
+   length matches the new model, or edit the file by hand.
+3. **Add the agent in Xcode** — open the **Add an ACP Agent** dialog and fill in:
    - **Executable**: `/path/to/opencode` (your OpenCode
      binary — find it with `which opencode`)
    - **Arguments**: `acp`
    - **Interpreter**: (empty)
    - **Environment variables**: (empty)
-4. Save it. Xcode's chat now runs through OpenCode on your local model.
+4. **Save it** — Xcode's in-editor chat now runs through OpenCode on your local
+   model. Switch models by repeating steps 1–2; Xcode needs no changes.
 
 ### B. Agent-driven development (build the app for you)
 
@@ -411,9 +435,9 @@ through your local model.
 > generation thread and the server stops responding until restarted.
 >
 > **`limit.context` should match the model.** Set it to the model's maximum
-> context length (262144 for the Qwen3.5/3.6/3.8 models, 40960 for Qwen3-14B) so
-> OpenCode knows how much it can send. The menu-bar app writes this for you from
-> each model's profile; this sample shows the Qwen3.5 value.
+> context length (see the model table in Step 2) so OpenCode knows how much it
+> can send. The menu-bar app and `setup.sh` write this for you from each model's
+> profile; this sample shows the Qwen3.5 value (262144).
 
 ---
 

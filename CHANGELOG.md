@@ -6,6 +6,52 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.8.0] — 2026-10-30
+
+### Added
+
+- **Eleven more models (15 total)** — Ministral 3 (8B / 3B), Gemma 4 (12B QAT /
+  E4B / E2B), Llama 3.2 3B, Devstral Small 2 24B, Qwen3.5 9B / 4B / 2B, and
+  Qwen2.5-Coder 7B. Each carries its real 4-bit weight size (which drives the
+  memory-safety guard) and its max context, read from the Hugging Face config.
+- **Per-model description** — selecting a model now shows a one-line summary,
+  what it's good at, hashtag-style highlights, and a "View on Hugging Face" link.
+- **Thinking guard for non-thinking models** — models whose chat template has no
+  thinking step (Coder, Ministral, Gemma, Llama, Devstral) now force the
+  Thinking toggle off, disable it, and warn the user (plus a system notification
+  when a previous model had it on). The `enable_thinking` flag is only passed to
+  models that accept it.
+
+### Changed
+
+- **Terminal path matches the app** — `setup.sh` now offers all 15 models (and
+  shows whether each supports thinking), and `start_server.sh` only passes the
+  `enable_thinking` flag to Qwen-family models. `README.md` gained the full model
+  table and clearer Xcode (ACP) setup steps.
+
+### Models (complete list)
+
+| Model | 4-bit weight | Max context | Thinking |
+| --- | --- | --- | --- |
+| Qwen3.5-35B-A3B | 18 GB | 262,144 | ✅ |
+| Qwen3.6-35B-A3B | 18 GB | 262,144 | ✅ |
+| Qwen3.8-27B | 14 GB | 262,144 | ✅ |
+| Qwen3-14B | 7 GB | 40,960 | ✅ |
+| Qwen3.5-9B | 6 GB | 262,144 | ✅ |
+| Qwen2.5-Coder-7B-Instruct | 4.28 GB | 32,768 | — |
+| Qwen3.5-4B | 3.03 GB | 262,144 | ✅ |
+| Qwen3.5-2B | 1.72 GB | 262,144 | ✅ |
+| Devstral Small 2 24B Instruct | 15.10 GB | 393,216 | — |
+| Gemma 4 12B IT QAT | 10.99 GB | 262,144 | — |
+| Ministral 3 8B Instruct | 5.60 GB | 262,144 | — |
+| Gemma 4 E4B Instruct | 5.15 GB | 131,072 | — |
+| Gemma 4 E2B Instruct | 3.55 GB | 131,072 | — |
+| Ministral 3 3B Instruct | 2.75 GB | 262,144 | — |
+| Llama 3.2 3B Instruct | 1.81 GB | 131,072 | — |
+
+Thinking mode is a Qwen-family feature; the other models are for chat and
+generation. For agent/tool-calling work, stick with the Qwen models.
+
 ## [1.7.1] — 2026-10-29
 
 ### Fixed
@@ -227,6 +273,7 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.8.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.8.0
 [1.7.1]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.7.1
 [1.7.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.7.0
 [1.6.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.6.0

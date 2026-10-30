@@ -17,15 +17,13 @@ set -euo pipefail
 MODEL="${1:-mlx-community/Qwen3.5-35B-A3B-4bit}"
 PORT="${PORT:-8080}"
 
-# The same four models the menu-bar app (MLXServer/) ships, for `./start_server.sh <id>`:
-#   mlx-community/Qwen3.5-35B-A3B-4bit   (default)  max context 262144
-#   mlx-community/Qwen3.6-35B-A3B-4bit               max context 262144
-#   mlx-community/Qwen3.8-27B-4bit                   max context 262144
-#   mlx-community/Qwen3-14B-4bit                     max context  40960
+# The server ships the same models as the menu-bar app (MLXServer/) and the
+# `./setup.sh` picker — 15 total. Pass any of their ids to `./start_server.sh <id>`.
 # The server reads each model's own max context from its config, so no context
 # flag is needed here. Only the client needs the matching per-model value
-# (OpenCode's `limit.context`) — the app writes that for you; set it by hand
-# only if you configure OpenCode without the app.
+# (OpenCode's `limit.context`) — setup.sh / the app writes that for you; set it by
+# hand only if you configure OpenCode without them. Thinking mode applies only to
+# the Qwen3 family (see THINKING_MODELS below).
 
 echo "Starting MLX-LM server for: $MODEL"
 echo "Listening on http://127.0.0.1:${PORT}  (OpenAI API at /v1)"
@@ -59,17 +57,44 @@ TEMP="${TEMP:-0.2}"
 TOP_P="${TOP_P:-0.8}"
 TOP_K="${TOP_K:-20}"
 
-# Thinking mode — the same toggle as the menu-bar app, default off. The
-# Qwen3.5/3.6/3.8/14B chat templates accept `enable_thinking`. mlx-lm ≥ 0.32
-# keeps the answer clean either way: with thinking on it emits the reasoning in a
-# separate `reasoning` field, so agents still see a clean answer. It just burns
-# extra reasoning tokens per turn (slower + more KV cache), so it stays off.
+# Thinking mode — the same toggle as the menu-bar app, default off. Only the
+# Qwen3-family chat templates accept `enable_thinking`, so the flag is passed for
+# those models only (see THINKING_MODELS below); for Coder / Ministral / Gemma /
+# Llama / Devstral it's meaningless and is omitted. mlx-lm ≥ 0.32 keeps the answer
+# clean either way: with thinking on it emits the reasoning in a separate
+# `reasoning` field, so agents still see a clean answer. It just burns extra
+# reasoning tokens per turn (slower + more KV cache), so it stays off.
 ENABLE_THINKING="${ENABLE_THINKING:-false}"
 
-exec mlx_lm.server --model "$MODEL" --port "$PORT" \
+# Models whose chat template accepts `enable_thinking` (the Qwen3 family).
+THINKING_MODELS=(
+  "mlx-community/Qwen3.5-35B-A3B-4bit"
+  "mlx-community/Qwen3.6-35B-A3B-4bit"
+  "mlx-community/Qwen3.8-27B-4bit"
+  "mlx-community/Qwen3-14B-4bit"
+  "mlx-community/Qwen3.5-9B-4bit"
+  "mlx-community/Qwen3.5-4B-4bit"
+  "mlx-community/Qwen3.5-2B-4bit"
+)
+
+supports_thinking() {
+  local m
+  for m in "${THINKING_MODELS[@]}"; do
+    if [[ "$m" == "$MODEL" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+ARGS=(--model "$MODEL" --port "$PORT" \
   --kv-bits "$KV_BITS" \
   --max-tokens "$MAX_TOKENS" \
   --temp "$TEMP" \
   --top-p "$TOP_P" \
-  --top-k "$TOP_K" \
-  --chat-template-args "{\"enable_thinking\":${ENABLE_THINKING}}"
+  --top-k "$TOP_K")
+if supports_thinking; then
+  ARGS+=(--chat-template-args "{\"enable_thinking\":${ENABLE_THINKING}}")
+fi
+
+exec mlx_lm.server "${ARGS[@]}"

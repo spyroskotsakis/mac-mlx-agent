@@ -33,15 +33,38 @@ MODELS_REPO=(
   "mlx-community/Qwen3.6-35B-A3B-4bit"
   "mlx-community/Qwen3.8-27B-4bit"
   "mlx-community/Qwen3-14B-4bit"
+  "mlx-community/Qwen3.5-9B-4bit"
+  "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit"
+  "mlx-community/Qwen3.5-4B-4bit"
+  "mlx-community/Qwen3.5-2B-4bit"
+  "mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit"
+  "mlx-community/gemma-4-12B-it-qat-4bit"
+  "mlx-community/Ministral-3-8B-Instruct-2512-4bit"
+  "mlx-community/gemma-4-e4b-it-4bit"
+  "mlx-community/gemma-4-e2b-it-4bit"
+  "mlx-community/Ministral-3-3B-Instruct-2512-4bit"
+  "mlx-community/Llama-3.2-3B-Instruct-4bit"
 )
 MODELS_NAME=(
   "Qwen3.5-35B-A3B (4-bit)"
   "Qwen3.6-35B-A3B (4-bit)"
   "Qwen3.8-27B (4-bit)"
   "Qwen3-14B (4-bit)"
+  "Qwen3.5-9B (4-bit)"
+  "Qwen2.5-Coder-7B-Instruct (4-bit)"
+  "Qwen3.5-4B (4-bit)"
+  "Qwen3.5-2B (4-bit)"
+  "Devstral Small 2 24B Instruct (4-bit)"
+  "Gemma 4 12B IT QAT (4-bit)"
+  "Ministral 3 8B Instruct (4-bit)"
+  "Gemma 4 E4B Instruct (4-bit)"
+  "Gemma 4 E2B Instruct (4-bit)"
+  "Ministral 3 3B Instruct (4-bit)"
+  "Llama 3.2 3B Instruct (4-bit)"
 )
-MODELS_CTX=(262144 262144 262144 40960)
-MODELS_WGT=(18 18 14 7)
+MODELS_CTX=(262144 262144 262144 40960 262144 32768 262144 262144 393216 262144 262144 131072 131072 262144 131072)
+MODELS_WGT=(18 18 14 7 6 4.28 3.03 1.72 15.10 10.99 5.60 5.15 3.55 2.75 1.81)
+MODELS_THINK=(yes yes yes yes yes no yes yes no no no no no no no)
 DEFAULT_INDEX=0
 
 # --- flags ---------------------------------------------------------------------
@@ -149,10 +172,12 @@ install_opencode() {
 # --- model selection + download + config --------------------------------------
 list_models() {
   say "Available models:"
-  local i
+  local i think
   for i in "${!MODELS_REPO[@]}"; do
-    printf '  %d) %-30s ~%2d GB weights, %s context\n' \
-      "$((i + 1))" "${MODELS_NAME[$i]}" "${MODELS_WGT[$i]}" "${MODELS_CTX[$i]}"
+    think="no thinking"
+    [[ "${MODELS_THINK[$i]}" == yes ]] && think="thinking"
+    printf '  %2d) %-38s ~%5s GB weights, %s context, %s\n' \
+      "$((i + 1))" "${MODELS_NAME[$i]}" "${MODELS_WGT[$i]}" "${MODELS_CTX[$i]}" "$think"
   done
 }
 

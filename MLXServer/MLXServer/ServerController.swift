@@ -19,12 +19,20 @@ struct ModelProfile: Hashable {
 }
 
 /// One selectable model. `repoID` is the HuggingFace `mlx-community/…` id passed
-/// to `mlx_lm.server --model`; `displayName` is what the picker shows.
+/// to `mlx_lm.server --model`; `displayName` is what the picker shows. `summary`
+/// and `highlights` are the one-line description and hashtag-style tags shown
+/// under the picker once a model is selected.
 struct ModelOption: Identifiable, Hashable {
     let repoID: String
     let displayName: String
     let profile: ModelProfile
+    /// What the model is and what it's good for (one short sentence).
+    let summary: String
+    /// Short hashtag-style highlights (rendered with a leading `#`).
+    let highlights: [String]
     var id: String { repoID }
+    /// Link to the model's Hugging Face page.
+    var hfURL: URL { URL(string: "https://huggingface.co/\(repoID)")! }
 }
 
 /// Defaults for the model settings exposed in the app. These are the values
@@ -88,16 +96,79 @@ final class ServerController: ObservableObject {
     static let availableModels: [ModelOption] = [
         ModelOption(repoID: "mlx-community/Qwen3.5-35B-A3B-4bit",
                     displayName: "Qwen3.5-35B-A3B (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 18)),
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 18),
+                    summary: "Flagship mixture-of-experts (35B total, 3B active per token) — the strongest agentic coding and reasoning here, with vision.",
+                    highlights: ["MoE 3B active", "Agentic coding", "Vision", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Qwen3.6-35B-A3B-4bit",
                     displayName: "Qwen3.6-35B-A3B (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 18)),
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 18),
+                    summary: "Newest Qwen MoE (35B total, 3B active) — refined reasoning and tool use for long, demanding agent sessions.",
+                    highlights: ["MoE 3B active", "Reasoning", "Agentic", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Qwen3.8-27B-4bit",
                     displayName: "Qwen3.8-27B (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 14)),
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 14),
+                    summary: "Dense 27B — consistent, high-quality coding and multi-turn agent work with vision.",
+                    highlights: ["Dense 27B", "Coding", "Vision", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Qwen3-14B-4bit",
                     displayName: "Qwen3-14B (4-bit)",
-                    profile: ModelProfile(maxContext: 40_960, thinkingSupported: true, weightGB: 7))
+                    profile: ModelProfile(maxContext: 40_960, thinkingSupported: true, weightGB: 7),
+                    summary: "Balanced 14B — fast tool calling and solid reasoning; the memory-safe default for most Macs.",
+                    highlights: ["Fast", "Tool-calling", "40K ctx"]),
+        ModelOption(repoID: "mlx-community/Qwen3.5-9B-4bit",
+                    displayName: "Qwen3.5-9B (4-bit)",
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 6),
+                    summary: "Compact 9B with huge context — quick daily coding and chat that still fits smaller-RAM Macs.",
+                    highlights: ["Compact", "Coding", "262K ctx"]),
+        ModelOption(repoID: "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit",
+                    displayName: "Qwen2.5-Coder-7B-Instruct (4-bit)",
+                    profile: ModelProfile(maxContext: 32_768, thinkingSupported: false, weightGB: 4.28),
+                    summary: "Dedicated code model — strong at snippets, edits, and refactors; no thinking mode.",
+                    highlights: ["Code specialist", "Fast", "No thinking"]),
+        ModelOption(repoID: "mlx-community/Qwen3.5-4B-4bit",
+                    displayName: "Qwen3.5-4B (4-bit)",
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 3.03),
+                    summary: "Tiny 4B — snappy replies and full 262K context for light tasks.",
+                    highlights: ["Tiny", "Fast", "262K ctx"]),
+        ModelOption(repoID: "mlx-community/Qwen3.5-2B-4bit",
+                    displayName: "Qwen3.5-2B (4-bit)",
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 1.72),
+                    summary: "Smallest Qwen — near-instant on any Mac; fine for quick Q&A.",
+                    highlights: ["Smallest", "Instant", "262K ctx"]),
+        ModelOption(repoID: "mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit",
+                    displayName: "Devstral Small 2 24B Instruct (4-bit)",
+                    profile: ModelProfile(maxContext: 393_216, thinkingSupported: false, weightGB: 15.10),
+                    summary: "Mistral's 24B coding specialist — strong instruction following and tool use for agents.",
+                    highlights: ["Coding", "Agentic", "393K ctx"]),
+        ModelOption(repoID: "mlx-community/gemma-4-12B-it-qat-4bit",
+                    displayName: "Gemma 4 12B IT QAT (4-bit)",
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, weightGB: 10.99),
+                    summary: "Google's 12B with quantized-aware training — capable multilingual general assistant with long context.",
+                    highlights: ["Multilingual", "QAT", "262K ctx"]),
+        ModelOption(repoID: "mlx-community/Ministral-3-8B-Instruct-2512-4bit",
+                    displayName: "Ministral 3 8B Instruct (4-bit)",
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, weightGB: 5.60),
+                    summary: "Mistral 8B built for edge/on-device — efficient multilingual chat and light coding.",
+                    highlights: ["Multilingual", "Efficient", "262K ctx"]),
+        ModelOption(repoID: "mlx-community/gemma-4-e4b-it-4bit",
+                    displayName: "Gemma 4 E4B Instruct (4-bit)",
+                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, weightGB: 5.15),
+                    summary: "Google's efficient 4B-class assistant — vision and long context at low memory cost.",
+                    highlights: ["Vision", "Efficient", "131K ctx"]),
+        ModelOption(repoID: "mlx-community/gemma-4-e2b-it-4bit",
+                    displayName: "Gemma 4 E2B Instruct (4-bit)",
+                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, weightGB: 3.55),
+                    summary: "Google's smallest Gemma 4 — fast general chat and vision.",
+                    highlights: ["Small", "Vision", "131K ctx"]),
+        ModelOption(repoID: "mlx-community/Ministral-3-3B-Instruct-2512-4bit",
+                    displayName: "Ministral 3 3B Instruct (4-bit)",
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, weightGB: 2.75),
+                    summary: "Mistral 3B for edge devices — tiny multilingual assistant.",
+                    highlights: ["Tiny", "Multilingual", "262K ctx"]),
+        ModelOption(repoID: "mlx-community/Llama-3.2-3B-Instruct-4bit",
+                    displayName: "Llama 3.2 3B Instruct (4-bit)",
+                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, weightGB: 1.81),
+                    summary: "Meta's on-device 3B — small, fast, multilingual general assistant.",
+                    highlights: ["On-device", "Multilingual", "131K ctx"])
     ]
 
     /// Guards the CLI-detection probes so opening the panel in quick succession
@@ -161,10 +232,17 @@ final class ServerController: ObservableObject {
     @Published var selectedModel: ModelOption {
         didSet {
             UserDefaults.standard.set(selectedModel.repoID, forKey: Keys.model)
-            // Reflect this model's own thinking preference in the UI.
-            enableThinking = Self.loadThinking(for: selectedModel.repoID)
+            // Reflect this model's own thinking preference in the UI. A model
+            // whose chat template has no `enable_thinking` is forced off, and the
+            // user is alerted when a previous model had it on.
+            let hadThinkingOn = enableThinking
+            let supportsThinking = selectedModel.profile.thinkingSupported
+            enableThinking = supportsThinking ? Self.loadThinking(for: selectedModel.repoID) : false
             // A large model must never stay in concurrent-requests mode.
             clampConcurrentRequestsForSelectedModel()
+            if hadThinkingOn && !supportsThinking {
+                notifyThinkingUnsupported()
+            }
         }
     }
 
@@ -258,7 +336,8 @@ final class ServerController: ObservableObject {
             ?? Self.availableModels.first!
         self.selectedModel = initialModel
 
-        self.enableThinking = Self.loadThinking(for: initialModel.repoID)
+        self.enableThinking = initialModel.profile.thinkingSupported
+            ? Self.loadThinking(for: initialModel.repoID) : false
         self.temperature = UserDefaults.standard.object(forKey: Keys.temperature) as? Double ?? ModelDefaults.temperature
         self.topP = UserDefaults.standard.object(forKey: Keys.topP) as? Double ?? ModelDefaults.topP
         self.topK = UserDefaults.standard.object(forKey: Keys.topK) as? Int ?? ModelDefaults.topK
@@ -341,6 +420,11 @@ final class ServerController: ObservableObject {
     /// a separate `reasoning` field, so agents still get a clean answer — but each
     /// turn is slower and, on a memory-tight machine, the extra tokens cost KV cache.
     var thinkingWarning: String? {
+        // Models with no thinking chat template can't reason first, so the toggle
+        // is disabled and forced off — tell the user why it won't switch on.
+        if !selectedModel.profile.thinkingSupported {
+            return "\(selectedModel.displayName) doesn't support thinking mode, so the toggle stays off for this model."
+        }
         guard enableThinking else { return nil }
         var msg = "Thinking mode is ON — the model reasons in a separate step before answering. Claude Code and OpenCode still get a clean answer, but each turn is slower because it first emits those extra reasoning tokens."
         if selectedModelIsMemoryTight {
@@ -474,6 +558,22 @@ final class ServerController: ObservableObject {
         content.userInfo = ["releaseURL": url.absoluteString]
         let request = UNNotificationRequest(
             identifier: "mlx-server-update-\(version)",
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request)
+    }
+
+    /// System alert when switching to a model that can't think while the previous
+    /// model had thinking on: the toggle is forced off, so tell the user instead
+    /// of silently changing their setting.
+    private func notifyThinkingUnsupported() {
+        let content = UNMutableNotificationContent()
+        content.title = "Thinking mode turned off"
+        content.body = "\(selectedModel.displayName) doesn't support thinking mode, so it was turned off for this model."
+        content.sound = .default
+        let request = UNNotificationRequest(
+            identifier: "mlx-server-thinking-unsupported",
             content: content,
             trigger: nil
         )
@@ -1677,9 +1777,14 @@ final class ServerController: ObservableObject {
             "--max-tokens", "\(maxTokens)",
             "--temp", Self.samplingText(temperature),
             "--top-p", Self.samplingText(topP),
-            "--top-k", "\(topK)",
-            "--chat-template-args", "{\"enable_thinking\":\(enableThinking ? "true" : "false")}"
+            "--top-k", "\(topK)"
         ]
+        // Only models whose chat template accepts `enable_thinking` (Qwen3-family)
+        // get the flag. Non-thinking models (Coder, Ministral, Gemma, Llama,
+        // Devstral) don't — passing it there is meaningless noise.
+        if selectedModel.profile.thinkingSupported {
+            args += ["--chat-template-args", "{\"enable_thinking\":\(enableThinking ? "true" : "false")}"]
+        }
         return args
     }
 

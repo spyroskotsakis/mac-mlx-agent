@@ -901,6 +901,28 @@ struct ContentView: View {
             .labelsHidden()
             .pickerStyle(.menu)
             .disabled(!server.canSwitchModel || server.isInstalling)
+
+            Text(server.selectedModel.summary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            FlowLayout(spacing: 6) {
+                ForEach(server.selectedModel.highlights, id: \.self) { tag in
+                    Text("#\(tag)")
+                        .font(.caption2.weight(.medium))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(Color.accentColor.opacity(0.14)))
+                        .foregroundStyle(.tint)
+                }
+            }
+
+            Link(destination: server.selectedModel.hfURL) {
+                Label("View on Hugging Face", systemImage: "arrow.up.right.square")
+                    .font(.caption)
+            }
+
             Text("Stop the server before switching models.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
@@ -921,7 +943,9 @@ struct ContentView: View {
                 Toggle(isOn: $server.enableThinking) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Thinking mode")
-                        Text("Qwen3 models reason first, then answer — the reply stays clean either way.")
+                        Text(server.selectedModel.profile.thinkingSupported
+                             ? "Qwen3 models reason first, then answer — the reply stays clean either way."
+                             : "This model has no thinking mode.")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -1221,6 +1245,49 @@ private extension ServerController.ServerState {
         case .starting, .stopping: return .orange
         case .running: return .green
         case .failed: return .red
+        }
+    }
+}
+
+/// Simple left-to-right wrapping layout for the hashtag pills under the model
+/// picker. Not a full flow layout — just enough to wrap short tags.
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x + size.width > maxWidth, x > 0 {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+        let width = maxWidth == .infinity ? x : maxWidth
+        return CGSize(width: width, height: y + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x + size.width > bounds.maxX, x > bounds.minX {
+                x = bounds.minX
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y),
+                          proposal: ProposedViewSize(width: size.width, height: size.height))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
         }
     }
 }
