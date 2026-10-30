@@ -205,10 +205,41 @@ pick_model() {
   fi
 }
 
+# Resolve the installed OpenCode's major version (1 or 2) so the config is
+# written in the matching shape. v1 uses `provider`/`npm`/`options`; v2 uses
+# `providers`/`package`/`settings`/`capabilities`. Defaults to 1 (v1) when the
+# binary can't be run, so a machine without OpenCode yet gets the v1 shape.
+opencode_major() {
+  local bin="" v="" c
+  # Same precedence as ServerController.resolveOpenCode(), so the app and this
+  # script always agree on which installed binary to probe.
+  for c in \
+    "$HOME/.opencode/bin/opencode" \
+    "$HOME/.local/bin/opencode" \
+    "/opt/homebrew/bin/opencode" \
+    "/usr/local/bin/opencode"; do
+    if [[ -x "$c" ]]; then bin="$c"; break; fi
+  done
+  if [[ -z "$bin" ]] && have opencode; then bin="$(command -v opencode)"; fi
+  if [[ -z "$bin" ]]; then echo "1"; return 0; fi
+  v="$("$bin" --version 2>/dev/null)" || { echo "1"; return 0; }
+  v="${v#v}"; v="${v%%.*}"
+  [[ "$v" =~ ^[0-9]+$ ]] && echo "$v" || echo "1"
+}
+
 configure_agents() {
   local repo="$1" name="$2" ctx="$3"
 
   # OpenCode config (JSONC filename, pure-JSON content — same as the app writes).
+  # The shape follows the installed OpenCode major: v1 uses `provider`/`npm`/
+  # `options`/`modalities`; v2 uses `providers`/`package`/`settings`/`capabilities`.
+  # Mistral-family models get `compatibility.requireAssistantAfterTool` in v2 to
+  # bridge the tool-result→user boundary their chat template otherwise rejects.
+  local oc_major oc_compat=""
+  oc_major="$(opencode_major)"
+  case "$repo" in
+    *Devstral*|*Ministral*) oc_compat=$',\n          "compatibility": { "requireAssistantAfterTool": true }' ;;
+  esac
   local oc_dir="$HOME/.config/opencode"
   local oc_file="$oc_dir/opencode.jsonc"
   mkdir -p "$oc_dir"
@@ -217,7 +248,41 @@ configure_agents() {
     mv "$oc_file" "$bak"
     say "Backed up existing OpenCode config → $bak"
   fi
-  cat > "$oc_file" <<EOF
+  if [[ "$oc_major" -ge 2 ]]; then
+    cat > "$oc_file" <<EOF
+{
+  "\$schema": "https://opencode.ai/config.json",
+  "model": "mlx/default_model",
+  "providers": {
+    "mlx": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "name": "MLX (local)",
+      "settings": {
+        "baseURL": "http://127.0.0.1:${MLX_PORT}/v1",
+        "chunkTimeout": false,
+        "headerTimeout": false
+      },
+      "models": {
+        "default_model": {
+          "modelID": "default_model",
+          "name": "${name}",
+          "limit": {
+            "context": ${ctx},
+            "output": ${MAX_OUTPUT_TOKENS}
+          },
+          "capabilities": {
+            "tools": true,
+            "input": ["text"],
+            "output": ["text"]
+          }${oc_compat}
+        }
+      }
+    }
+  }
+}
+EOF
+  else
+    cat > "$oc_file" <<EOF
 {
   "\$schema": "https://opencode.ai/config.json",
   "model": "mlx/default_model",
@@ -248,6 +313,7 @@ configure_agents() {
   }
 }
 EOF
+  fi
   ok "Wrote OpenCode config → $oc_file"
 
   # Claude Code env profile (sourced by ./claude-local.sh or manually).

@@ -237,6 +237,7 @@ final class ServerController: ObservableObject {
     @Published private(set) var openCodeConfigStatus: OpenCodeConfigStatus = .checking
     @Published private(set) var setupMessage: String = ""
     @Published private(set) var openCodePath: String?
+    @Published private(set) var openCodeMajor: Int?
     @Published private(set) var claudeCodePath: String?
     @Published private(set) var claudeCodeVersion: String?
     @Published private(set) var claudeCodeProfileWritten: Bool = false
@@ -1612,10 +1613,21 @@ final class ServerController: ObservableObject {
         Self.openCodeProbeInFlight = true
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let path = Self.resolveOpenCode()
+            let major = path.flatMap { Self.openCodeVersion(at: $0)?.major }
             DispatchQueue.main.async {
                 Self.openCodeProbeInFlight = false
                 guard let self else { return }
                 self.openCodePath = path
+                if path == nil {
+                    // Binary no longer resolvable: forget the last major rather
+                    // than writing a config for a version that isn't installed.
+                    self.openCodeMajor = nil
+                } else if let major {
+                    self.openCodeMajor = major
+                }
+                // A nil from a transient re-probe failure intentionally keeps the
+                // last known major, so "Check status" can't downgrade a known-v2
+                // install to the destructive unknown-version fallback.
             }
         }
     }
@@ -2004,10 +2016,16 @@ final class ServerController: ObservableObject {
         }
     }
 
-    /// The `mlx` provider entry written into the OpenCode config. Kept as a dict
-    /// so `mergedOpenCodeConfig` can drop it into an existing config without
-    /// clobbering the rest of the file.
+    /// The `mlx` provider entry written into the OpenCode config, for the
+    /// installed OpenCode major version. Kept as a dict so `mergedOpenCodeConfig`
+    /// can drop it into an existing config without clobbering the rest of the
+    /// file. v1 and v2 use different shapes.
     private var mlxProviderConfig: [String: Any] {
+        openCodeIsV2 ? mlxProviderConfigV2 : mlxProviderConfigV1
+    }
+
+    /// v1 OpenCode provider entry (`provider` / `npm` / `options` shape).
+    private var mlxProviderConfigV1: [String: Any] {
         [
             "npm": "@ai-sdk/openai-compatible",
             "name": "MLX (local)",
@@ -2032,15 +2050,84 @@ final class ServerController: ObservableObject {
         ]
     }
 
+    /// v2 OpenCode provider entry (`providers` / `package` / `settings` /
+    /// `capabilities` shape). Mistral-family repoIDs additionally get
+    /// `compatibility.requireAssistantAfterTool` (see `mlxNeedsAssistantAfterTool`).
+    private var mlxProviderConfigV2: [String: Any] {
+        var model: [String: Any] = [
+            "modelID": "default_model",
+            "name": selectedModel.displayName,
+            "limit": ["context": selectedModel.profile.maxContext, "output": maxTokens],
+            // Same text-only constraint as v1, expressed via v2 `capabilities`:
+            // without a vision processor the server 404s on image attachments.
+            "capabilities": [
+                "tools": true,
+                "input": ["text"],
+                "output": ["text"]
+            ]
+        ]
+        if mlxNeedsAssistantAfterTool {
+            model["compatibility"] = ["requireAssistantAfterTool": true]
+        }
+        return [
+            "package": "@opencode/ai/providers/openai-compatible",
+            "name": "MLX (local)",
+            "settings": [
+                "baseURL": "http://127.0.0.1:\(port)/v1",
+                "chunkTimeout": false,
+                "headerTimeout": false
+            ],
+            "models": ["default_model": model]
+        ]
+    }
+
+    /// The Mistral-family repoIDs whose chat template rejects a `tool result →
+    /// user` boundary ("conversation roles must alternate"). OpenCode v2 bridges
+    /// that boundary with `compatibility.requireAssistantAfterTool`.
+    private static let mistralFamilyRepoIDs: Set<String> = [
+        "mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit",
+        "mlx-community/Ministral-3-8B-Instruct-2512-4bit",
+        "mlx-community/Ministral-3-3B-Instruct-2512-4bit"
+    ]
+
+    /// True when the selected model needs OpenCode v2's assistant-after-tool
+    /// bridge. OpenCode auto-defaults this only for Mistral-family *model IDs*,
+    /// but mlx_lm.server serves every model under the fixed alias `default_model`,
+    /// so that default never fires — we must opt in explicitly for these repoIDs.
+    private var mlxNeedsAssistantAfterTool: Bool {
+        Self.mistralFamilyRepoIDs.contains(selectedModel.repoID)
+    }
+
+    /// True when the installed OpenCode reads/writes the v2 config shape
+    /// (`providers`/`package`/`settings`/`capabilities`). Defaults to false (v1)
+    /// when the version probe hasn't resolved yet — writing a v2 shape a v1
+    /// client can't read is worse than staying on the current, working v1 shape.
+    private var openCodeIsV2: Bool { (openCodeMajor ?? 1) >= 2 }
+
     /// Merges the app's `mlx` provider into `existing`, keeping every other key
-    /// (other providers, MCP servers, agent settings) intact.
+    /// (other providers, MCP servers, agent settings) intact. The `provider` vs
+    /// `providers` root key follows the detected OpenCode major version, and the
+    /// stale key from the other shape is removed so an in-place v1→v2 upgrade
+    /// doesn't leave both.
     private func mergedOpenCodeConfig(existing: [String: Any]) -> [String: Any] {
         var config = existing
         config["$schema"] = "https://opencode.ai/config.json"
         config["model"] = "mlx/default_model"
-        var provider = config["provider"] as? [String: Any] ?? [:]
-        provider["mlx"] = mlxProviderConfig
-        config["provider"] = provider
+        // Only delete the other shape's root key once `openCodeMajor` is known.
+        // While the probe is still pending (nil) we write the safe v1 shape but
+        // must NOT delete a real `providers` block, or an early model switch on a
+        // v2 machine could destroy the user's providers without a backup.
+        if openCodeIsV2 {
+            var providers = config["providers"] as? [String: Any] ?? [:]
+            providers["mlx"] = mlxProviderConfig
+            config["providers"] = providers
+            if openCodeMajor != nil { config.removeValue(forKey: "provider") }
+        } else {
+            var provider = config["provider"] as? [String: Any] ?? [:]
+            provider["mlx"] = mlxProviderConfig
+            config["provider"] = provider
+            if openCodeMajor != nil { config.removeValue(forKey: "providers") }
+        }
         return config
     }
 
@@ -2073,11 +2160,15 @@ final class ServerController: ObservableObject {
     /// mid-generation disconnect from wedging the single generation thread (see
     /// the main repo README).
     var openCodeConfigText: String {
-        let config: [String: Any] = [
+        var config: [String: Any] = [
             "$schema": "https://opencode.ai/config.json",
-            "model": "mlx/default_model",
-            "provider": ["mlx": mlxProviderConfig]
+            "model": "mlx/default_model"
         ]
+        if openCodeIsV2 {
+            config["providers"] = ["mlx": mlxProviderConfig]
+        } else {
+            config["provider"] = ["mlx": mlxProviderConfig]
+        }
         return Self.openCodeConfigJSON(config)
     }
 
@@ -2343,6 +2434,33 @@ final class ServerController: ObservableObject {
             let data = out.fileHandleForReading.readDataToEndOfFile()
             let version = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
             return (version?.isEmpty == false) ? version : nil
+        } catch {
+            return nil
+        }
+    }
+
+    /// Runs `opencode --version` and parses the major version (accepts "1.19.3",
+    /// "v2.0.29", etc.). Returns nil when the binary can't be run or doesn't
+    /// report a numeric major. Used to pick the v1 vs v2 config shape.
+    private static func openCodeVersion(at path: String) -> (major: Int, raw: String)? {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: path)
+        proc.arguments = ["--version"]
+        let out = Pipe()
+        proc.standardOutput = out
+        proc.standardError = Pipe()
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+            guard proc.terminationStatus == 0 else { return nil }
+            let data = out.fileHandleForReading.readDataToEndOfFile()
+            guard let raw = String(data: data, encoding: .utf8)?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+                !raw.isEmpty else { return nil }
+            let trimmed = raw.hasPrefix("v") ? String(raw.dropFirst()) : raw
+            let majorText = trimmed.split(separator: ".").first.map(String.init) ?? ""
+            guard let major = Int(majorText) else { return nil }
+            return (major, raw)
         } catch {
             return nil
         }
