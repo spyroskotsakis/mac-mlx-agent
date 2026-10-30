@@ -223,8 +223,14 @@ opencode_major() {
   if [[ -z "$bin" ]] && have opencode; then bin="$(command -v opencode)"; fi
   if [[ -z "$bin" ]]; then echo "1"; return 0; fi
   v="$("$bin" --version 2>/dev/null)" || { echo "1"; return 0; }
-  v="${v#v}"; v="${v%%.*}"
-  [[ "$v" =~ ^[0-9]+$ ]] && echo "$v" || echo "1"
+  # `opencode --version` prints "opencode v2.2.4" (not "v2.2.4"), so match the
+  # first N.M version token anywhere in the line instead of assuming a leading
+  # "v" or digit.
+  if [[ "$v" =~ ([0-9]+)\.([0-9]+) ]]; then
+    echo "${BASH_REMATCH[1]}"
+  else
+    echo "1"
+  fi
 }
 
 configure_agents() {

@@ -2454,8 +2454,8 @@ final class ServerController: ObservableObject {
     }
 
     /// Runs `opencode --version` and parses the major version (accepts "1.19.3",
-    /// "v2.0.29", etc.). Returns nil when the binary can't be run or doesn't
-    /// report a numeric major. Used to pick the v1 vs v2 config shape.
+    /// "v2.0.29", "opencode v2.2.4", etc.). Returns nil when the binary can't be
+    /// run or doesn't report a numeric major. Used to pick the v1 vs v2 shape.
     private static func openCodeVersion(at path: String) -> (major: Int, raw: String)? {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: path)
@@ -2471,8 +2471,13 @@ final class ServerController: ObservableObject {
             guard let raw = String(data: data, encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines),
                 !raw.isEmpty else { return nil }
-            let trimmed = raw.hasPrefix("v") ? String(raw.dropFirst()) : raw
-            let majorText = trimmed.split(separator: ".").first.map(String.init) ?? ""
+            // `opencode --version` prints "opencode v2.2.4" (not "v2.2.4"), so
+            // match the first version token anywhere in the line instead of
+            // assuming it starts with "v" or a digit.
+            guard let match = raw.range(of: #"\d+(?:\.\d+)*"#, options: .regularExpression) else {
+                return nil
+            }
+            let majorText = String(raw[match]).split(separator: ".").first.map(String.init) ?? ""
             guard let major = Int(majorText) else { return nil }
             return (major, raw)
         } catch {
