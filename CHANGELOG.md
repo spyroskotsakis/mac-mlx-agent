@@ -6,6 +6,32 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.13.0] — 2026-10-30
+
+### Fixed
+
+- **Model downloads no longer stall on the Xet backend.** `hf_transfer` is a
+  no-op in `huggingface_hub` 2.3, and `hf_xet`'s replacement — the Xet CAS path —
+  hangs on anonymous downloads: its `get_reconstruction` calls to
+  `cas-server.xethub.hf.co` connect but never return data, so the 45s watchdog
+  killed every attempt at 0 bytes. The app, `setup.sh`, and `start_server.sh` now
+  set `HF_HUB_DISABLE_XET=1`, which makes `hf download` fall back to the classic
+  LFS path (verified ~2–3 MB/s sustained, resuming cleanly).
+
+- **Clearer first-run Gatekeeper note.** A downloaded build is ad-hoc signed (no
+  Apple Developer ID), so macOS blocks it with *“cannot verify … may harm your
+  Mac.”* The README now leads with the reliable unblock
+  (`xattr -cr /Applications/MLXServer.app`) instead of right-click → Open, which
+  macOS usually doesn't offer for ad-hoc builds.
+
+- **OpenCode no longer crashes the server on image attachments.** When OpenCode's
+  build agent read an image (or attached a screenshot), the MLX server returned
+  `{"error": "Only 'text' content type is supported."}` (HTTP 404) and wedged the
+  session. mlx_lm.server loads a vision processor for none of these models, so any
+  image content is rejected. The OpenCode config the app and `setup.sh` write now
+  marks the model text-only (`modalities: { input: ["text"], output: ["text"] }`,
+  `attachment: false`) so OpenCode never attaches images in the first place.
+
 ## [1.12.0] — 2026-10-30
 
 ### Fixed
@@ -409,6 +435,7 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.13.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.13.0
 [1.12.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.12.0
 [1.11.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.11.0
 [1.10.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.10.0

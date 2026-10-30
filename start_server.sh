@@ -122,10 +122,9 @@ if supports_thinking; then
   ARGS+=(--chat-template-args "{\"enable_thinking\":${ENABLE_THINKING}}")
 fi
 
-# Enable the fast Rust downloader when the active Python has it, so a model the
-# server auto-downloads on first launch doesn't stall behind anonymous HF limits.
-if command -v python3 >/dev/null 2>&1 && python3 -c "import hf_transfer" >/dev/null 2>&1; then
-  export HF_HUB_ENABLE_HF_TRANSFER=1
-fi
+# Disable hf_xet's Xet backend — its CAS reconstruction API hangs on anonymous
+# downloads, so a model mlx_lm.server auto-downloads on first launch would stall
+# at 0 bytes. The classic LFS path downloads and resumes cleanly instead.
+export HF_HUB_DISABLE_XET=1
 
 exec mlx_lm.server "${ARGS[@]}"

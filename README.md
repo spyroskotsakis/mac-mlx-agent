@@ -334,9 +334,18 @@ per-model **Thinking mode** toggle and a per-model **Max context** display.
   <img src="docs/mlx-server.png" alt="MLX Server menu-bar app control panel" width="480">
 </p>
 
-> **First launch on a downloaded build:** the app is ad-hoc signed (not
-> notarized), so macOS Gatekeeper may block it. Right-click `MLXServer.app` →
-> **Open**, or run `xattr -dr com.apple.quarantine MLXServer.app` first.
+> **First launch on a downloaded build:** the app is ad-hoc signed (no Apple
+> Developer ID / notarization), so macOS Gatekeeper blocks it with *“MLXServer
+> cannot be verified … may harm your Mac.”* Clear the download flag once, then
+> open it normally:
+>
+> ```bash
+> xattr -cr /Applications/MLXServer.app
+> ```
+>
+> (Or **System Settings → Privacy & Security → “Open Anyway”**.) The one-liner is
+> the reliable path — right-click → **Open** usually isn't offered for ad-hoc
+> builds.
 
 - Click the **MLX Server** icon in the menu bar to open the control panel.
 - **Start / Stop** the server, pick the model, and watch the live log.

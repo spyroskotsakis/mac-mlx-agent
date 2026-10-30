@@ -235,7 +235,6 @@ final class ServerController: ObservableObject {
     @Published private(set) var litellmPath: String?
     @Published private(set) var hfPath: String?
     @Published private(set) var pythonPath: String?
-    @Published private(set) var hfTransferAvailable: Bool = false
     @Published private(set) var litellmVersion: String?
     @Published private(set) var litellmConfigWritten: Bool = false
     @Published private(set) var litellmConfigPortMismatch: Bool = false
@@ -411,10 +410,6 @@ final class ServerController: ObservableObject {
         // A persisted unsafe combination (large model + concurrent requests) must
         // not survive a relaunch: clamp it before the app can start the server.
         clampConcurrentRequestsForSelectedModel()
-
-        // Populate the hf_transfer flag on first launch (async) so the setup
-        // guide reflects it without needing a manual "Check status".
-        checkHFTransfer()
     }
 
     // MARK: - UI helpers
@@ -489,13 +484,15 @@ final class ServerController: ObservableObject {
         return msg
     }
 
-    /// Warning shown when the selected model can't drive coding agents: it has no
-    /// reliable tool-calling, so OpenCode / Claude Code get raw, unparseable tool-call
-    /// text (e.g. `{ "name": …, "parameters": {} }`) instead of an answer. Points the
+    /// Warning shown when the selected model can't drive coding agents. Two distinct
+    /// failure modes: (1) no reliable tool-calling, so OpenCode / Claude Code get raw,
+    /// unparseable tool-call text; and (2) Mistral-family chat templates (Ministral,
+    /// Devstral) reject OpenCode's message flow outright — consecutive user messages or
+    /// the title request trip their strict role-alternation check and 404. Points the
     /// user at the Qwen models, which are the ones that work for agent use.
     var toolCallingWarning: String? {
         guard !selectedModel.profile.toolCallingSupported else { return nil }
-        return "\(selectedModel.displayName) is a chat/generation model — it can't reliably drive OpenCode or Claude Code and will emit broken tool calls (raw JSON instead of an answer). Pick a Qwen model for agent work."
+        return "\(selectedModel.displayName) is a chat/generation model — it can't drive OpenCode or Claude Code. It emits broken tool calls, and Mistral-family chat templates can reject OpenCode's message flow with a \"roles must alternate\" error. Pick a Qwen model for agent work."
     }
 
     var primaryLabel: String {
@@ -1076,23 +1073,6 @@ final class ServerController: ObservableObject {
         hfPath = Self.findHF()
     }
 
-    /// Re-checks whether the `hf_transfer` downloader is importable in the
-    /// resolved Python env. It's the fast Rust downloader that keeps multi-GB
-    /// model weights from stalling behind anonymous HF rate limits; the download
-    /// path enables it via `HF_HUB_ENABLE_HF_TRANSFER=1` when it's present.
-    func checkHFTransfer() {
-        guard let python = pythonPath ?? Self.findPython(executableOverride: executablePath) else {
-            hfTransferAvailable = false
-            return
-        }
-        DispatchQueue.global(qos: .utility).async {
-            let ok = Self.runTool(python, ["-c", "import hf_transfer; print('OK')"]).contains("OK")
-            DispatchQueue.main.async {
-                self.hfTransferAvailable = ok
-            }
-        }
-    }
-
     /// Re-resolves the Python interpreter (nil if none found). Everything here —
     /// mlx-lm, the `hf` CLI, and the server itself — runs on Python, so this is
     /// the base prerequisite the install buttons depend on.
@@ -1112,7 +1092,6 @@ final class ServerController: ObservableObject {
         checkLitellm()
         checkHF()
         checkPython()
-        checkHFTransfer()
         checkPortConflicts()
         checkMLXLM()
     }
@@ -1187,11 +1166,6 @@ final class ServerController: ObservableObject {
             steps.append(.init(title: "Hugging Face CLI (hf)",
                                hint: "Click Install in Requirements. No Hugging Face account is needed.",
                                optional: false))
-        }
-        if pythonPath != nil && !hfTransferAvailable {
-            steps.append(.init(title: "hf_transfer (fast downloader)",
-                               hint: "Click Install in Requirements (or `pip install hf_transfer`) — stops multi-GB model downloads from stalling.",
-                               optional: true))
         }
         if modelCached != true {
             steps.append(.init(title: "Model files",
@@ -1268,9 +1242,9 @@ final class ServerController: ObservableObject {
         }
         isInstalling = true
         installOutput = ""
-        appendInstallOutput("$ \(python) -m pip install --upgrade mlx-lm uvicorn fastapi huggingface_hub hf_transfer 'brotli>=1.2.0'\n\n")
+        appendInstallOutput("$ \(python) -m pip install --upgrade mlx-lm uvicorn fastapi huggingface_hub 'brotli>=1.2.0'\n\n")
         runStreaming(executable: python,
-                     arguments: ["-m", "pip", "install", "--upgrade", "mlx-lm", "uvicorn", "fastapi", "huggingface_hub", "hf_transfer", "brotli>=1.2.0"],
+                     arguments: ["-m", "pip", "install", "--upgrade", "mlx-lm", "uvicorn", "fastapi", "huggingface_hub", "brotli>=1.2.0"],
                      sink: { [weak self] in self?.appendInstallOutput($0) },
                      completion: { [weak self] status in
             guard let self else { return }
@@ -1278,7 +1252,6 @@ final class ServerController: ObservableObject {
             self.appendInstallOutput(status == 0 ? "\n[mlx-lm installed]\n" : "\n[install failed (status \(status))]\n")
             self.refreshExecutableResolution()
             self.checkMLXLM()
-            self.checkHFTransfer()
         })
     }
 
@@ -1292,16 +1265,15 @@ final class ServerController: ObservableObject {
         }
         isInstalling = true
         installOutput = ""
-        appendInstallOutput("$ \(python) -m pip install --upgrade huggingface_hub hf_transfer 'brotli>=1.2.0'\n\n")
+        appendInstallOutput("$ \(python) -m pip install --upgrade huggingface_hub 'brotli>=1.2.0'\n\n")
         runStreaming(executable: python,
-                     arguments: ["-m", "pip", "install", "--upgrade", "huggingface_hub", "hf_transfer", "brotli>=1.2.0"],
+                     arguments: ["-m", "pip", "install", "--upgrade", "huggingface_hub", "brotli>=1.2.0"],
                      sink: { [weak self] in self?.appendInstallOutput($0) },
                      completion: { [weak self] status in
             guard let self else { return }
             self.isInstalling = false
             self.appendInstallOutput(status == 0 ? "\n[huggingface_hub (hf) installed]\n" : "\n[install failed (status \(status))]\n")
             self.checkHF()
-            self.checkHFTransfer()
         })
     }
 
@@ -1410,9 +1382,13 @@ final class ServerController: ObservableObject {
             }
         }
 
+        // Disable hf_xet's Xet backend: its CAS reconstruction API hangs on
+        // anonymous downloads (established sockets, zero bytes — see the xet logs),
+        // while the classic LFS path downloads and resumes cleanly. Verified:
+        // Xet = 0 bytes in 30s, classic = ~2–3 MB/s sustained.
         downloadProcess = runStreaming(executable: hf,
                                        arguments: ["download", repo],
-                                       environment: ["HF_HUB_ENABLE_HF_TRANSFER": "1"],
+                                       environment: ["HF_HUB_DISABLE_XET": "1"],
                                        sink: { [weak self] in self?.appendInstallOutput($0) },
                                        completion: { [weak self] status in
             self?.handleDownloadCompletion(status: status)
@@ -2033,7 +2009,14 @@ final class ServerController: ObservableObject {
             "models": [
                 "default_model": [
                     "name": selectedModel.displayName,
-                    "limit": ["context": selectedModel.profile.maxContext, "output": maxTokens]
+                    "limit": ["context": selectedModel.profile.maxContext, "output": maxTokens],
+                    // mlx_lm.server loads no vision processor for any of these
+                    // models (only `muse_spark` is wired up in this mlx-lm), so an
+                    // image/screenshot attachment makes it reply 404 ("Only 'text'
+                    // content type is supported."). Tell OpenCode the model is
+                    // text-only so it never attaches images to the request.
+                    "modalities": ["input": ["text"], "output": ["text"]],
+                    "attachment": false
                 ]
             ]
         ]

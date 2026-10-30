@@ -123,7 +123,6 @@ check_status() {
   if "$PYTHON" -c "import mlx_lm" >/dev/null 2>&1; then ok "mlx-lm"; MLXLM_OK=1; else bad "mlx-lm"; MLXLM_OK=0; fi
   if find_hf; then ok "hf (huggingface_hub) → $HF_BIN"; HF_OK=1; else bad "hf (huggingface_hub)"; HF_OK=0; fi
   if "$PYTHON" -c "import uvicorn, fastapi" >/dev/null 2>&1; then ok "uvicorn + fastapi"; UVICORN_OK=1; else bad "uvicorn + fastapi"; UVICORN_OK=0; fi
-  if "$PYTHON" -c "import hf_transfer" >/dev/null 2>&1; then ok "hf_transfer (fast downloader)"; HF_TRANSFER_OK=1; else warn "hf_transfer not found (optional — speeds up large model downloads)"; HF_TRANSFER_OK=0; fi
   if have opencode || [[ -x "$HOME/.opencode/bin/opencode" ]]; then ok "OpenCode (recommended agent)"; OPENCODE_OK=1; else bad "OpenCode (recommended agent)"; OPENCODE_OK=0; fi
   if have claude; then ok "Claude Code"; CLAUDE_OK=1; else warn "Claude Code not found (optional — OpenCode is recommended for local models)"; CLAUDE_OK=0; fi
   if [[ -x "$SCRIPT_DIR/.venv-litellm/bin/litellm" ]]; then ok "LiteLLM (.venv-litellm)"; LITELLM_OK=1; else bad "LiteLLM (.venv-litellm)"; LITELLM_OK=0; fi
@@ -132,12 +131,12 @@ check_status() {
 
 # --- installers ----------------------------------------------------------------
 install_python_pkgs() {
-  if [[ "${MLXLM_OK:-0}" -eq 1 && "${HF_OK:-0}" -eq 1 && "${UVICORN_OK:-0}" -eq 1 && "${HF_TRANSFER_OK:-0}" -eq 1 ]]; then
+  if [[ "${MLXLM_OK:-0}" -eq 1 && "${HF_OK:-0}" -eq 1 && "${UVICORN_OK:-0}" -eq 1 ]]; then
     ok "Python packages already installed — nothing to do."
     return 0
   fi
-  say "Installing mlx-lm, uvicorn, fastapi, huggingface_hub (the \`hf\` CLI), and hf_transfer…"
-  "$PYTHON" -m pip install --upgrade mlx-lm uvicorn fastapi huggingface_hub hf_transfer 'brotli>=1.2.0' || {
+  say "Installing mlx-lm, uvicorn, fastapi, and huggingface_hub (the \`hf\` CLI)…"
+  "$PYTHON" -m pip install --upgrade mlx-lm uvicorn fastapi huggingface_hub 'brotli>=1.2.0' || {
     say "pip install failed. If you use a venv, re-run with: PYTHON=/path/to/venv/bin/python ./setup.sh" >&2
     return 1
   }
@@ -145,7 +144,6 @@ install_python_pkgs() {
   "$PYTHON" -c "import mlx_lm" >/dev/null 2>&1 && MLXLM_OK=1 || MLXLM_OK=0
   "$PYTHON" -c "import uvicorn, fastapi" >/dev/null 2>&1 && UVICORN_OK=1 || UVICORN_OK=0
   find_hf && HF_OK=1 || HF_OK=0
-  "$PYTHON" -c "import hf_transfer" >/dev/null 2>&1 && HF_TRANSFER_OK=1 || HF_TRANSFER_OK=0
 }
 
 install_litellm() {
@@ -238,7 +236,12 @@ configure_agents() {
           "limit": {
             "context": ${ctx},
             "output": ${MAX_OUTPUT_TOKENS}
-          }
+          },
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "attachment": false
         }
       }
     }
@@ -284,14 +287,14 @@ download_and_configure() {
   say "Downloading $name …"
   if ! find_hf; then
     say "hf not found — installing huggingface_hub first."
-    "$PYTHON" -m pip install --upgrade huggingface_hub hf_transfer 'brotli>=1.2.0' || { say "huggingface_hub install failed." >&2; return 1; }
+    "$PYTHON" -m pip install --upgrade huggingface_hub 'brotli>=1.2.0' || { say "huggingface_hub install failed." >&2; return 1; }
     find_hf || { say "Still can't find the \`hf\` CLI." >&2; return 1; }
   fi
-  # Use the fast Rust downloader when available — it stops the multi-GB weight
-  # download from stalling behind anonymous HF rate limits.
-  if "$PYTHON" -c "import hf_transfer" >/dev/null 2>&1; then
-    export HF_HUB_ENABLE_HF_TRANSFER=1
-  fi
+  # Disable hf_xet's Xet backend — its CAS reconstruction API hangs on anonymous
+  # downloads (established sockets, zero bytes), while the classic LFS path
+  # downloads and resumes cleanly. `hf download` falls back to classic LFS when
+  # this is set, so model weights actually arrive instead of stalling.
+  export HF_HUB_DISABLE_XET=1
   "$HF_BIN" download "$repo" || {
     say "Download failed. Re-run ./setup.sh — \`hf download\` resumes where it left off." >&2
     return 1
