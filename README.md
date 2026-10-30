@@ -330,12 +330,13 @@ This repo also ships a native macOS **menu-bar app** (`MLXServer/`) that
 > open it normally:
 >
 > ```bash
-> xattr -cr /Applications/MLXServer.app
+> /usr/bin/xattr -cr /Applications/MLXServer.app
 > ```
 >
 > No terminal? Try to open it, click **Done** on the warning, then **System
-> Settings → Privacy & Security → Open Anyway**. (`xattr -cr` is the reliable
-> one-liner — right-click → **Open** isn't usually offered for ad-hoc builds.)
+> Settings → Privacy & Security → Open Anyway**. (`/usr/bin/xattr -cr` is the
+> reliable one-liner — use the full path so a conda/PATH `xattr` can't shadow it;
+> right-click → **Open** isn't usually offered for ad-hoc builds.)
 
 So **Steps 1–3 below are optional** — they're kept to explain what the app does
 under the hood and for people who prefer the terminal. The app defaults to the
