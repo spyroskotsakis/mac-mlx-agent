@@ -199,23 +199,20 @@ Edit `ServerController.availableModels` in `MLXServer/ServerController.swift`:
 static let availableModels: [ModelOption] = [
     ModelOption(repoID: "mlx-community/Qwen3.5-35B-A3B-4bit",
                 displayName: "Qwen3.5-35B-A3B (4-bit)",
-                profile: ModelProfile(maxContext: 262_144, thinkingSupported: true)),
-    ModelOption(repoID: "mlx-community/Qwen3.6-35B-A3B-4bit",
-                displayName: "Qwen3.6-35B-A3B (4-bit)",
-                profile: ModelProfile(maxContext: 262_144, thinkingSupported: true)),
-    ModelOption(repoID: "mlx-community/Qwen3.8-27B-4bit",
-                displayName: "Qwen3.8-27B (4-bit)",
-                profile: ModelProfile(maxContext: 262_144, thinkingSupported: true)),
+                profile: ModelProfile(maxContext: 262_144, thinkingSupported: true,
+                                      toolCallingSupported: true, weightGB: 18)),
     ModelOption(repoID: "mlx-community/Qwen3-14B-4bit",
                 displayName: "Qwen3-14B (4-bit)",
-                profile: ModelProfile(maxContext: 40_960, thinkingSupported: true)),
+                profile: ModelProfile(maxContext: 40_960, thinkingSupported: true,
+                                      toolCallingSupported: true, weightGB: 7)),
     ModelOption(repoID: "mlx-community/Your-New-Model-4bit",
                 displayName: "Your New Model (4-bit)",
-                profile: ModelProfile(maxContext: 32768, thinkingSupported: false)),
+                profile: ModelProfile(maxContext: 32768, thinkingSupported: false,
+                                      toolCallingSupported: false, weightGB: 4)),
 ]
 ```
 
-Each model carries a **profile** with two fields for now:
+Each model carries a **profile** with four fields:
 
 - `maxContext` — the model's maximum context length (its
   `max_position_embeddings`); this is shown in **Model settings** and written to
@@ -223,6 +220,11 @@ Each model carries a **profile** with two fields for now:
 - `thinkingSupported` — whether the model's chat template accepts
   `enable_thinking`; when false the **Thinking mode** toggle is disabled for that
   model.
+- `toolCallingSupported` — whether the model reliably emits parseable tool calls
+  for coding agents (OpenCode / Claude Code). Only the Qwen3-family models set
+  this true; chat models (Llama, Gemma, Ministral, Devstral, Qwen Coder) set it
+  false and show a warning when selected.
+- `weightGB` — approximate 4-bit weight RAM, used by the memory-safety guard.
 
 The **Max tokens** output limit is *not* per-model — every Qwen3-family model
 generates at most 32,768 tokens per response, so it lives as a single constant
@@ -234,6 +236,5 @@ toggle state independently, defaulting to **off**.
 Download the model first (the server also auto-downloads on first launch). The
 selected model is remembered across launches.
 
-> Only use a model whose tool-call format `mlx_lm.server` can actually parse.
-> See the main repo `README.md` — Qwen3-Coder-30B and Qwen2.5-Coder-14B emit
-> the wrong wrapper and stall the agent loop.
+> Only use a model whose tool-call format `mlx_lm.server` can actually parse —
+> for agent work that's the Qwen3-family models. See the main repo `README.md`.

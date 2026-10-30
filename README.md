@@ -226,28 +226,31 @@ agents (Xcode / OpenCode / Claude Code); the rest are great for chat and
 generation but aren't the pick for agentic work. Pick one that fits your RAM;
 4-bit weights ≈ (parameters in billions) × 0.55 GB.
 
-| Model | 4-bit weight (RAM) | Max context | Thinking | Notes |
-|-------|-------------------|-------------|----------|-------|
-| `mlx-community/Qwen3.5-35B-A3B-4bit` | 18 GB | 262,144 | ✅ | **Default.** MoE coder (3B active → fast); tool calls parse reliably. |
-| `mlx-community/Qwen3.6-35B-A3B-4bit` | 18 GB | 262,144 | ✅ | MoE coder (3B active), newer sibling of the default. |
-| `mlx-community/Qwen3.8-27B-4bit` | 14 GB | 262,144 | ✅ | 27B mid-size option. |
-| `mlx-community/Qwen3-14B-4bit` | 7 GB | 40,960 | ✅ | Smaller; natural pick for "concurrent requests" mode. |
-| `mlx-community/Qwen3.5-9B-4bit` | 6 GB | 262,144 | ✅ | Compact daily driver. |
-| `mlx-community/Qwen2.5-Coder-7B-Instruct-4bit` | 4.28 GB | 32,768 | — | Code specialist; no thinking mode. |
-| `mlx-community/Qwen3.5-4B-4bit` | 3.03 GB | 262,144 | ✅ | Tiny + long context. |
-| `mlx-community/Qwen3.5-2B-4bit` | 1.72 GB | 262,144 | ✅ | Smallest Qwen. |
-| `mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit` | 15.10 GB | 393,216 | — | Mistral coding specialist. |
-| `mlx-community/gemma-4-12B-it-qat-4bit` | 10.99 GB | 262,144 | — | Google, multilingual. |
-| `mlx-community/Ministral-3-8B-Instruct-2512-4bit` | 5.60 GB | 262,144 | — | Edge/on-device, multilingual. |
-| `mlx-community/gemma-4-e4b-it-4bit` | 5.15 GB | 131,072 | — | Efficient + vision. |
-| `mlx-community/gemma-4-e2b-it-4bit` | 3.55 GB | 131,072 | — | Small + vision. |
-| `mlx-community/Ministral-3-3B-Instruct-2512-4bit` | 2.75 GB | 262,144 | — | Tiny, multilingual. |
-| `mlx-community/Llama-3.2-3B-Instruct-4bit` | 1.81 GB | 131,072 | — | On-device, multilingual. |
+| Model | 4-bit weight (RAM) | Max context | Thinking | Tool calling | Notes |
+|-------|-------------------|-------------|----------|--------------|-------|
+| `mlx-community/Qwen3.5-35B-A3B-4bit` | 18 GB | 262,144 | ✅ | ✅ | **Default.** MoE coder (3B active → fast); tool calls parse reliably. |
+| `mlx-community/Qwen3.6-35B-A3B-4bit` | 18 GB | 262,144 | ✅ | ✅ | MoE coder (3B active), newer sibling of the default. |
+| `mlx-community/Qwen3.8-27B-4bit` | 14 GB | 262,144 | ✅ | ✅ | 27B mid-size option. |
+| `mlx-community/Qwen3-14B-4bit` | 7 GB | 40,960 | ✅ | ✅ | Smaller; natural pick for "concurrent requests" mode. |
+| `mlx-community/Qwen3.5-9B-4bit` | 6 GB | 262,144 | ✅ | ✅ | Compact daily driver. |
+| `mlx-community/Qwen2.5-Coder-7B-Instruct-4bit` | 4.28 GB | 32,768 | — | — | Code specialist; chat/generation only. |
+| `mlx-community/Qwen3.5-4B-4bit` | 3.03 GB | 262,144 | ✅ | ✅ | Tiny + long context. |
+| `mlx-community/Qwen3.5-2B-4bit` | 1.72 GB | 262,144 | ✅ | ✅ | Smallest Qwen. |
+| `mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit` | 15.10 GB | 393,216 | — | — | Mistral coding specialist; chat/generation only. |
+| `mlx-community/gemma-4-12B-it-qat-4bit` | 10.99 GB | 262,144 | — | — | Google, multilingual; chat/generation only. |
+| `mlx-community/Ministral-3-8B-Instruct-2512-4bit` | 5.60 GB | 262,144 | — | — | Edge/on-device, multilingual; chat/generation only. |
+| `mlx-community/gemma-4-e4b-it-4bit` | 5.15 GB | 131,072 | — | — | Efficient + vision; chat/generation only. |
+| `mlx-community/gemma-4-e2b-it-4bit` | 3.55 GB | 131,072 | — | — | Small + vision; chat/generation only. |
+| `mlx-community/Ministral-3-3B-Instruct-2512-4bit` | 2.75 GB | 262,144 | — | — | Tiny, multilingual; chat/generation only. |
+| `mlx-community/Llama-3.2-3B-Instruct-4bit` | 1.81 GB | 131,072 | — | — | On-device, multilingual; chat/generation only. |
 
-> **Avoid for agent use:** `Qwen3-Coder-30B-A3B` (drops the `<tool_call>` wrapper)
-> and `Qwen2.5-Coder-14B` (wraps its call in `<tools>` instead of `<tool_call>`)
-> both emit tool calls mlx_lm.server can't parse, which stalls the OpenCode/Xcode
-> loop.
+> **Use only the Qwen3-family models for agent/tool-calling work.** The rest of
+> the list (Llama, Gemma, Ministral, Devstral, and Qwen2.5-Coder) are chat and
+> generation models — as coding agents they emit raw tool-call JSON that
+> mlx_lm.server can't parse, so OpenCode/Xcode/Claude Code just see the raw text
+> (e.g. `{ "name": …, "parameters": {} }`) instead of an answer. (`Qwen3-Coder-30B-A3B`
+> drops the `<tool_call>` wrapper and `Qwen2.5-Coder-14B` wraps its call in
+> `<tools>` instead — same symptom.)
 
 Download the model you picked (or run `./setup.sh`, which does this for you —
 the server also auto-downloads on first launch). The repo ids are in the table

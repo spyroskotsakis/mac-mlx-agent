@@ -6,6 +6,31 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.10.0] — 2026-10-30
+
+### Added
+
+- **Agent capability flag + warning per model.** Each model now carries a
+  `toolCallingSupported` flag: only the Qwen3-family models reliably emit
+  parseable tool calls, so they're the ones that can drive OpenCode / Claude Code.
+  Selecting a chat/generation model (Llama, Gemma, Ministral, Devstral,
+  Qwen2.5-Coder) now shows a clear warning that it will emit broken tool calls
+  (raw JSON like `{ "name": …, "parameters": {} }` instead of an answer) and
+  points you at the Qwen models.
+
+### Fixed
+
+- **Stale-server reclamation no longer runs mid-generation.** `onAppear()` used to
+  sweep for leftover `mlx_lm.server`/LiteLLM processes every time the panel opened,
+  even while a request was in flight — logging `[Stopping N stale …]` lines in the
+  middle of a generation and risking the live server. The sweep now only runs when
+  the server is stopped/failed; `start()` still reclaims before it launches.
+
+### Changed
+
+- **Docs** — the model tables now include a "Tool calling" column, and the agent
+  guidance is explicit that only the Qwen3-family models work for agent use.
+
 ## [1.9.2] — 2026-10-30
 
 ### Fixed
@@ -324,6 +349,7 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.10.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.10.0
 [1.9.2]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.9.2
 [1.9.1]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.9.1
 [1.9.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.9.0

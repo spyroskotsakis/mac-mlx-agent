@@ -12,6 +12,11 @@ import Darwin
 struct ModelProfile: Hashable {
     let maxContext: Int
     let thinkingSupported: Bool
+    /// Whether the model reliably emits parseable tool calls, so it can drive a
+    /// coding agent (OpenCode / Claude Code). Qwen3-family models do; the chat /
+    /// coding-specialist models (Llama, Gemma, Ministral, Devstral, Qwen Coder)
+    /// emit tool calls the server can't parse and stall the agent loop.
+    let toolCallingSupported: Bool
     /// Approximate RAM (GiB) the 4-bit weights occupy once loaded. Used by the
     /// memory-safety guard to decide whether concurrent requests (full-precision
     /// KV cache, no byte cap) can fit alongside the model on this machine.
@@ -106,77 +111,77 @@ final class ServerController: ObservableObject {
     static let availableModels: [ModelOption] = [
         ModelOption(repoID: "mlx-community/Qwen3.5-35B-A3B-4bit",
                     displayName: "Qwen3.5-35B-A3B (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 18),
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, toolCallingSupported: true, weightGB: 18),
                     summary: "Flagship mixture-of-experts (35B total, 3B active per token) — the strongest agentic coding and reasoning here, with vision.",
                     highlights: ["MoE 3B active", "Agentic coding", "Vision", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Qwen3.6-35B-A3B-4bit",
                     displayName: "Qwen3.6-35B-A3B (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 18),
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, toolCallingSupported: true, weightGB: 18),
                     summary: "Newest Qwen MoE (35B total, 3B active) — refined reasoning and tool use for long, demanding agent sessions.",
                     highlights: ["MoE 3B active", "Reasoning", "Agentic", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Qwen3.8-27B-4bit",
                     displayName: "Qwen3.8-27B (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 14),
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, toolCallingSupported: true, weightGB: 14),
                     summary: "Dense 27B — consistent, high-quality coding and multi-turn agent work with vision.",
                     highlights: ["Dense 27B", "Coding", "Vision", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Qwen3-14B-4bit",
                     displayName: "Qwen3-14B (4-bit)",
-                    profile: ModelProfile(maxContext: 40_960, thinkingSupported: true, weightGB: 7),
+                    profile: ModelProfile(maxContext: 40_960, thinkingSupported: true, toolCallingSupported: true, weightGB: 7),
                     summary: "Balanced 14B — fast tool calling and solid reasoning; the memory-safe default for most Macs.",
                     highlights: ["Fast", "Tool-calling", "40K ctx"]),
         ModelOption(repoID: "mlx-community/Qwen3.5-9B-4bit",
                     displayName: "Qwen3.5-9B (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 6),
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, toolCallingSupported: true, weightGB: 6),
                     summary: "Compact 9B with huge context — quick daily coding and chat that still fits smaller-RAM Macs.",
                     highlights: ["Compact", "Coding", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit",
                     displayName: "Qwen2.5-Coder-7B-Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 32_768, thinkingSupported: false, weightGB: 4.28),
+                    profile: ModelProfile(maxContext: 32_768, thinkingSupported: false, toolCallingSupported: false, weightGB: 4.28),
                     summary: "Dedicated code model — strong at snippets, edits, and refactors; no thinking mode.",
                     highlights: ["Code specialist", "Fast", "No thinking"]),
         ModelOption(repoID: "mlx-community/Qwen3.5-4B-4bit",
                     displayName: "Qwen3.5-4B (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 3.03),
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, toolCallingSupported: true, weightGB: 3.03),
                     summary: "Tiny 4B — snappy replies and full 262K context for light tasks.",
                     highlights: ["Tiny", "Fast", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Qwen3.5-2B-4bit",
                     displayName: "Qwen3.5-2B (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 1.72),
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, toolCallingSupported: true, weightGB: 1.72),
                     summary: "Smallest Qwen — near-instant on any Mac; fine for quick Q&A.",
                     highlights: ["Smallest", "Instant", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit",
                     displayName: "Devstral Small 2 24B Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 393_216, thinkingSupported: false, weightGB: 15.10),
+                    profile: ModelProfile(maxContext: 393_216, thinkingSupported: false, toolCallingSupported: false, weightGB: 15.10),
                     summary: "Mistral's 24B coding specialist — strong instruction following and tool use for agents.",
                     highlights: ["Coding", "Agentic", "393K ctx"]),
         ModelOption(repoID: "mlx-community/gemma-4-12B-it-qat-4bit",
                     displayName: "Gemma 4 12B IT QAT (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, weightGB: 10.99),
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, toolCallingSupported: false, weightGB: 10.99),
                     summary: "Google's 12B with quantized-aware training — capable multilingual general assistant with long context.",
                     highlights: ["Multilingual", "QAT", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Ministral-3-8B-Instruct-2512-4bit",
                     displayName: "Ministral 3 8B Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, weightGB: 5.60),
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, toolCallingSupported: false, weightGB: 5.60),
                     summary: "Mistral 8B built for edge/on-device — efficient multilingual chat and light coding.",
                     highlights: ["Multilingual", "Efficient", "262K ctx"]),
         ModelOption(repoID: "mlx-community/gemma-4-e4b-it-4bit",
                     displayName: "Gemma 4 E4B Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, weightGB: 5.15),
+                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, toolCallingSupported: false, weightGB: 5.15),
                     summary: "Google's efficient 4B-class assistant — vision and long context at low memory cost.",
                     highlights: ["Vision", "Efficient", "131K ctx"]),
         ModelOption(repoID: "mlx-community/gemma-4-e2b-it-4bit",
                     displayName: "Gemma 4 E2B Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, weightGB: 3.55),
+                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, toolCallingSupported: false, weightGB: 3.55),
                     summary: "Google's smallest Gemma 4 — fast general chat and vision.",
                     highlights: ["Small", "Vision", "131K ctx"]),
         ModelOption(repoID: "mlx-community/Ministral-3-3B-Instruct-2512-4bit",
                     displayName: "Ministral 3 3B Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, weightGB: 2.75),
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, toolCallingSupported: false, weightGB: 2.75),
                     summary: "Mistral 3B for edge devices — tiny multilingual assistant.",
                     highlights: ["Tiny", "Multilingual", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Llama-3.2-3B-Instruct-4bit",
                     displayName: "Llama 3.2 3B Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, weightGB: 1.81),
+                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, toolCallingSupported: false, weightGB: 1.81),
                     summary: "Meta's on-device 3B — small, fast, multilingual general assistant.",
                     highlights: ["On-device", "Multilingual", "131K ctx"])
     ]
@@ -445,6 +450,15 @@ final class ServerController: ObservableObject {
         return msg
     }
 
+    /// Warning shown when the selected model can't drive coding agents: it has no
+    /// reliable tool-calling, so OpenCode / Claude Code get raw, unparseable tool-call
+    /// text (e.g. `{ "name": …, "parameters": {} }`) instead of an answer. Points the
+    /// user at the Qwen models, which are the ones that work for agent use.
+    var toolCallingWarning: String? {
+        guard !selectedModel.profile.toolCallingSupported else { return nil }
+        return "\(selectedModel.displayName) is a chat/generation model — it can't reliably drive OpenCode or Claude Code and will emit broken tool calls (raw JSON instead of an answer). Pick a Qwen model for agent work."
+    }
+
     var primaryLabel: String {
         switch state {
         case .stopped, .failed: return "Start Server"
@@ -475,8 +489,13 @@ final class ServerController: ObservableObject {
     func onAppear() {
         // Reclaim any stale server/bridge processes (from a previous crash or a
         // manual `start_server.sh`) so the app is the single owner of the model and
-        // multiple instances never pile up competing for unified memory.
-        killAllServers()
+        // multiple instances never pile up competing for unified memory. Only sweep
+        // while nothing is running: `start()` reclaims before it launches anyway,
+        // and sweeping mid-generation risks killing the live server (and spams the
+        // log while a request is in flight).
+        if !state.isRunning && !state.isTransitioning {
+            killAllServers()
+        }
         checkMLXLM()
     }
 
