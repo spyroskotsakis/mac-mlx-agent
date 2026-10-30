@@ -136,7 +136,7 @@ install_python_pkgs() {
     return 0
   fi
   say "Installing mlx-lm, uvicorn, fastapi, and huggingface_hub (the \`hf\` CLI)…"
-  "$PYTHON" -m pip install --upgrade mlx-lm uvicorn fastapi huggingface_hub || {
+  "$PYTHON" -m pip install --upgrade mlx-lm uvicorn fastapi huggingface_hub 'brotli>=1.2.0' || {
     say "pip install failed. If you use a venv, re-run with: PYTHON=/path/to/venv/bin/python ./setup.sh" >&2
     return 1
   }
@@ -282,7 +282,7 @@ download_and_configure() {
   say "Downloading $name …"
   if ! find_hf; then
     say "hf not found — installing huggingface_hub first."
-    "$PYTHON" -m pip install --upgrade huggingface_hub || { say "huggingface_hub install failed." >&2; return 1; }
+    "$PYTHON" -m pip install --upgrade huggingface_hub 'brotli>=1.2.0' || { say "huggingface_hub install failed." >&2; return 1; }
     find_hf || { say "Still can't find the \`hf\` CLI." >&2; return 1; }
   fi
   "$HF_BIN" download "$repo" || {

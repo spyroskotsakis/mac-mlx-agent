@@ -36,9 +36,9 @@ struct ContentView: View {
         var message: String {
             switch self {
             case .installMLX:
-                return "This runs pip install into your Python environment (mlx-lm, uvicorn, fastapi, huggingface_hub) and may upgrade existing packages. You can run the same command yourself from “How to install mlx-lm manually”."
+                return "This runs pip install into your Python environment (mlx-lm, uvicorn, fastapi, huggingface_hub, brotli>=1.2.0) and may upgrade existing packages. You can run the same command yourself from “How to install mlx-lm manually”."
             case .installHF:
-                return "This runs pip install huggingface_hub into your Python environment. No Hugging Face account or token is needed."
+                return "This runs pip install huggingface_hub (and pins brotli>=1.2.0, which model downloads need) into your Python environment. No Hugging Face account or token is needed."
             case .installLitellm:
                 return "This creates an isolated .venv-litellm and installs litellm[proxy] there — it does not touch your mlx-lm environment."
             case .writeOpenCode:
@@ -519,7 +519,7 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Run this in the terminal (the same Python the rest uses):")
                             .font(.caption)
-                        codeBlock(title: "bash", code: "python3 -m pip install --upgrade mlx-lm uvicorn fastapi huggingface_hub")
+                        codeBlock(title: "bash", code: "python3 -m pip install --upgrade mlx-lm uvicorn fastapi huggingface_hub 'brotli>=1.2.0'")
                         Text("Then click \"Check status\" (or reopen the panel) so it re-detects mlx-lm.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -542,7 +542,7 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("The `hf` tool ships with `huggingface_hub`. Install it into the same Python environment as mlx-lm:")
                             .font(.caption)
-                        codeBlock(title: "bash", code: "python3 -m pip install --upgrade huggingface_hub")
+                        codeBlock(title: "bash", code: "python3 -m pip install --upgrade huggingface_hub 'brotli>=1.2.0'")
                         Text("Then click \"Check status\" (or reopen the panel) so it re-detects `hf`.")
                             .font(.caption)
                             .foregroundStyle(.secondary)

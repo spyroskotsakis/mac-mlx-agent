@@ -1098,9 +1098,9 @@ final class ServerController: ObservableObject {
         }
         isInstalling = true
         installOutput = ""
-        appendInstallOutput("$ \(python) -m pip install --upgrade mlx-lm uvicorn fastapi huggingface_hub\n\n")
+        appendInstallOutput("$ \(python) -m pip install --upgrade mlx-lm uvicorn fastapi huggingface_hub 'brotli>=1.2.0'\n\n")
         runStreaming(executable: python,
-                     arguments: ["-m", "pip", "install", "--upgrade", "mlx-lm", "uvicorn", "fastapi", "huggingface_hub"],
+                     arguments: ["-m", "pip", "install", "--upgrade", "mlx-lm", "uvicorn", "fastapi", "huggingface_hub", "brotli>=1.2.0"],
                      sink: { [weak self] in self?.appendInstallOutput($0) },
                      completion: { [weak self] status in
             guard let self else { return }
@@ -1121,9 +1121,9 @@ final class ServerController: ObservableObject {
         }
         isInstalling = true
         installOutput = ""
-        appendInstallOutput("$ \(python) -m pip install --upgrade huggingface_hub\n\n")
+        appendInstallOutput("$ \(python) -m pip install --upgrade huggingface_hub 'brotli>=1.2.0'\n\n")
         runStreaming(executable: python,
-                     arguments: ["-m", "pip", "install", "--upgrade", "huggingface_hub"],
+                     arguments: ["-m", "pip", "install", "--upgrade", "huggingface_hub", "brotli>=1.2.0"],
                      sink: { [weak self] in self?.appendInstallOutput($0) },
                      completion: { [weak self] status in
             guard let self else { return }
@@ -2036,20 +2036,30 @@ final class ServerController: ObservableObject {
     }
 
     /// Runs `mlx_lm.server --help`; a healthy install exits 0, a broken one (e.g.
-    /// a transformers/huggingface_hub conflict) exits non-zero.
+    /// a transformers/huggingface_hub conflict) exits non-zero. `--help` can fail
+    /// transiently (right after a stale server is reclaimed, or while another MLX
+    /// process is initializing), so it retries before declaring the install broken.
     private static func mlxLMHealth(at path: String) -> Bool {
-        let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: path)
-        proc.arguments = ["--help"]
-        proc.standardOutput = FileHandle.nullDevice
-        proc.standardError = FileHandle.nullDevice
-        do {
-            try proc.run()
-            proc.waitUntilExit()
-            return proc.terminationStatus == 0
-        } catch {
-            return false
+        for attempt in 0..<3 {
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: path)
+            proc.arguments = ["--help"]
+            proc.standardOutput = FileHandle.nullDevice
+            proc.standardError = FileHandle.nullDevice
+            do {
+                try proc.run()
+                proc.waitUntilExit()
+                if proc.terminationStatus == 0 {
+                    return true
+                }
+            } catch {
+                // fall through and retry
+            }
+            if attempt < 2 {
+                usleep(1_000_000) // 1s between attempts
+            }
         }
+        return false
     }
 
     private static func resolveViaLoginShell(command: String) -> String? {

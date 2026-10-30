@@ -163,8 +163,8 @@ missing, so a fresh machine shows its gaps up front.
 | Dependency | Why it's needed | Missing → the app does |
 |---|---|---|
 | **Python 3** | base runtime for mlx-lm, `hf`, and the server | warning + "How to install Python" instructions |
-| **mlx-lm** (`mlx_lm.server`) | the local server | one-click **Install** (`pip install mlx-lm uvicorn fastapi huggingface_hub`) |
-| **`hf` CLI** (`huggingface_hub`) | downloads models | one-click **Install** (`pip install huggingface_hub`) |
+| **mlx-lm** (`mlx_lm.server`) | the local server | one-click **Install** (`pip install mlx-lm uvicorn fastapi huggingface_hub 'brotli>=1.2.0'`) |
+| **`hf` CLI** (`huggingface_hub`) | downloads models | one-click **Install** (`pip install huggingface_hub 'brotli>=1.2.0'`) |
 | **Model files** | the weights to serve | one-click **Download** with a progress bar |
 | **OpenCode** | recommended agent | "How to install OpenCode" fold-out (not pip — manual) |
 | **OpenCode config** | points OpenCode at the server | one-click **Set up** |

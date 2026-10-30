@@ -6,6 +6,21 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.9.2] — 2026-10-30
+
+### Fixed
+
+- **Model downloads could crash on machines with a stale `Brotli`.** `huggingface_hub`
+  2.x now uses `httpx2`, whose Brotli decoder requires `brotli>=1.2.0`; with an older
+  `brotli` (e.g. Anaconda's 1.1.0) the download died with
+  `TypeError: process() takes no keyword arguments`. The app now pins `brotli>=1.2.0`
+  in every install path (mlx-lm and `hf`), and `setup.sh` does the same.
+- **False "mlx-lm (broken) — dependency conflict" warning.** The health check ran
+  `mlx_lm.server --help` once at launch; a single transient failure (right after a
+  stale server was reclaimed) flipped the Requirements row to "broken" until
+  "Check status" re-ran it. The check now retries (3 attempts) before declaring the
+  install broken.
+
 ## [1.9.1] — 2026-10-30
 
 ### Fixed
@@ -309,6 +324,7 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.9.2]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.9.2
 [1.9.1]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.9.1
 [1.9.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.9.0
 [1.8.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.8.0
