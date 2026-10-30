@@ -2106,29 +2106,43 @@ final class ServerController: ObservableObject {
 
     /// Merges the app's `mlx` provider into `existing`, keeping every other key
     /// (other providers, MCP servers, agent settings) intact. The `provider` vs
-    /// `providers` root key follows the detected OpenCode major version, and the
-    /// stale key from the other shape is removed so an in-place v1→v2 upgrade
-    /// doesn't leave both.
+    /// `providers` root key follows the detected OpenCode major version. Only the
+    /// app's own `mlx` entry is pruned from the other shape — the user's other
+    /// providers (e.g. `deepseek`) stay put so a v1→v2 switch never drops them.
     private func mergedOpenCodeConfig(existing: [String: Any]) -> [String: Any] {
         var config = existing
         config["$schema"] = "https://opencode.ai/config.json"
         config["model"] = "mlx/default_model"
-        // Only delete the other shape's root key once `openCodeMajor` is known.
-        // While the probe is still pending (nil) we write the safe v1 shape but
-        // must NOT delete a real `providers` block, or an early model switch on a
-        // v2 machine could destroy the user's providers without a backup.
         if openCodeIsV2 {
             var providers = config["providers"] as? [String: Any] ?? [:]
             providers["mlx"] = mlxProviderConfig
             config["providers"] = providers
-            if openCodeMajor != nil { config.removeValue(forKey: "provider") }
+            Self.removeMlx(fromKey: "provider", in: &config)
         } else {
             var provider = config["provider"] as? [String: Any] ?? [:]
             provider["mlx"] = mlxProviderConfig
             config["provider"] = provider
-            if openCodeMajor != nil { config.removeValue(forKey: "providers") }
+            // Only prune the stale v2 entry once the major is known; while the
+            // probe is pending, writing the v1 shape must not delete a real
+            // `providers` entry (or the user's other providers under it).
+            if openCodeMajor != nil {
+                Self.removeMlx(fromKey: "providers", in: &config)
+            }
         }
         return config
+    }
+
+    /// Removes the app's `mlx` entry from the provider map stored under `key`,
+    /// dropping `key` itself only if that leaves it empty. Never touches other
+    /// provider entries.
+    private static func removeMlx(fromKey key: String, in config: inout [String: Any]) {
+        guard var map = config[key] as? [String: Any] else { return }
+        map.removeValue(forKey: "mlx")
+        if map.isEmpty {
+            config.removeValue(forKey: key)
+        } else {
+            config[key] = map
+        }
     }
 
     /// Reads an existing OpenCode config as a dictionary (`[:]` when missing or
