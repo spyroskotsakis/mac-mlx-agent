@@ -361,7 +361,7 @@ final class ServerController: ObservableObject {
         self.claudeCodeProfilePortMismatch = Self.configPortMismatch(atPath: Self.claudeCodeEnvFilePath(), port: self.bridgePort)
         self.litellmPath = Self.resolveLitellm()
         self.hfPath = Self.findHF()
-        self.pythonPath = Self.findPython()
+        self.pythonPath = Self.findPython(executableOverride: self.executablePath)
         self.litellmVersion = self.litellmPath.flatMap { Self.litellmVersion(at: $0) }
         self.litellmConfigWritten = FileManager.default.fileExists(atPath: Self.litellmConfigFilePath())
         self.litellmConfigPortMismatch = Self.configPortMismatch(atPath: Self.litellmConfigFilePath(), port: self.port)
@@ -933,7 +933,7 @@ final class ServerController: ObservableObject {
     /// mlx-lm, the `hf` CLI, and the server itself — runs on Python, so this is
     /// the base prerequisite the install buttons depend on.
     func checkPython() {
-        pythonPath = Self.findPython()
+        pythonPath = Self.findPython(executableOverride: executablePath)
     }
 
     /// Re-runs every prerequisite check (mlx-lm binary, model cache, OpenCode CLI,
@@ -1092,7 +1092,7 @@ final class ServerController: ObservableObject {
     /// discovered Python environment, streaming output to `installOutput`.
     func installMLX() {
         guard !isInstalling else { return }
-        guard let python = Self.findPython() else {
+        guard let python = Self.findPython(executableOverride: executablePath) else {
             installOutput = "Could not find a Python interpreter to install into.\n"
             return
         }
@@ -1115,7 +1115,7 @@ final class ServerController: ObservableObject {
     /// discovered Python environment, streaming output to `installOutput`.
     func installHF() {
         guard !isInstalling else { return }
-        guard let python = Self.findPython() else {
+        guard let python = Self.findPython(executableOverride: executablePath) else {
             installOutput = "Could not find a Python interpreter to install into.\n"
             return
         }
@@ -1530,7 +1530,7 @@ final class ServerController: ObservableObject {
     /// transformers needs `>=0.23.1`, so they cannot share a Python environment.
     func installLitellm() {
         guard !isInstalling else { return }
-        guard let python = Self.findPython() else {
+        guard let python = Self.findPython(executableOverride: executablePath) else {
             installOutput = "Could not find a Python interpreter to bootstrap litellm.\n"
             return
         }
@@ -2095,8 +2095,8 @@ final class ServerController: ObservableObject {
 
     /// Finds a usable Python interpreter, preferring the one that owns
     /// `mlx_lm.server` (read from its shebang).
-    private static func findPython() -> String? {
-        if let exe = resolveExecutable(override: ServerController.shared.executablePath),
+    private static func findPython(executableOverride: String = "") -> String? {
+        if let exe = resolveExecutable(override: executableOverride),
            let shebang = try? String(contentsOfFile: exe, encoding: .utf8).split(separator: "\n").first {
             let line = shebang.trimmingCharacters(in: .whitespaces)
             if line.hasPrefix("#!") {

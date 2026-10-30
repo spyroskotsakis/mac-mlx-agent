@@ -6,6 +6,16 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.9.1] — 2026-10-30
+
+### Fixed
+
+- **Launch crash** — `findPython()` referenced `ServerController.shared` during
+  the singleton's own initialization, which re-entered the one-time initializer
+  and aborted at startup (`BUG IN CLIENT OF LIBDISPATCH: trying to lock
+  recursively`). Python is now resolved with the executable override passed in,
+  so the app launches cleanly.
+
 ## [1.9.0] — 2026-10-30
 
 ### Added
@@ -299,6 +309,7 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.9.1]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.9.1
 [1.9.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.9.0
 [1.8.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.8.0
 [1.7.1]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.7.1
