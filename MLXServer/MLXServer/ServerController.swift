@@ -21,6 +21,24 @@ struct ModelProfile: Hashable {
     /// memory-safety guard to decide whether concurrent requests (full-precision
     /// KV cache, no byte cap) can fit alongside the model on this machine.
     let weightGB: Double
+    /// True when the model uses mlx_lm's `RotatingKVCache` (Gemma 4, Ministral 3,
+    /// Llama 3.2's sliding-window layers). That cache type has no quantized form
+    /// yet, so passing `--kv-bits 4` raises "RotatingKVCache Quantization NYI"
+    /// on the first request — these models are served with a full-precision KV
+    /// cache instead.
+    let rotatingKVCache: Bool
+
+    init(maxContext: Int,
+         thinkingSupported: Bool,
+         toolCallingSupported: Bool,
+         weightGB: Double,
+         rotatingKVCache: Bool = false) {
+        self.maxContext = maxContext
+        self.thinkingSupported = thinkingSupported
+        self.toolCallingSupported = toolCallingSupported
+        self.weightGB = weightGB
+        self.rotatingKVCache = rotatingKVCache
+    }
 }
 
 /// One selectable model. `repoID` is the HuggingFace `mlx-community/…` id passed
@@ -156,32 +174,32 @@ final class ServerController: ObservableObject {
                     highlights: ["Coding", "Agentic", "393K ctx"]),
         ModelOption(repoID: "mlx-community/gemma-4-12B-it-qat-4bit",
                     displayName: "Gemma 4 12B IT QAT (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, toolCallingSupported: false, weightGB: 10.99),
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, toolCallingSupported: false, weightGB: 10.99, rotatingKVCache: true),
                     summary: "Google's 12B with quantized-aware training — capable multilingual general assistant with long context.",
                     highlights: ["Multilingual", "QAT", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Ministral-3-8B-Instruct-2512-4bit",
                     displayName: "Ministral 3 8B Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, toolCallingSupported: false, weightGB: 5.60),
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, toolCallingSupported: false, weightGB: 5.60, rotatingKVCache: true),
                     summary: "Mistral 8B built for edge/on-device — efficient multilingual chat and light coding.",
                     highlights: ["Multilingual", "Efficient", "262K ctx"]),
         ModelOption(repoID: "mlx-community/gemma-4-e4b-it-4bit",
                     displayName: "Gemma 4 E4B Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, toolCallingSupported: false, weightGB: 5.15),
+                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, toolCallingSupported: false, weightGB: 5.15, rotatingKVCache: true),
                     summary: "Google's efficient 4B-class assistant — vision and long context at low memory cost.",
                     highlights: ["Vision", "Efficient", "131K ctx"]),
         ModelOption(repoID: "mlx-community/gemma-4-e2b-it-4bit",
                     displayName: "Gemma 4 E2B Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, toolCallingSupported: false, weightGB: 3.55),
+                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, toolCallingSupported: false, weightGB: 3.55, rotatingKVCache: true),
                     summary: "Google's smallest Gemma 4 — fast general chat and vision.",
                     highlights: ["Small", "Vision", "131K ctx"]),
         ModelOption(repoID: "mlx-community/Ministral-3-3B-Instruct-2512-4bit",
                     displayName: "Ministral 3 3B Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, toolCallingSupported: false, weightGB: 2.75),
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, toolCallingSupported: false, weightGB: 2.75, rotatingKVCache: true),
                     summary: "Mistral 3B for edge devices — tiny multilingual assistant.",
                     highlights: ["Tiny", "Multilingual", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Llama-3.2-3B-Instruct-4bit",
                     displayName: "Llama 3.2 3B Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, toolCallingSupported: false, weightGB: 1.81),
+                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, toolCallingSupported: false, weightGB: 1.81, rotatingKVCache: true),
                     summary: "Meta's on-device 3B — small, fast, multilingual general assistant.",
                     highlights: ["On-device", "Multilingual", "131K ctx"])
     ]
@@ -217,6 +235,7 @@ final class ServerController: ObservableObject {
     @Published private(set) var litellmPath: String?
     @Published private(set) var hfPath: String?
     @Published private(set) var pythonPath: String?
+    @Published private(set) var hfTransferAvailable: Bool = false
     @Published private(set) var litellmVersion: String?
     @Published private(set) var litellmConfigWritten: Bool = false
     @Published private(set) var litellmConfigPortMismatch: Bool = false
@@ -326,6 +345,9 @@ final class ServerController: ObservableObject {
     private var downloadPollTask: Task<Void, Never>?
     private var downloadProcess: Process?
     private var downloadRetryTask: Task<Void, Never>?
+    /// True while the user is cancelling a download, so the process's later exit
+    /// isn't mistaken for a failure that should auto-retry.
+    private var downloadCancelled = false
 
     /// Auto-retry a failed/stalled model download this many times before handing
     /// back to the manual "Retry download" button.
@@ -389,6 +411,10 @@ final class ServerController: ObservableObject {
         // A persisted unsafe combination (large model + concurrent requests) must
         // not survive a relaunch: clamp it before the app can start the server.
         clampConcurrentRequestsForSelectedModel()
+
+        // Populate the hf_transfer flag on first launch (async) so the setup
+        // guide reflects it without needing a manual "Check status".
+        checkHFTransfer()
     }
 
     // MARK: - UI helpers
@@ -883,10 +909,17 @@ final class ServerController: ObservableObject {
     }
 
     /// On-disk bytes of the currently-selected model in the HF cache (0 if absent).
+    /// Follows the shared-blob symlinks so the multi-GB weights are counted, not
+    /// just the small files huggingface_hub keeps inline in the repo folder.
     var selectedModelDiskBytes: Int64 {
-        let repo = selectedModel.repoID
-        let blobsDir = Self.hfHubDir() + "/models--" + repo.replacingOccurrences(of: "/", with: "--") + "/blobs"
-        return Self.directorySize(atPath: blobsDir)
+        Self.repoDiskBytes(repoID: selectedModel.repoID)
+    }
+
+    /// Total on-disk bytes of every model in the HF cache (0 if none cached).
+    var allModelsDiskBytes: Int64 {
+        Self.availableModels.reduce(into: Int64(0)) { acc, model in
+            acc += Self.repoDiskBytes(repoID: model.repoID)
+        }
     }
 
     /// The local HuggingFace cache folder for the currently-selected model.
@@ -894,22 +927,104 @@ final class ServerController: ObservableObject {
         Self.hfHubDir() + "/models--" + selectedModel.repoID.replacingOccurrences(of: "/", with: "--")
     }
 
+    /// Finds the Python interpreter that backs the resolved `mlx_lm.server`
+    /// (they live side by side, e.g. `/opt/anaconda3/bin/`). Deletion shells out
+    /// to huggingface_hub's cache API — the only way to correctly clear a repo
+    /// from the ≥ 2 shared-blob store. Falls back to common installs, then
+    /// `python3` on the login-shell PATH.
+    private func resolvePython() -> String? {
+        var candidates: [String] = []
+        if let exe = resolvedExecutable {
+            let dir = (exe as NSString).deletingLastPathComponent
+            candidates += [dir + "/python", dir + "/python3"]
+        }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        candidates += [
+            "/opt/anaconda3/bin/python",
+            "/opt/miniconda3/bin/python",
+            "/opt/homebrew/bin/python3",
+            "/usr/local/bin/python3",
+            home + "/anaconda3/bin/python",
+            home + "/miniconda3/bin/python",
+            home + "/miniforge3/bin/python"
+        ]
+        for candidate in candidates where FileManager.default.isExecutableFile(atPath: candidate) {
+            return candidate
+        }
+        return Self.resolveViaLoginShell(command: "python3")
+    }
+
+    /// Deletes repos from the HuggingFace cache via `scan_cache_dir` +
+    /// `delete_revisions`, which removes the `models--…` folder AND sweeps the
+    /// now-orphaned weights out of the shared-blob store. A plain `removeItem` on
+    /// the repo folder leaves those multi-GB weights behind.
+    private func deleteReposFromCache(_ repoIDs: [String]) -> (freedBytes: Int64, deleted: [String], notCached: [String], error: String?) {
+        guard let python = resolvePython() else {
+            return (0, [], [], "Python not found — can't clear the HuggingFace cache.")
+        }
+        let script = """
+        import sys, json
+        try:
+            from huggingface_hub import scan_cache_dir
+            targets = set(sys.argv[1:])
+            info = scan_cache_dir()
+            cached = [r.repo_id for r in info.repos if r.repo_id in targets]
+            hashes = [rev.commit_hash for r in info.repos if r.repo_id in targets for rev in r.revisions]
+            missing = sorted(targets - set(cached))
+            freed = 0
+            if hashes:
+                strategy = info.delete_revisions(*hashes)
+                freed = strategy.expected_freed_size
+                strategy.execute()
+            print(json.dumps({"ok": True, "freed_bytes": freed, "deleted": cached, "not_cached": missing}))
+        except Exception as exc:
+            print(json.dumps({"ok": False, "error": str(exc)}))
+        """
+        let output = Self.runTool(python, ["-c", script] + repoIDs)
+        guard let data = output.data(using: .utf8),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return (0, [], [], "Couldn't read the deletion result.")
+        }
+        if json["ok"] as? Bool == false {
+            return (0, [], [], (json["error"] as? String) ?? "Deletion failed.")
+        }
+        let freed = (json["freed_bytes"] as? NSNumber)?.int64Value ?? 0
+        let deleted = (json["deleted"] as? [String]) ?? []
+        let notCached = (json["not_cached"] as? [String]) ?? []
+        return (freed, deleted, notCached, nil)
+    }
+
     /// Deletes the currently-selected model from the local HuggingFace cache,
-    /// removing its whole `models--…` directory (blobs, snapshots, and refs).
+    /// weights included (not just the `models--…` folder).
     func deleteModel() {
         guard !isInstalling, canSwitchModel else { return }
         let repo = selectedModel.repoID
-        let repoDir = Self.hfHubDir() + "/models--" + repo.replacingOccurrences(of: "/", with: "--")
-        let freed = Self.directorySize(atPath: repoDir + "/blobs")
-        do {
-            if FileManager.default.fileExists(atPath: repoDir) {
-                try FileManager.default.removeItem(atPath: repoDir)
-            }
-            checkModelCached()
-            let freedText = ByteCountFormatter.string(fromByteCount: freed, countStyle: .file)
+        let result = deleteReposFromCache([repo])
+        checkModelCached()
+        if let error = result.error {
+            modelMessage = "Failed to delete \(repo): \(error)"
+        } else if result.deleted.isEmpty {
+            modelMessage = "\(repo) is not cached."
+        } else {
+            let freedText = ByteCountFormatter.string(fromByteCount: result.freedBytes, countStyle: .file)
             modelMessage = "Deleted \(repo) — freed \(freedText)."
-        } catch {
-            modelMessage = "Failed to delete \(repo): \(error.localizedDescription)"
+        }
+    }
+
+    /// Deletes every model in `availableModels` from the local HuggingFace cache
+    /// (weights included), reporting how many were removed and how much disk
+    /// space was freed. Safe to run when nothing is cached.
+    func deleteAllModels() {
+        guard !isInstalling, canSwitchModel else { return }
+        let result = deleteReposFromCache(Self.availableModels.map(\.repoID))
+        checkModelCached()
+        if let error = result.error {
+            modelMessage = "Delete failed: \(error)"
+        } else if result.deleted.isEmpty {
+            modelMessage = "No cached models to delete."
+        } else {
+            let freedText = ByteCountFormatter.string(fromByteCount: result.freedBytes, countStyle: .file)
+            modelMessage = "Deleted \(result.deleted.count) model(s) — freed \(freedText)."
         }
     }
 
@@ -961,6 +1076,23 @@ final class ServerController: ObservableObject {
         hfPath = Self.findHF()
     }
 
+    /// Re-checks whether the `hf_transfer` downloader is importable in the
+    /// resolved Python env. It's the fast Rust downloader that keeps multi-GB
+    /// model weights from stalling behind anonymous HF rate limits; the download
+    /// path enables it via `HF_HUB_ENABLE_HF_TRANSFER=1` when it's present.
+    func checkHFTransfer() {
+        guard let python = pythonPath ?? Self.findPython(executableOverride: executablePath) else {
+            hfTransferAvailable = false
+            return
+        }
+        DispatchQueue.global(qos: .utility).async {
+            let ok = Self.runTool(python, ["-c", "import hf_transfer; print('OK')"]).contains("OK")
+            DispatchQueue.main.async {
+                self.hfTransferAvailable = ok
+            }
+        }
+    }
+
     /// Re-resolves the Python interpreter (nil if none found). Everything here —
     /// mlx-lm, the `hf` CLI, and the server itself — runs on Python, so this is
     /// the base prerequisite the install buttons depend on.
@@ -980,6 +1112,7 @@ final class ServerController: ObservableObject {
         checkLitellm()
         checkHF()
         checkPython()
+        checkHFTransfer()
         checkPortConflicts()
         checkMLXLM()
     }
@@ -1054,6 +1187,11 @@ final class ServerController: ObservableObject {
             steps.append(.init(title: "Hugging Face CLI (hf)",
                                hint: "Click Install in Requirements. No Hugging Face account is needed.",
                                optional: false))
+        }
+        if pythonPath != nil && !hfTransferAvailable {
+            steps.append(.init(title: "hf_transfer (fast downloader)",
+                               hint: "Click Install in Requirements (or `pip install hf_transfer`) — stops multi-GB model downloads from stalling.",
+                               optional: true))
         }
         if modelCached != true {
             steps.append(.init(title: "Model files",
@@ -1130,9 +1268,9 @@ final class ServerController: ObservableObject {
         }
         isInstalling = true
         installOutput = ""
-        appendInstallOutput("$ \(python) -m pip install --upgrade mlx-lm uvicorn fastapi huggingface_hub 'brotli>=1.2.0'\n\n")
+        appendInstallOutput("$ \(python) -m pip install --upgrade mlx-lm uvicorn fastapi huggingface_hub hf_transfer 'brotli>=1.2.0'\n\n")
         runStreaming(executable: python,
-                     arguments: ["-m", "pip", "install", "--upgrade", "mlx-lm", "uvicorn", "fastapi", "huggingface_hub", "brotli>=1.2.0"],
+                     arguments: ["-m", "pip", "install", "--upgrade", "mlx-lm", "uvicorn", "fastapi", "huggingface_hub", "hf_transfer", "brotli>=1.2.0"],
                      sink: { [weak self] in self?.appendInstallOutput($0) },
                      completion: { [weak self] status in
             guard let self else { return }
@@ -1140,6 +1278,7 @@ final class ServerController: ObservableObject {
             self.appendInstallOutput(status == 0 ? "\n[mlx-lm installed]\n" : "\n[install failed (status \(status))]\n")
             self.refreshExecutableResolution()
             self.checkMLXLM()
+            self.checkHFTransfer()
         })
     }
 
@@ -1153,15 +1292,16 @@ final class ServerController: ObservableObject {
         }
         isInstalling = true
         installOutput = ""
-        appendInstallOutput("$ \(python) -m pip install --upgrade huggingface_hub 'brotli>=1.2.0'\n\n")
+        appendInstallOutput("$ \(python) -m pip install --upgrade huggingface_hub hf_transfer 'brotli>=1.2.0'\n\n")
         runStreaming(executable: python,
-                     arguments: ["-m", "pip", "install", "--upgrade", "huggingface_hub", "brotli>=1.2.0"],
+                     arguments: ["-m", "pip", "install", "--upgrade", "huggingface_hub", "hf_transfer", "brotli>=1.2.0"],
                      sink: { [weak self] in self?.appendInstallOutput($0) },
                      completion: { [weak self] status in
             guard let self else { return }
             self.isInstalling = false
             self.appendInstallOutput(status == 0 ? "\n[huggingface_hub (hf) installed]\n" : "\n[install failed (status \(status))]\n")
             self.checkHF()
+            self.checkHFTransfer()
         })
     }
 
@@ -1186,6 +1326,34 @@ final class ServerController: ObservableObject {
         performDownload()
     }
 
+    /// Stops an in-flight download (or cancels a pending auto-retry) and returns
+    /// to the manual "Retry download" button, so a hung download never traps the
+    /// user with no way out.
+    func cancelDownload() {
+        downloadCancelled = true
+        downloadRetryTask?.cancel()
+        downloadRetryTask = nil
+        downloadPollTask?.cancel()
+        downloadPollTask = nil
+        if let proc = downloadProcess {
+            proc.terminate() // SIGTERM
+            let pid = proc.processIdentifier
+            // Escalate to SIGKILL if it ignores SIGTERM.
+            DispatchQueue.global().asyncAfter(deadline: .now() + 3) {
+                if kill(pid, 0) == 0 { kill(pid, SIGKILL) }
+            }
+        }
+        downloadProcess = nil
+        downloadRetryCount = 0
+        downloadRetrySecondsRemaining = 0
+        downloadProgress = nil
+        downloadTotalBytes = nil
+        downloadBytes = 0
+        isInstalling = false
+        appendInstallOutput("\n[Download stopped]\n")
+        checkModelCached()
+    }
+
     /// Starts (or restarts) the `hf download` subprocess and the progress poll.
     /// `isInstalling` is already true here on retries, so the panel stays in
     /// "downloading" while the countdown runs. `hf` resumes partial downloads, so
@@ -1197,6 +1365,7 @@ final class ServerController: ObservableObject {
             isInstalling = false
             return
         }
+        downloadCancelled = false
         isInstalling = true
         downloadProgress = 0
         downloadTotalBytes = nil
@@ -1243,6 +1412,7 @@ final class ServerController: ObservableObject {
 
         downloadProcess = runStreaming(executable: hf,
                                        arguments: ["download", repo],
+                                       environment: ["HF_HUB_ENABLE_HF_TRANSFER": "1"],
                                        sink: { [weak self] in self?.appendInstallOutput($0) },
                                        completion: { [weak self] status in
             self?.handleDownloadCompletion(status: status)
@@ -1255,6 +1425,12 @@ final class ServerController: ObservableObject {
         downloadProcess = nil
         downloadPollTask?.cancel()
         downloadPollTask = nil
+
+        // The user cancelled it: nothing to retry.
+        if downloadCancelled {
+            downloadCancelled = false
+            return
+        }
 
         if status == 0 {
             downloadRetryCount = 0
@@ -1334,11 +1510,17 @@ final class ServerController: ObservableObject {
     @discardableResult
     private func runStreaming(executable: String,
                               arguments: [String],
+                              environment: [String: String]? = nil,
                               sink: @escaping (String) -> Void,
                               completion: @escaping (Int32) -> Void) -> Process? {
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: executable)
         proc.arguments = arguments
+        if let environment {
+            var env = ProcessInfo.processInfo.environment
+            for (key, value) in environment { env[key] = value }
+            proc.environment = env
+        }
         let outPipe = Pipe()
         let errPipe = Pipe()
         proc.standardOutput = outPipe
@@ -1992,11 +2174,16 @@ final class ServerController: ObservableObject {
         // the caps, at their own risk.
         if !allowConcurrentRequests {
             args += [
-                "--kv-bits", "4",
                 "--prompt-concurrency", "1",
                 "--decode-concurrency", "1",
                 "--prompt-cache-bytes", "\(promptCacheBytesGB)GB"
             ]
+            // Rotating-KV-cache models (Gemma 4, Ministral 3, Llama 3.2 sliding
+            // window) have no quantized form yet, so skip --kv-bits there rather
+            // than crash the first request with "RotatingKVCache Quantization NYI".
+            if !selectedModel.profile.rotatingKVCache {
+                args += ["--kv-bits", "4"]
+            }
         }
         args += [
             "--max-tokens", "\(maxTokens)",
@@ -2296,6 +2483,23 @@ final class ServerController: ObservableObject {
         guard let names = try? fm.contentsOfDirectory(atPath: path) else { return 0 }
         return names.reduce(into: Int64(0)) { acc, name in
             if let attrs = try? fm.attributesOfItem(atPath: path + "/" + name),
+               let size = attrs[.size] as? NSNumber {
+                acc += size.int64Value
+            }
+        }
+    }
+
+    /// Physical on-disk bytes of one repo in the HF cache. huggingface_hub ≥ 2
+    /// keeps small files inline under `blobs/` but stores the weights in a shared
+    /// content-addressed store and symlinks them into the repo — `directorySize`
+    /// misses those, so this resolves each entry to its real target before sizing.
+    private static func repoDiskBytes(repoID: String) -> Int64 {
+        let blobsDir = hfHubDir() + "/models--" + repoID.replacingOccurrences(of: "/", with: "--") + "/blobs"
+        let fm = FileManager.default
+        guard let names = try? fm.contentsOfDirectory(atPath: blobsDir) else { return 0 }
+        return names.reduce(into: Int64(0)) { acc, name in
+            let resolved = URL(fileURLWithPath: blobsDir + "/" + name).resolvingSymlinksInPath().path
+            if let attrs = try? fm.attributesOfItem(atPath: resolved),
                let size = attrs[.size] as? NSNumber {
                 acc += size.int64Value
             }

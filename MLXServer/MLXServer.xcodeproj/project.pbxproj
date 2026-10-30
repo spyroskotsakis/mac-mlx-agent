@@ -10,6 +10,7 @@
 		ABCDEFABCDEF000000000013 /* MLXServerApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCDEFABCDEF000000000010 /* MLXServerApp.swift */; };
 		ABCDEFABCDEF000000000014 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCDEFABCDEF000000000011 /* ContentView.swift */; };
 		ABCDEFABCDEF000000000015 /* ServerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCDEFABCDEF000000000012 /* ServerController.swift */; };
+		ABCDEFABCDEF000000000019 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABCDEFABCDEF000000000018 /* main.swift */; };
 		ABCDEFABCDEF000000000017 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = ABCDEFABCDEF000000000016 /* Assets.xcassets */; };
 /* End PBXBuildFile section */
 
@@ -18,6 +19,7 @@
 		ABCDEFABCDEF000000000010 /* MLXServerApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MLXServerApp.swift; sourceTree = "<group>"; };
 		ABCDEFABCDEF000000000011 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		ABCDEFABCDEF000000000012 /* ServerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerController.swift; sourceTree = "<group>"; };
+		ABCDEFABCDEF000000000018 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		ABCDEFABCDEF000000000016 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -54,6 +56,7 @@
 				ABCDEFABCDEF000000000010 /* MLXServerApp.swift */,
 				ABCDEFABCDEF000000000011 /* ContentView.swift */,
 				ABCDEFABCDEF000000000012 /* ServerController.swift */,
+				ABCDEFABCDEF000000000018 /* main.swift */,
 				ABCDEFABCDEF000000000016 /* Assets.xcassets */,
 			);
 			path = MLXServer;
@@ -131,6 +134,7 @@
 				ABCDEFABCDEF000000000013 /* MLXServerApp.swift in Sources */,
 				ABCDEFABCDEF000000000014 /* ContentView.swift in Sources */,
 				ABCDEFABCDEF000000000015 /* ServerController.swift in Sources */,
+				ABCDEFABCDEF000000000019 /* main.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -194,13 +198,13 @@
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "MLX Server";
-				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_LSUIElement = NO;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.11.0;
+				MARKETING_VERSION = 1.12.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mlxserver.MLXServer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -220,13 +224,13 @@
 				ENABLE_HARDENED_RUNTIME = NO;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "MLX Server";
-				INFOPLIST_KEY_LSUIElement = YES;
+				INFOPLIST_KEY_LSUIElement = NO;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.11.0;
+				MARKETING_VERSION = 1.12.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mlxserver.MLXServer;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

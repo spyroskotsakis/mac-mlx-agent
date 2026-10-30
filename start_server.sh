@@ -87,14 +87,45 @@ supports_thinking() {
   return 1
 }
 
+# Models whose KV cache is mlx_lm's RotatingKVCache (Gemma 4, Ministral 3,
+# Llama 3.2's sliding-window layers). Rotating caches have no quantized form
+# yet — passing --kv-bits raises "RotatingKVCache Quantization NYI" on the
+# first request — so it's omitted for them and they run a full-precision cache.
+ROTATING_KV_MODELS=(
+  "mlx-community/gemma-4-12B-it-qat-4bit"
+  "mlx-community/Ministral-3-8B-Instruct-2512-4bit"
+  "mlx-community/gemma-4-e4b-it-4bit"
+  "mlx-community/gemma-4-e2b-it-4bit"
+  "mlx-community/Ministral-3-3B-Instruct-2512-4bit"
+  "mlx-community/Llama-3.2-3B-Instruct-4bit"
+)
+
+uses_rotating_kv() {
+  local m
+  for m in "${ROTATING_KV_MODELS[@]}"; do
+    if [[ "$m" == "$MODEL" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 ARGS=(--model "$MODEL" --port "$PORT" \
-  --kv-bits "$KV_BITS" \
   --max-tokens "$MAX_TOKENS" \
   --temp "$TEMP" \
   --top-p "$TOP_P" \
   --top-k "$TOP_K")
+if ! uses_rotating_kv; then
+  ARGS+=(--kv-bits "$KV_BITS")
+fi
 if supports_thinking; then
   ARGS+=(--chat-template-args "{\"enable_thinking\":${ENABLE_THINKING}}")
+fi
+
+# Enable the fast Rust downloader when the active Python has it, so a model the
+# server auto-downloads on first launch doesn't stall behind anonymous HF limits.
+if command -v python3 >/dev/null 2>&1 && python3 -c "import hf_transfer" >/dev/null 2>&1; then
+  export HF_HUB_ENABLE_HF_TRANSFER=1
 fi
 
 exec mlx_lm.server "${ARGS[@]}"

@@ -7,11 +7,9 @@ struct ContentView: View {
     @State private var showManualConfig = false
     @State private var showManualClaudeCode = false
     @State private var showManualLitellm = false
-    @State private var showDeleteModelConfirm = false
     @State private var samplingInfo: SamplingInfo?
     @State private var maxTokensText = ""
     @FocusState private var maxTokensFocused: Bool
-    @State private var pendingConfirm: PendingConfirm?
 
     /// A one-click install/config action awaiting confirmation. Auto-install and
     /// auto-config buttons modify the Python environment or overwrite a config
@@ -19,6 +17,7 @@ struct ContentView: View {
     private enum PendingConfirm: String, Identifiable {
         case installMLX, installHF, installLitellm
         case writeOpenCode, writeClaudeCode, writeLitellm
+        case deleteModel, deleteAllModels
 
         var id: String { rawValue }
 
@@ -30,6 +29,8 @@ struct ContentView: View {
             case .writeOpenCode: return "Write the OpenCode config?"
             case .writeClaudeCode: return "Write the Claude Code profile?"
             case .writeLitellm: return "Write the LiteLLM config?"
+            case .deleteModel: return "Delete model?"
+            case .deleteAllModels: return "Delete all models?"
             }
         }
 
@@ -47,6 +48,10 @@ struct ContentView: View {
                 return "This overwrites ~/.config/mlx-local/claude-code.env (your existing file is backed up first). You can instead copy it by hand from “Manual”."
             case .writeLitellm:
                 return "This overwrites ~/.config/mlx-local/litellm-mlx.yaml (your existing file is backed up first)."
+            case .deleteModel:
+                return ""
+            case .deleteAllModels:
+                return ""
             }
         }
 
@@ -58,6 +63,8 @@ struct ContentView: View {
             case .writeOpenCode: return "Write config"
             case .writeClaudeCode: return "Write profile"
             case .writeLitellm: return "Write config"
+            case .deleteModel: return "Delete"
+            case .deleteAllModels: return "Delete all"
             }
         }
 
@@ -67,28 +74,24 @@ struct ContentView: View {
             switch self {
             case .installMLX, .installHF, .installLitellm: return false
             case .writeOpenCode, .writeClaudeCode, .writeLitellm: return true
+            case .deleteModel, .deleteAllModels: return true
             }
         }
     }
 
     var body: some View {
         TabView {
-            serverTab
-                .tabItem { Label("Server", systemImage: "cpu") }
-            connectTab
-                .tabItem { Label("Connect", systemImage: "link") }
+            ScrollView {
+                serverTab
+            }
+            .tabItem { Label("Server", systemImage: "cpu") }
+
+            ScrollView {
+                connectTab
+            }
+            .tabItem { Label("Connect", systemImage: "link") }
         }
-        .frame(width: 890)
-        .alert(item: $pendingConfirm) { confirm in
-            Alert(
-                title: Text(confirm.title),
-                message: Text(confirm.message),
-                primaryButton: confirm.destructive
-                    ? .destructive(Text(confirm.actionLabel)) { run(confirm) }
-                    : .default(Text(confirm.actionLabel)) { run(confirm) },
-                secondaryButton: .cancel()
-            )
-        }
+        .frame(minWidth: 880, minHeight: 600)
         .onAppear {
             server.onAppear()
             server.checkModelCached()
@@ -133,6 +136,44 @@ struct ContentView: View {
         case .writeOpenCode: server.writeOpenCodeConfig()
         case .writeClaudeCode: server.writeClaudeCodeConfig()
         case .writeLitellm: server.writeLitellmConfig()
+        case .deleteModel: server.deleteModel()
+        case .deleteAllModels: server.deleteAllModels()
+        }
+    }
+
+    private func confirmTitle(_ confirm: PendingConfirm) -> String {
+        confirm == .deleteModel ? "Delete \(server.selectedModel.displayName)?" : confirm.title
+    }
+
+    private func confirmMessage(_ confirm: PendingConfirm) -> String {
+        switch confirm {
+        case .deleteModel:
+            return "This removes the model from the local HuggingFace cache and frees \(selectedModelSizeText) of disk space. You can download it again later."
+        case .deleteAllModels:
+            return "This removes every cached model from the local HuggingFace cache and frees \(allModelsSizeText) of disk space. You can download them again later."
+        default:
+            return confirm.message
+        }
+    }
+
+    /// SwiftUI's `.alert` is unreliable inside a `MenuBarExtra(.window)` — the
+    /// alert is a separate window, so clicking it steals focus, the menu-bar
+    /// popover closes, and the alert (and often its action) is torn down with it.
+    /// We present the confirmation as an `NSAlert` instead, which stays on screen
+    /// independently of the popover and keeps the action running.
+    private func confirm(_ action: PendingConfirm) {
+        let alert = NSAlert()
+        alert.messageText = confirmTitle(action)
+        alert.informativeText = confirmMessage(action)
+        if action == .deleteModel || action == .deleteAllModels {
+            alert.alertStyle = .critical
+        } else if action.destructive {
+            alert.alertStyle = .warning
+        }
+        alert.addButton(withTitle: action.actionLabel)
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn {
+            run(action)
         }
     }
 
@@ -505,7 +546,7 @@ struct ContentView: View {
                 title: "mlx-lm (mlx_lm.server)",
                 detail: mlxLMDetail,
                 buttonTitle: server.resolvedExecutable == nil ? "Install" : "Repair",
-                action: { pendingConfirm = .installMLX }
+                action: { confirm(.installMLX) }
             )
 
             if server.resolvedExecutable != nil && !server.mlxLMHealthy {
@@ -534,7 +575,7 @@ struct ContentView: View {
                 title: "Hugging Face CLI (hf)",
                 detail: hfDetail,
                 buttonTitle: "Install",
-                action: { pendingConfirm = .installHF }
+                action: { confirm(.installHF) }
             )
 
             if server.hfPath == nil {
@@ -558,7 +599,7 @@ struct ContentView: View {
                 detail: modelDetail,
                 buttonTitle: server.modelPartialDownload ? "Retry download" : "Download",
                 action: server.downloadModel,
-                deleteAction: server.modelCached == true ? { showDeleteModelConfirm = true } : nil,
+                deleteAction: server.modelCached == true ? { confirm(.deleteModel) } : nil,
                 folderAction: { openInFinder(server.modelFolderPath) }
             )
 
@@ -589,7 +630,14 @@ struct ContentView: View {
                         Button("Retry now") { server.retryNow() }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
+                        Button("Stop") { server.cancelDownload() }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
                     }
+                } else {
+                    Button("Stop download") { server.cancelDownload() }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
                 }
                 ScrollView {
                     Text(server.installOutput.isEmpty ? "Waiting…" : server.installOutput)
@@ -602,12 +650,6 @@ struct ContentView: View {
                 .padding(8)
                 .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .windowBackgroundColor)))
             }
-        }
-        .alert("Delete \(server.selectedModel.displayName)?", isPresented: $showDeleteModelConfirm) {
-            Button("Delete", role: .destructive) { server.deleteModel() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This removes the model from the local HuggingFace cache and frees \(selectedModelSizeText) of disk space. You can download it again later.")
         }
     }
 
@@ -655,6 +697,10 @@ struct ContentView: View {
 
     private var selectedModelSizeText: String {
         ByteCountFormatter.string(fromByteCount: server.selectedModelDiskBytes, countStyle: .file)
+    }
+
+    private var allModelsSizeText: String {
+        ByteCountFormatter.string(fromByteCount: server.allModelsDiskBytes, countStyle: .file)
     }
 
     private var downloadProgressLabel: String {
@@ -760,7 +806,7 @@ struct ContentView: View {
                 }
                 Spacer()
                 if showsAutoSetup {
-                    Button(configButtonTitle) { pendingConfirm = .writeOpenCode }
+                    Button(configButtonTitle) { confirm(.writeOpenCode) }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .disabled(server.openCodePath == nil)
@@ -858,7 +904,7 @@ struct ContentView: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                Button(server.litellmConfigPortMismatch ? "Update config" : "Set up config") { pendingConfirm = .writeLitellm }
+                Button(server.litellmConfigPortMismatch ? "Update config" : "Set up config") { confirm(.writeLitellm) }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .disabled(server.litellmPath == nil)
@@ -866,7 +912,7 @@ struct ContentView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 if server.litellmPath == nil || server.litellmVersion == nil {
-                    Button(server.litellmPath == nil ? "Install" : "Repair") { pendingConfirm = .installLitellm }
+                    Button(server.litellmPath == nil ? "Install" : "Repair") { confirm(.installLitellm) }
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                 }
@@ -948,7 +994,7 @@ struct ContentView: View {
                         .lineLimit(1)
                 }
                 Spacer()
-                Button(server.claudeCodeProfilePortMismatch ? "Update" : "Set up") { pendingConfirm = .writeClaudeCode }
+                Button(server.claudeCodeProfilePortMismatch ? "Update" : "Set up") { confirm(.writeClaudeCode) }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .disabled(server.claudeCodePath == nil)
@@ -1160,6 +1206,18 @@ struct ContentView: View {
             Text("Stop the server before switching models.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+
+            Divider()
+
+            Button {
+                confirm(.deleteAllModels)
+            } label: {
+                Label("Delete all models", systemImage: "trash")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .tint(.red)
+            .disabled(server.isInstalling || !server.canSwitchModel)
         }
     }
 

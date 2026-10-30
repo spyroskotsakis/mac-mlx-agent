@@ -6,6 +6,48 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.12.0] — 2026-10-30
+
+### Fixed
+
+- **Deleting a model now removes the actual weights.** The Delete and Delete-all
+  buttons used to remove only the small per-repo files and leave the multi-GB
+  weights orphaned in huggingface_hub's shared blob store. They now go through
+  `scan_cache_dir` + `delete_revisions`, which deletes the repo folder *and*
+  sweeps the orphaned weights. The "freed X" figure (and the Delete-all
+  confirmation) now reports the real GB-scale size, not a ~1000× undercount.
+
+- **Gemma 4 / Ministral 3 / Llama 3.2 no longer crash on the first request.**
+  These models use mlx_lm's sliding-window `RotatingKVCache`, which has no
+  quantized form, so passing `--kv-bits 4` raised
+  `NotImplementedError: RotatingKVCache Quantization NYI`. The app (and
+  `start_server.sh`) now skip `--kv-bits` for those six models and run them with
+  a full-precision KV cache.
+
+- **Large model downloads no longer stall on the multi-GB weights.** Anonymous HF
+  downloads could fetch the small files instantly and then make zero progress on
+  `model.safetensors`, tripping the 45s stall watchdog and burning through all
+  five auto-retries. Downloads now run through `hf_transfer` (the fast Rust
+  downloader) when it's installed.
+
+### Added
+
+- **`hf_transfer` is now a prerequisite.** The app installs it alongside mlx-lm /
+  `hf`, checks for it in Requirements, and shows a setup-guide step with install
+  instructions when it's missing. `setup.sh` does the same.
+
+- **Single-instance guard.** Launching the app twice now focuses the existing
+  window instead of spawning a duplicate process (`main.swift` + `flock`).
+
+- **"Delete all models" button.** Clears every cached model (weights included) in
+  one step, with a confirmation showing the total on-disk size.
+
+### Changed
+
+- **Terminal path matches the app.** `setup.sh` and `start_server.sh` now install
+  and enable `hf_transfer`, and `start_server.sh` skips `--kv-bits` for the six
+  rotating-KV-cache models — the same behavior as the menu-bar app.
+
 ## [1.11.0] — 2026-10-30
 
 ### Added
@@ -367,6 +409,7 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.12.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.12.0
 [1.11.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.11.0
 [1.10.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.10.0
 [1.9.2]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.9.2
