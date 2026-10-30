@@ -141,6 +141,23 @@ The signed `.app` lands in `MLXServer/build/Release/`, the zip in `MLXServer/bui
 Version/build are the Xcode target's `CFBundleShortVersionString` / `CFBundleVersion`
 (check `MLXServer/MLXServer.xcodeproj` or the built Info.plist).
 
+### First-launch Gatekeeper note (required in every release)
+
+The `.app` is **ad-hoc signed only** — no Apple Developer ID, not notarized — so a
+downloaded copy is blocked on first launch by macOS Gatekeeper (*"Apple could not
+verify MLXServer is free of malware…"*). This is expected and **cannot be fixed in
+code**: the browser stamps the downloaded zip with `com.apple.quarantine`, and only
+an Apple Developer ID + notarization (a paid account) removes the block. So **every
+release must ship the one-line unblock**, in *both* the GitHub release notes and the
+README's "Use the menu-bar app" section:
+
+    /usr/bin/xattr -cr /Applications/MLXServer.app
+
+Use the full `/usr/bin/xattr` path — Anaconda's `xattr` (when it shadows on `PATH`)
+has no `-r` flag and fails with "option -r not recognized". Clearing
+`com.apple.quarantine` once per downloaded copy is all that's needed; a locally
+built `.app` carries no quarantine flag and opens without this step.
+
 ## Key endpoints (when running)
 
 - `GET  http://127.0.0.1:8080/v1/models` — server health / cached models.
