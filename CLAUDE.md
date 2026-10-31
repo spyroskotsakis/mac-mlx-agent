@@ -94,6 +94,17 @@ emit tool calls the server can't parse and stall the loop.
   Model settings). Claude Code's ~85k-token system prompt quantizes to ~6 GB,
   which fills the 6 GB default and defeats caching (`system: 0 sequences`). See
   [Agent recommendations](#agent-recommendations-which-agent-for-which-job).
+- **Every release ships the Gatekeeper unblock.** The `.app` is ad-hoc signed
+  only (no Apple Developer ID, not notarized), so a downloaded copy is blocked on
+  first launch. **Every** release — no exceptions — must include the one-line
+  unblock in **both** the GitHub release notes and the README's "Use the menu-bar
+  app" section:
+
+      /usr/bin/xattr -cr /Applications/MLXServer.app
+
+  Use the full `/usr/bin/xattr` path — Anaconda's `xattr` (when it shadows on
+  `PATH`) has no `-r` flag and fails with "option -r not recognized". See
+  [Build & release](#build--release).
 
 ## Agent recommendations (which agent for which job)
 
