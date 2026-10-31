@@ -1,6 +1,6 @@
 # Mac Local AI Setup with Xcode Support
 
-A fully **local** AI stack for Apple Silicon: run a Qwen model with **MLX** behind
+A fully **local** AI stack for Apple Silicon: run local models with **MLX** behind
 an OpenAI-compatible **MLX-LM server**, and drive it from a native **macOS
 menu-bar app** or the **CLI** — no cloud, no API keys. Xcode, OpenCode, and Claude
 Code all talk to your own model on `127.0.0.1:8080/v1`.
