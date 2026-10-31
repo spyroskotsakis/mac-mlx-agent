@@ -55,6 +55,8 @@ MODELS_REPO=(
   "mlx-community/LFM2.5-1.2B-Instruct-4bit"
   "tthoman79/WhiteRabbitNeo-V3-7B-mlx-8bit"
   "tthoman79/Foundation-Sec-8B-Reasoning-mlx-8bit"
+  "mlx-community/glm-4.7-flash-abliterated-8bit"
+  "mlx-community/GLM-4.7-Flash-Derestricted-8bit-gs32"
 )
 MODELS_NAME=(
   "Qwen3.5-35B-A3B (4-bit)"
@@ -83,10 +85,12 @@ MODELS_NAME=(
   "LFM2.5 1.2B Instruct (4-bit)"
   "WhiteRabbitNeo V3 7B (8-bit)"
   "Foundation-Sec 8B Reasoning (8-bit)"
+  "GLM-4.7-Flash Abliterated (8-bit)"
+  "GLM-4.7-Flash Derestricted (8-bit)"
 )
-MODELS_CTX=(262144 262144 262144 40960 262144 32768 262144 262144 393216 262144 262144 131072 131072 262144 131072 262144 262144 131072 131072 131072 262144 202752 128000 128000 32768 131072)
-MODELS_WGT=(18 18 14 7 6 4.28 3.03 1.72 15.10 10.99 5.60 5.15 3.55 2.75 1.81 44.84 17.18 18.43 63.39 12.08 15.61 16.85 12.49 0.66 7.62 8.03)
-MODELS_THINK=(yes yes yes yes yes no yes yes no no no no no no no no no no no no no no no no no no)
+MODELS_CTX=(262144 262144 262144 40960 262144 32768 262144 262144 393216 262144 262144 131072 131072 262144 131072 262144 262144 131072 131072 131072 262144 202752 128000 128000 32768 131072 202752 202752)
+MODELS_WGT=(18 18 14 7 6 4.28 3.03 1.72 15.10 10.99 5.60 5.15 3.55 2.75 1.81 44.84 17.18 18.43 63.39 12.08 15.61 16.85 12.49 0.66 7.62 8.03 29.94 29.94)
+MODELS_THINK=(yes yes yes yes yes no yes yes no no no no no no no no no no no no no no no no no no no no)
 DEFAULT_INDEX=0
 
 # --- flags ---------------------------------------------------------------------

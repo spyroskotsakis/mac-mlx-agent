@@ -265,11 +265,19 @@ generation but aren't the pick for agentic work. Pick one that fits your RAM;
 | `mlx-community/LFM2.5-1.2B-Instruct-4bit` | 1.2B | 0.66 GB | 128,000 | — | — | Liquid AI tiny 1.2B; chat/generation only. |
 | `tthoman79/WhiteRabbitNeo-V3-7B-mlx-8bit` | 7B | 7.62 GB | 32,768 | — | — | **Pentesting** — code review, vuln discussion, DevSecOps (Qwen2.5-Coder fine-tune); 8-bit, chat only. |
 | `tthoman79/Foundation-Sec-8B-Reasoning-mlx-8bit` | 8B | 8.03 GB | 131,072 | — | — | **Pentesting** — findings analysis, vuln prioritization, threat modeling; 8-bit, chat only. |
+| `mlx-community/glm-4.7-flash-abliterated-8bit` | 30B (3B active) | 29.94 GB | 202,752 | — | — | **Reduced-refusal** — huihui-ai abliterated; 8-bit, chat only, experimental. |
+| `mlx-community/GLM-4.7-Flash-Derestricted-8bit-gs32` | 30B (3B active) | 29.94 GB | 202,752 | — | — | **Reduced-refusal** — koute derestricted; 8-bit, chat only, experimental. |
 
 > **Security / pentesting models** (WhiteRabbitNeo, Foundation-Sec) are 8-bit
 > quantizations for cybersecurity lab work — code review, vulnerability analysis,
 > threat modeling, and DevSecOps. They're chat/generation models, not agents, and
 > are for **authorized** testing on systems you own or are cleared to assess.
+
+> **Reduced-refusal (abliterated/derestricted) models** are experimental chat-only
+> models with safety/refusal training removed. They are **not** wired to tool
+> calling, so selecting one does not grant it shell, network, or secrets access.
+> Treat their output with caution and evaluate only on authorized or sandboxed
+> targets.
 
 > **Params:** dense models list total parameters; MoE models list `total (active per token)`. Gemma 4 “E” models are MoE and list *effective* parameters (their totals are higher).
 

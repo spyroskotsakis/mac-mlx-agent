@@ -299,7 +299,22 @@ final class ServerController: ObservableObject {
                     params: "8B",
                     summary: "Security reasoning model for findings analysis, vulnerability prioritization, and threat modeling.",
                     highlights: ["Pentesting", "Threat modeling", "128K ctx"],
-                    agentNote: "Pentesting/security model — chat only; tool calling isn't validated. Use a Qwen3 model for agent work.")
+                    agentNote: "Pentesting/security model — chat only; tool calling isn't validated. Use a Qwen3 model for agent work."),
+        // --- Reduced-refusal — Experimental (abliterated/derestricted, chat-only) ---
+        ModelOption(repoID: "mlx-community/glm-4.7-flash-abliterated-8bit",
+                    displayName: "GLM-4.7-Flash Abliterated (8-bit)",
+                    profile: ModelProfile(maxContext: 202_752, thinkingSupported: false, weightGB: 29.94),
+                    params: "30B (3B active)",
+                    summary: "Reduced-refusal GLM-4.7-Flash (huihui-ai abliterated) — experimental, chat-only.",
+                    highlights: ["Reduced refusal", "Abliterated", "Experimental"],
+                    agentNote: "Reduced-refusal (abliterated) — experimental, chat-only. No tool calling, so it has no shell/network/secrets access; evaluate only on authorized or sandboxed targets."),
+        ModelOption(repoID: "mlx-community/GLM-4.7-Flash-Derestricted-8bit-gs32",
+                    displayName: "GLM-4.7-Flash Derestricted (8-bit)",
+                    profile: ModelProfile(maxContext: 202_752, thinkingSupported: false, weightGB: 29.94),
+                    params: "30B (3B active)",
+                    summary: "Reduced-refusal GLM-4.7-Flash (koute derestricted) — experimental, chat-only.",
+                    highlights: ["Reduced refusal", "Derestricted", "Experimental"],
+                    agentNote: "Reduced-refusal (derestricted) — experimental, chat-only. No tool calling, so it has no shell/network/secrets access; evaluate only on authorized or sandboxed targets.")
     ]
 
     /// Guards the CLI-detection probes so opening the panel in quick succession

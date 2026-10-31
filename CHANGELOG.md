@@ -6,6 +6,15 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.18.0] — 2026-10-31
+
+### Added
+
+- **Two reduced-refusal GLM-4.7-Flash models (8-bit).** Abliterated (huihui-ai) and
+  Derestricted (koute) variants, flagged "Reduced-refusal — Experimental" in the
+  picker. Chat-only — no tool calling, so they have no shell/network/secrets
+  access; for evaluation on authorized or sandboxed targets.
+
 ## [1.17.0] — 2026-10-31
 
 ### Added
