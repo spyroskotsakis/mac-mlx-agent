@@ -6,6 +6,28 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.15.0] — 2026-10-31
+
+### Added
+
+- **Nine more models** in the app and `setup.sh` picker (24 total, up from 15):
+  Qwen3-Coder-Next (4-bit), Qwen3-Coder-30B-A3B-Instruct (4-bit),
+  DeepSeek-R1-Distill-Qwen-32B (4-bit), GPT-OSS 120B (MXFP4/Q8), GPT-OSS 20B
+  (MXFP4/Q8), Gemma 4 26B-A4B IT QAT (4-bit), GLM-4.7-Flash (4-bit), and
+  LFM2.5-1.2B-Instruct (4-bit). None support thinking mode; the two GPT-OSS and
+  Gemma 4 models serve a full-precision (rotating) KV cache.
+
+- **GPT-OSS + Gemma 4 rotating-KV handling** in `start_server.sh` — these models
+  skip `--kv-bits` because mlx-lm's RotatingKVCache has no quantized form yet.
+
+### Fixed
+
+- **LFM2.5-24B-A2B-Preview-mxfp4 dropped.** That checkpoint stores every weight
+  under a `language_model.model.` prefix that mlx-lm's `lfm2_moe` loader doesn't
+  strip, so loading it died with "Received 725 parameters not in model" →
+  "generation thread died". Replaced with the correctly-converted
+  `mlx-community/LFM2-24B-A2B-4bit` (the same 24B-A2B MoE class, ~12.5 GB).
+
 ## [1.14.0] — 2026-10-31
 
 ### Added
@@ -467,6 +489,7 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.15.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.15.0
 [1.14.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.14.0
 [1.13.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.13.0
 [1.12.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.12.0

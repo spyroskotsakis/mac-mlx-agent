@@ -198,7 +198,7 @@ writes the OpenCode + Claude Code configs that point at it.
 ./setup.sh --model mlx-community/Qwen3-14B-4bit     # a specific model
 ```
 
-The menu offers the same 15 models as the app (see the table in Step 2).
+The menu offers the same 24 models as the app (see the table in Step 2).
 Everything below is the manual, step-by-step version of what `setup.sh` does.
 
 ---
@@ -243,13 +243,23 @@ generation but aren't the pick for agentic work. Pick one that fits your RAM;
 | `mlx-community/gemma-4-e2b-it-4bit` | 3.55 GB | 131,072 | — | — | Small + vision; chat/generation only. |
 | `mlx-community/Ministral-3-3B-Instruct-2512-4bit` | 2.75 GB | 262,144 | — | — | Tiny, multilingual; chat/generation only. |
 | `mlx-community/Llama-3.2-3B-Instruct-4bit` | 1.81 GB | 131,072 | — | — | On-device, multilingual; chat/generation only. |
+| `mlx-community/Qwen3-Coder-Next-4bit` | 44.84 GB | 262,144 | — | — | Next-gen Qwen coder MoE (10 active); chat/generation only. |
+| `mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit` | 17.18 GB | 262,144 | — | — | Coder MoE; drops the `<tool_call>` wrapper → chat/generation only. |
+| `mlx-community/DeepSeek-R1-Distill-Qwen-32B-4bit` | 18.43 GB | 131,072 | — | — | DeepSeek-R1 reasoning distilled into Qwen 32B; chat/generation only. |
+| `mlx-community/gpt-oss-120b-MXFP4-Q8` | 63.39 GB | 131,072 | — | — | OpenAI's 120B MoE; chat/generation only (needs a maxed-out Mac). |
+| `mlx-community/gpt-oss-20b-MXFP4-Q8` | 12.08 GB | 131,072 | — | — | OpenAI's 20B MoE; chat/generation only. |
+| `mlx-community/gemma-4-26B-A4B-it-qat-4bit` | 15.61 GB | 262,144 | — | — | Google 26B-A4B MoE, multilingual; chat/generation only. |
+| `mlx-community/GLM-4.7-Flash-4bit` | 16.85 GB | 202,752 | — | — | Zhipu GLM-4.7-Flash MoE; chat/generation only. |
+| `mlx-community/LFM2-24B-A2B-4bit` | 12.49 GB | 128,000 | — | — | Liquid AI 24B-A2B MoE; chat/generation only. |
+| `mlx-community/LFM2.5-1.2B-Instruct-4bit` | 0.66 GB | 128,000 | — | — | Liquid AI tiny 1.2B; chat/generation only. |
 
 > **Use only the Qwen3-family models for agent/tool-calling work.** The rest of
-> the list (Llama, Gemma, Ministral, Devstral, and Qwen2.5-Coder) are chat and
-> generation models — as coding agents they emit raw tool-call JSON that
-> mlx_lm.server can't parse, so OpenCode/Xcode/Claude Code just see the raw text
-> (e.g. `{ "name": …, "parameters": {} }`) instead of an answer. (`Qwen3-Coder-30B-A3B`
-> drops the `<tool_call>` wrapper and `Qwen2.5-Coder-14B` wraps its call in
+> the list (Llama, Gemma, Ministral, Devstral, GPT-OSS, GLM, LFM, DeepSeek-R1,
+> and the Qwen coder variants) are chat and generation models — as coding agents
+> they emit raw tool-call JSON that mlx_lm.server can't parse, so
+> OpenCode/Xcode/Claude Code just see the raw text (e.g. `{ "name": …, "parameters": {} }`)
+> instead of an answer. (`Qwen3-Coder-30B-A3B` drops the `<tool_call>` wrapper,
+> `Qwen3-Coder-Next` is unvalidated, and `Qwen2.5-Coder-14B` wraps its call in
 > `<tools>` instead — same symptom.)
 
 Download the model you picked (or run `./setup.sh`, which does this for you —
