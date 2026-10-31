@@ -11,6 +11,23 @@ It works with:
 
 Everything runs on your own hardware. Your code never leaves your Mac.
 
+## Quick start — install the macOS app
+
+Paste this into Terminal to download and install the latest **MLX Server**
+menu-bar app — no Gatekeeper prompt, because the download goes through `curl`
+rather than a browser:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/spyroskotsakis/mac-mlx-agent/main/install.sh | bash
+```
+
+Then open **MLX Server**, pick a model, and click **Start**. It installs `mlx-lm`,
+downloads the model, and sets up OpenCode and Claude Code automatically — so you
+can skip the manual steps below. Prefer to download the zip yourself? See
+[Use the menu-bar app](#use-the-menu-bar-app-recommended).
+
+---
+
 > ## ⚠️ Claude Code is crashing — use OpenCode instead
 >
 > **Claude Code is currently crashing on the local model** (its ~85k-token system
@@ -19,18 +36,6 @@ Everything runs on your own hardware. Your code never leaves your Mac.
 > it sends a far smaller prompt, caches reliably, and is the agent this project
 > tests against. See [Which agent to use](#which-agent-to-use). This note will be
 > removed when Claude Code is usable again.
-
-> **Just want it to work?** Paste this into Terminal — it downloads the latest
-> **MLX Server** menu-bar app and installs it **without** the Gatekeeper warning
-> (the download goes through `curl`, not a browser, so no `xattr` step is needed):
->
-> ```bash
-> curl -fsSL https://raw.githubusercontent.com/spyroskotsakis/mac-mlx-agent/main/install.sh | bash
-> ```
->
-> The app then installs `mlx-lm`, downloads the model, and sets up OpenCode and
-> Claude Code automatically, so you can skip the manual steps below. Prefer a
-> manual download? See [Use the menu-bar app](#use-the-menu-bar-app-recommended).
 
 ---
 

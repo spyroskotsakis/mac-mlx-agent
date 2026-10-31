@@ -117,6 +117,11 @@ emit tool calls the server can't parse and stall the loop.
 
   Never rename/move `install.sh` or change the default branch without updating
   every place this URL is referenced.
+- **No AI-assistant attribution anywhere.** Never add "Generated with Claude Code"
+  (or any Claude Code / AI-assistant generation footer or attribution line) to
+  any file in this repo, the README, the CHANGELOG, or any GitHub release note.
+  These are human-authored docs and release notes — if such a footer appears,
+  remove it from every file and release that has it.
 
 ## Agent recommendations (which agent for which job)
 
