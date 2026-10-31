@@ -6,6 +6,38 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.14.0] — 2026-10-31
+
+### Added
+
+- **Mistral-family models now drive agents.** Devstral Small 2 24B and Ministral 3
+  (8B / 3B) previously 404'd on OpenCode's tool-call follow-ups — their chat
+  template enforces strict user/assistant role alternation and raises "conversation
+  roles must alternate", which `mlx_lm.server` surfaces as a 404. The app (and
+  `start_server.sh`) now serve these models with a lenient copy of the template
+  (same `[SYSTEM_PROMPT]` / `[INST]` / `[TOOL_CALLS]` token format, alternation
+  check removed) via `--chat-template`.
+
+- **OpenCode v2 config support.** The app and `setup.sh` detect the installed
+  OpenCode major version and write the matching config shape — v2
+  `providers`/`package`/`settings`/`capabilities` vs v1 `provider`/`npm`/`options` —
+  and re-probe the version at write time. Mistral-family models get
+  `compatibility.requireAssistantAfterTool`, and non-mlx providers are preserved
+  across the v1→v2 migration.
+
+### Fixed
+
+- **Stale "use a Qwen3 model" warnings removed.** Devstral, Ministral 3, and
+  Gemma 4 no longer carry the "OpenCode/Claude Code integration isn't validated"
+  warning — Mistral is fixed above and Gemma 4 is confirmed working. The warning
+  remains only for Qwen2.5-Coder (a tool-call format this app's parser doesn't
+  understand) and Llama 3.2 (unvalidated).
+
+### Changed
+
+- **Gatekeeper unblock uses the full `/usr/bin/xattr` path** in the README and
+  release notes, so Anaconda's `xattr` (which lacks `-r`) can't shadow it.
+
 ## [1.13.0] — 2026-10-30
 
 ### Fixed
@@ -435,6 +467,7 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.14.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.14.0
 [1.13.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.13.0
 [1.12.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.12.0
 [1.11.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.11.0
