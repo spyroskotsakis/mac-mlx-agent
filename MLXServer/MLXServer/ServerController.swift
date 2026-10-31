@@ -173,38 +173,32 @@ final class ServerController: ObservableObject {
                     displayName: "Devstral Small 2 24B Instruct (4-bit)",
                     profile: ModelProfile(maxContext: 393_216, thinkingSupported: false, weightGB: 15.10),
                     summary: "Mistral's 24B coding specialist — strong instruction following and tool use for agents.",
-                    highlights: ["Coding", "Agentic", "393K ctx"],
-                    agentNote: "Agentic coding model with native tool calling, but its Mistral chat template can reject OpenCode's message flow (\"roles must alternate\" errors) under this app's serving config. Use a Qwen3 model for agent work."),
+                    highlights: ["Coding", "Agentic", "393K ctx"]),
         ModelOption(repoID: "mlx-community/gemma-4-12B-it-qat-4bit",
                     displayName: "Gemma 4 12B IT QAT (4-bit)",
                     profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, weightGB: 10.99, rotatingKVCache: true),
                     summary: "Google's 12B with quantized-aware training — capable multilingual general assistant with long context.",
-                    highlights: ["Multilingual", "QAT", "262K ctx"],
-                    agentNote: "Thinking- and tool-capable model, but OpenCode/Claude Code integration isn't validated in this app. Use a Qwen3 model for agent work."),
+                    highlights: ["Multilingual", "QAT", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Ministral-3-8B-Instruct-2512-4bit",
                     displayName: "Ministral 3 8B Instruct (4-bit)",
                     profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, weightGB: 5.60, rotatingKVCache: true),
                     summary: "Mistral 8B built for edge/on-device — efficient multilingual chat and light coding.",
-                    highlights: ["Multilingual", "Efficient", "262K ctx"],
-                    agentNote: "Tool-capable model, but its Mistral chat template can reject OpenCode's message flow (\"roles must alternate\" errors) under this app's serving config. Use a Qwen3 model for agent work."),
+                    highlights: ["Multilingual", "Efficient", "262K ctx"]),
         ModelOption(repoID: "mlx-community/gemma-4-e4b-it-4bit",
                     displayName: "Gemma 4 E4B Instruct (4-bit)",
                     profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, weightGB: 5.15, rotatingKVCache: true),
                     summary: "Google's efficient 4B-class assistant — vision and long context at low memory cost.",
-                    highlights: ["Vision", "Efficient", "131K ctx"],
-                    agentNote: "Thinking- and tool-capable model, but OpenCode/Claude Code integration isn't validated in this app. Use a Qwen3 model for agent work."),
+                    highlights: ["Vision", "Efficient", "131K ctx"]),
         ModelOption(repoID: "mlx-community/gemma-4-e2b-it-4bit",
                     displayName: "Gemma 4 E2B Instruct (4-bit)",
                     profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, weightGB: 3.55, rotatingKVCache: true),
                     summary: "Google's smallest Gemma 4 — fast general chat and vision.",
-                    highlights: ["Small", "Vision", "131K ctx"],
-                    agentNote: "Thinking- and tool-capable model, but OpenCode/Claude Code integration isn't validated in this app. Use a Qwen3 model for agent work."),
+                    highlights: ["Small", "Vision", "131K ctx"]),
         ModelOption(repoID: "mlx-community/Ministral-3-3B-Instruct-2512-4bit",
                     displayName: "Ministral 3 3B Instruct (4-bit)",
                     profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, weightGB: 2.75, rotatingKVCache: true),
                     summary: "Mistral 3B for edge devices — tiny multilingual assistant.",
-                    highlights: ["Tiny", "Multilingual", "262K ctx"],
-                    agentNote: "Tool-capable model, but its Mistral chat template can reject OpenCode's message flow (\"roles must alternate\" errors) under this app's serving config. Use a Qwen3 model for agent work."),
+                    highlights: ["Tiny", "Multilingual", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Llama-3.2-3B-Instruct-4bit",
                     displayName: "Llama 3.2 3B Instruct (4-bit)",
                     profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, weightGB: 1.81, rotatingKVCache: true),
@@ -496,13 +490,11 @@ final class ServerController: ObservableObject {
     }
 
     /// Warning shown when the selected model isn't validated to drive a coding
-    /// agent through this app's serving stack. The note is per-model and accurate
-    /// about *why*: some models are tool-capable but unvalidated here, and the
-    /// Mistral-family templates (Ministral, Devstral) can reject OpenCode's message
-    /// flow outright (consecutive user messages or the title request trip their
-    /// strict role-alternation check and 404). It never claims the upstream model
-    /// "can't use tools" — that would be wrong for Devstral, Ministral, Gemma, and
-    /// Llama, all of which support native tool calling.
+    /// agent through this app's serving stack. It now fires only for Qwen2.5-Coder
+    /// (a tool-call format this app's parser doesn't understand) and Llama 3.2
+    /// (not yet validated). Mistral-family models (Ministral, Devstral) are served
+    /// with a lenient chat template and Gemma 4 is confirmed working, so those no
+    /// longer warn. It never claims the upstream model "can't use tools".
     var toolCallingWarning: String? {
         selectedModel.agentNote
     }
