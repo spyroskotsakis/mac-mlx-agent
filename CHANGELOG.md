@@ -6,6 +6,40 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.16.0] — 2026-10-31
+
+### Added
+
+- **Per-model parameter counts in the app.** The model picker and the info line
+  under it now show each model's parameter count (MoE models show
+  `total (active per token)`, Gemma 4 "E" models show `effective`).
+
+### Fixed
+
+- **GPT-OSS `<|channel|>` 404 in OpenCode.** GPT-OSS 120B/20B always answer inside
+  `<|channel|>analysis` / `<|channel|>final` deliberative-alignment tags, which
+  mlx-lm 0.32.2's thinking detector didn't recognize — the raw tags leaked into
+  `content` and the next turn 404'd. Patched mlx-lm's `_infer_thinking`
+  (`tokenizer_utils.py`) to map the analysis channel to `reasoning` and the final
+  channel to `content`, so GPT-OSS replies now round-trip cleanly. They still have
+  no tool calling, so they stay chat/generation-only (not OpenCode/Claude Code
+  agents). `setup.sh` now re-applies this patch automatically after installing
+  mlx-lm (via `patch_mlx_gptoss.py`, idempotent), so the terminal path stays
+  patched across `pip install -U mlx-lm`.
+
+- **Oversized-model guard.** The app now hard-blocks starting a model whose
+  weight footprint exceeds the Mac's total unified memory (previously only
+  concurrent-request mode was guarded). GPT-OSS 120B (63 GB) and Qwen3-Coder-Next
+  (45 GB) were "loading" because mlx-lm memory-maps the weights, then OOMing the
+  whole machine on the first generation; they now fail with a clear message
+  instead.
+
+- **"Delete models" now clears unfinished downloads.** `deleteModel` /
+  `deleteAllModels` used huggingface_hub's `delete_revisions`, which only removes
+  *complete* revisions — interrupted downloads (the `blobs/*.incomplete` files,
+  and repos with no complete snapshot) were left on disk. The deletion now also
+  sweeps those partial bytes for the selected models.
+
 ## [1.15.0] — 2026-10-31
 
 ### Added
@@ -318,8 +352,8 @@ generation. For agent/tool-calling work, stick with the Qwen models.
 
 ### Changed
 
-- **De-hardcoded** — removed machine-specific 36 GB / M4 Max / macOS version
-  references from the docs and app so the project is generic for any Apple Silicon
+- **De-hardcoded** — removed machine-specific values (RAM size, Mac model, macOS
+  version) from the docs and app so the project is generic for any Apple Silicon
   Mac.
 - **Generic bundle identifier** — `com.mlxserver.MLXServer`.
 - **Open-source release** — added the MIT license and removed test projects.
@@ -489,6 +523,7 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.16.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.16.0
 [1.15.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.15.0
 [1.14.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.14.0
 [1.13.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.13.0

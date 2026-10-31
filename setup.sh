@@ -164,6 +164,14 @@ install_python_pkgs() {
   find_hf && HF_OK=1 || HF_OK=0
 }
 
+# Apply the GPT-OSS thinking-detection patch to the mlx-lm this Python uses.
+# Idempotent; must re-run after `pip install -U mlx-lm`, which overwrites the
+# patched file. Non-fatal — a model still loads if the patch is skipped. See
+# patch_mlx_gptoss.py for the exact change.
+apply_gptoss_patch() {
+  "$PYTHON" "$SCRIPT_DIR/patch_mlx_gptoss.py" || say "GPT-OSS patch failed (non-fatal)." >&2
+}
+
 install_litellm() {
   if [[ "${LITELLM_OK:-0}" -eq 1 ]]; then ok "LiteLLM already installed."; return 0; fi
   say "Creating isolated venv .venv-litellm and installing litellm[proxy]…"
@@ -433,6 +441,7 @@ if [[ "$ASSUME_YES" -ne 1 ]]; then
 fi
 
 install_python_pkgs || exit 1
+apply_gptoss_patch
 install_litellm     || exit 1
 install_opencode    || exit 1
 

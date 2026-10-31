@@ -1168,12 +1168,16 @@ struct ContentView: View {
             Text("Model").font(.subheadline).foregroundStyle(.secondary)
             Picker("Model", selection: $server.selectedModel) {
                 ForEach(ServerController.availableModels) { model in
-                    Text(model.displayName).tag(model)
+                    Text("\(model.displayName) — \(model.params)").tag(model)
                 }
             }
             .labelsHidden()
             .pickerStyle(.menu)
             .disabled(!server.canSwitchModel || server.isInstalling)
+
+            Text("Parameters: \(server.selectedModel.params)")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.primary)
 
             Text(server.selectedModel.summary)
                 .font(.caption)

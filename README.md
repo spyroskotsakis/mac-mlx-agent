@@ -91,7 +91,7 @@ listens on `http://127.0.0.1:8080/v1`, where your model is reachable as
 at an OpenAI-compatible URL can use it** — Xcode, Claude Code, OpenCode, a bare
 `curl`, or your own app.
 
-### Why this setup is interesting (the pitch)
+### Why this setup is interesting
 
 | If someone cares about… | The point |
 |-------------------------|-----------|
@@ -107,7 +107,7 @@ Code's CLI, and OpenCode, with nothing round-tripping to a cloud provider.
 
 The honest tradeoff: a local 35B MoE is not a frontier cloud model — for the
 hardest problems a hosted model can still win. But for most day-to-day coding,
-"private, free, offline, and yours" is a strong offer. See
+"private, free, offline, and yours" is the reason to use it. See
 [Performance notes](#performance-notes) and
 [Caveats](#caveats-be-realistic) for the realistic picture.
 
@@ -246,8 +246,8 @@ generation but aren't the pick for agentic work. Pick one that fits your RAM;
 | `mlx-community/Qwen3-Coder-Next-4bit` | 80B (3B active) | 44.84 GB | 262,144 | — | — | Next-gen Qwen coder MoE (10 active); chat/generation only. |
 | `mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit` | 30B (3B active) | 17.18 GB | 262,144 | — | — | Coder MoE; drops the `<tool_call>` wrapper → chat/generation only. |
 | `mlx-community/DeepSeek-R1-Distill-Qwen-32B-4bit` | 32B | 18.43 GB | 131,072 | — | — | DeepSeek-R1 reasoning distilled into Qwen 32B; chat/generation only. |
-| `mlx-community/gpt-oss-120b-MXFP4-Q8` | 117B (5.1B active) | 63.39 GB | 131,072 | — | — | OpenAI's 120B MoE; chat/generation only (needs a maxed-out Mac). |
-| `mlx-community/gpt-oss-20b-MXFP4-Q8` | 21B (3.6B active) | 12.08 GB | 131,072 | — | — | OpenAI's 20B MoE; chat/generation only. |
+| `mlx-community/gpt-oss-120b-MXFP4-Q8` | 117B (5.1B active) | 63.39 GB | 131,072 | — | — | OpenAI's 120B MoE; thinking model, chat/generation only (needs a maxed-out Mac). |
+| `mlx-community/gpt-oss-20b-MXFP4-Q8` | 21B (3.6B active) | 12.08 GB | 131,072 | — | — | OpenAI's 20B MoE; thinking model, chat/generation only. |
 | `mlx-community/gemma-4-26B-A4B-it-qat-4bit` | 26B (4B active) | 15.61 GB | 262,144 | — | — | Google 26B-A4B MoE, multilingual; chat/generation only. |
 | `mlx-community/GLM-4.7-Flash-4bit` | 30B (3B active) | 16.85 GB | 202,752 | — | — | Zhipu GLM-4.7-Flash MoE; chat/generation only. |
 | `mlx-community/LFM2-24B-A2B-4bit` | 24B (2B active) | 12.49 GB | 128,000 | — | — | Liquid AI 24B-A2B MoE; chat/generation only. |
@@ -263,6 +263,14 @@ generation but aren't the pick for agentic work. Pick one that fits your RAM;
 > instead of an answer. (`Qwen3-Coder-30B-A3B` drops the `<tool_call>` wrapper,
 > `Qwen3-Coder-Next` is unvalidated, and `Qwen2.5-Coder-14B` wraps its call in
 > `<tools>` instead — same symptom.)
+>
+> **GPT-OSS is a thinking model, not an agent.** It always answers inside
+> deliberative-alignment tags (`<|channel|>analysis<|message|> … <|end|>` then
+> `<|channel|>final<|message|> … <|return|>`). The app (and `start_server.sh`)
+> split that into a `reasoning` field plus a clean `content` answer via a small
+> patch to mlx-lm's thinking detection — see [“GPT-OSS / mlx-lm patch”](#gpt-oss--mlx-lm-patch).
+> It still has no tool calling, so it's chat/generation only, not for
+> OpenCode/Claude Code agent work.
 
 Download the model you picked (or run `./setup.sh`, which does this for you —
 the server also auto-downloads on first launch). The repo ids are in the table
@@ -715,6 +723,42 @@ default.**
   without doing anything. This is a **model choice** issue, not a sampling issue:
   switch to a model whose chat template matches mlx_lm.server's parser (the
   default Qwen3.5-35B-A3B works; see the model table above).
+
+### GPT-OSS / mlx-lm patch
+
+GPT-OSS (120B/20B) always answers inside deliberative-alignment channels —
+`<|channel|>analysis<|message|>…<|end|>` (its reasoning) then
+`<|channel|>final<|message|>…<|return|>` (its answer). mlx-lm 0.32.2's thinking
+detector doesn't recognize those tags (it probes for the non-existent
+`<|channel>thought` / `<channel|>` tokens), so the raw tags leaked into the reply
+and the next turn 404'd with *"you have passed a message containing `<|channel|>`
+tags"*.
+
+The fix is a small addition to `_infer_thinking` in mlx-lm's
+`tokenizer_utils.py` that maps the analysis channel to the `reasoning` field and
+the final channel to `content`, leaving OpenCode/Claude Code a clean answer.
+`./setup.sh` applies it automatically after installing mlx-lm — via
+[`patch_mlx_gptoss.py`](patch_mlx_gptoss.py), which is idempotent — and it's
+already applied to this environment. A future `pip install -U mlx-lm` will
+overwrite it, so re-run `python3 patch_mlx_gptoss.py` (or `./setup.sh`) after any
+upgrade. The script inserts this just before the `# Multi token thinking modes`
+branch:
+
+```python
+# GPT-OSS deliberative-alignment channels: split analysis → reasoning, final → content.
+if "<|channel|>" in vocab and "<|message|>" in vocab:
+    think_start = "<|channel|>analysis"
+    think_end = "<|channel|>final<|message|>"
+    return (
+        think_start,
+        think_end,
+        tuple(tokenizer.encode(think_start, add_special_tokens=False)),
+        tuple(tokenizer.encode(think_end, add_special_tokens=False)),
+    )
+```
+
+GPT-OSS still has no tool calling, so even with clean replies it remains a
+chat/generation model — it can't drive OpenCode/Claude Code agent loops.
 
 ---
 
