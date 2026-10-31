@@ -6,6 +6,33 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.19.0] — 2026-10-31
+
+### Added
+
+- **mlx-optiq second runtime.** OptiQ-quantized models (mixed 4/8-bit per layer
+  with an MTP sidecar) don't load on stock `mlx_lm.server`; the `mlx-optiq`
+  package registers the architecture. The app now detects (`import optiq`),
+  installs (`pip install mlx-optiq`), and launches such models through
+  `python -c "import optiq; from mlx_lm.server import main; main()"` — via a new
+  **mlx-optiq** Requirements row with an Install button in the panel, and in the
+  CLI via `setup.sh` plus a new `OPTIQ_MODELS` branch in `start_server.sh`.
+
+- **Two reduced-refusal Uncensored/Obliterated Qwen3.8-27B models (OptiQ 4-bit).**
+  `mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit` (~19.8 GB) and
+  `mlx-community/Qwen3.8-27B-OBLITERATED-OptiQ-4bit` (~20.7 GB) — 27B, 262,144
+  context, thinking supported, experimental. Tool calling is declared but not
+  validated against this stack, so they're chat-only and have no
+  shell/network/secrets access; evaluate only on authorized or sandboxed targets.
+
+### Changed
+
+- **`setup.sh` / `start_server.sh` parity with the app.** `setup.sh`'s model
+  picker now accepts all 30 choices (it previously only matched 1–3), and
+  `start_server.sh` now applies the app's memory-safety defaults
+  (`--host 127.0.0.1`, `--prompt-concurrency 1`, `--decode-concurrency 1`,
+  `--prompt-cache-bytes`).
+
 ## [1.18.0] — 2026-10-31
 
 ### Added
@@ -542,6 +569,9 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.19.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.19.0
+[1.18.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.18.0
+[1.17.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.17.0
 [1.16.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.16.0
 [1.15.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.15.0
 [1.14.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.14.0

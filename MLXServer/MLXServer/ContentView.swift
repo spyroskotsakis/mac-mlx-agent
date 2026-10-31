@@ -15,7 +15,7 @@ struct ContentView: View {
     /// auto-config buttons modify the Python environment or overwrite a config
     /// file, so the user confirms each one before it runs.
     private enum PendingConfirm: String, Identifiable {
-        case installMLX, installHF, installLitellm
+        case installMLX, installOptiQ, installHF, installLitellm
         case writeOpenCode, writeClaudeCode, writeLitellm
         case deleteModel, deleteAllModels
 
@@ -24,6 +24,7 @@ struct ContentView: View {
         var title: String {
             switch self {
             case .installMLX: return "Install mlx-lm?"
+            case .installOptiQ: return "Install mlx-optiq?"
             case .installHF: return "Install the Hugging Face CLI?"
             case .installLitellm: return "Install LiteLLM?"
             case .writeOpenCode: return "Write the OpenCode config?"
@@ -38,6 +39,8 @@ struct ContentView: View {
             switch self {
             case .installMLX:
                 return "This runs pip install into your Python environment (mlx-lm, uvicorn, fastapi, huggingface_hub, brotli>=1.2.0) and may upgrade existing packages. You can run the same command yourself from “How to install mlx-lm manually”."
+            case .installOptiQ:
+                return "This runs pip install mlx-optiq into your Python environment — the second runtime that loads OptiQ-quantized models (mixed 4/8-bit with an MTP sidecar). Only needed for the OptiQ models in the picker."
             case .installHF:
                 return "This runs pip install huggingface_hub (and pins brotli>=1.2.0, which model downloads need) into your Python environment. No Hugging Face account or token is needed."
             case .installLitellm:
@@ -58,6 +61,7 @@ struct ContentView: View {
         var actionLabel: String {
             switch self {
             case .installMLX: return "Install mlx-lm"
+            case .installOptiQ: return "Install mlx-optiq"
             case .installHF: return "Install hf"
             case .installLitellm: return "Install LiteLLM"
             case .writeOpenCode: return "Write config"
@@ -72,7 +76,7 @@ struct ContentView: View {
         /// install into a Python env is a normal (but still confirmed) action.
         var destructive: Bool {
             switch self {
-            case .installMLX, .installHF, .installLitellm: return false
+            case .installMLX, .installOptiQ, .installHF, .installLitellm: return false
             case .writeOpenCode, .writeClaudeCode, .writeLitellm: return true
             case .deleteModel, .deleteAllModels: return true
             }
@@ -131,6 +135,7 @@ struct ContentView: View {
     private func run(_ confirm: PendingConfirm) {
         switch confirm {
         case .installMLX: server.installMLX()
+        case .installOptiQ: server.installOptiQ()
         case .installHF: server.installHF()
         case .installLitellm: server.installLitellm()
         case .writeOpenCode: server.writeOpenCodeConfig()
@@ -569,6 +574,36 @@ struct ContentView: View {
                 }
             }
 
+            if server.selectedModel.profile.requiresOptiQ {
+                requirementRow(
+                    ok: server.optiqHealthy,
+                    showAction: !server.optiqHealthy,
+                    title: "mlx-optiq (OptiQ runtime)",
+                    detail: optiqDetail,
+                    buttonTitle: "Install",
+                    action: { confirm(.installOptiQ) }
+                )
+
+                if !server.optiqHealthy {
+                    DisclosureGroup("How to install mlx-optiq") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("OptiQ-quantized models (mixed 4/8-bit with an MTP sidecar) won't load on stock mlx_lm.server — the mlx-optiq runtime registers the extra architecture. This installs the runtime package only, not the model (the model downloads separately when you click Start).")
+                                .font(.caption)
+                            Text("1. Install it into the same Python environment that runs mlx-lm:")
+                                .font(.caption)
+                            codeBlock(title: "bash", code: "python3 -m pip install --upgrade mlx-optiq")
+                            Text("2. Confirm it imports cleanly:")
+                                .font(.caption)
+                            codeBlock(title: "bash", code: "python3 -c \"import optiq; print('mlx-optiq OK')\"")
+                            Text("3. Back in the app, click \"Check status\" (or reopen the panel) — this row turns green once mlx-optiq is detected. You can also just click Install above and the app runs step 1 for you.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.top, 4)
+                    }
+                }
+            }
+
             requirementRow(
                 ok: server.hfPath != nil,
                 showAction: server.hfPath == nil,
@@ -683,6 +718,11 @@ struct ContentView: View {
     private var hfDetail: String {
         if server.hfPath == nil { return "not installed — needed to download models" }
         return server.hfPath ?? ""
+    }
+
+    private var optiqDetail: String {
+        if server.optiqHealthy { return "installed — loads OptiQ (4/8-bit + MTP) models" }
+        return "not installed — needed to run OptiQ models"
     }
 
     private var modelDetail: String {

@@ -9,16 +9,17 @@ set -euo pipefail
 # template carries an explicit "<IMPORTANT>: MUST be nested within <tool_call>"
 # reminder, so structured tool calls come out reliably.
 #
-# The two models we tried first are NOT reliable under OpenCode's long ~20-tool
-# prompt and were removed from cache: Qwen3-Coder-30B-A3B drops the <tool_call>
-# wrapper, and Qwen2.5-Coder-14B wraps its call in <tools> instead of
-# <tool_call> — both come back as plain text and stall the agent loop. Don't
-# switch back to either one for agentic use.
+# For agentic use, two coder models are NOT reliable under OpenCode's long
+# ~20-tool prompt: Qwen3-Coder-30B-A3B drops the <tool_call> wrapper (it is
+# still offered, with an agent-capability warning in the picker, but don't use
+# it for agents), and Qwen2.5-Coder-14B wrapped its call in <tools> instead of
+# <tool_call> and was removed from the picker. Both come back as plain text and
+# stall the agent loop.
 MODEL="${1:-mlx-community/Qwen3.5-35B-A3B-4bit}"
 PORT="${PORT:-8080}"
 
 # The server ships the same models as the menu-bar app (MLXServer/) and the
-# `./setup.sh` picker — 24 total. Pass any of their ids to `./start_server.sh <id>`.
+# `./setup.sh` picker — 30 total. Pass any of their ids to `./start_server.sh <id>`.
 # The server reads each model's own max context from its config, so no context
 # flag is needed here. Only the client needs the matching per-model value
 # (OpenCode's `limit.context`) — setup.sh / the app writes that for you; set it by
@@ -45,6 +46,15 @@ KV_BITS="${KV_BITS:-4}"
 # most 32768 tokens per response — the same ceiling the app's Max tokens field
 # enforces — so keep this at or below 32768.
 MAX_TOKENS="${MAX_TOKENS:-8192}"
+
+# Memory-safety caps, matching the app's safe default: serve one request at a
+# time and bound the prompt cache, so a large model can't exhaust unified memory
+# the way two agents prefilling together would. The app makes these
+# user-configurable (Model settings → "Allow concurrent requests"); the terminal
+# path keeps them fixed at the safe values. Override PROMPT_CACHE_BYTES_GB if
+# your prompt is much larger than ~3 GB of 4-bit KV (e.g. Claude Code's ~85k
+# system prompt wants ~2× the default).
+PROMPT_CACHE_BYTES_GB="${PROMPT_CACHE_BYTES_GB:-6}"
 
 # Sampling params. mlx_lm.server IGNORES the model's generation_config.json and
 # defaults to GREEDY decoding (temp 0.0, top_p 1.0, top_k 0) with NO repetition
@@ -75,6 +85,8 @@ THINKING_MODELS=(
   "mlx-community/Qwen3.5-9B-4bit"
   "mlx-community/Qwen3.5-4B-4bit"
   "mlx-community/Qwen3.5-2B-4bit"
+  "mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit"
+  "mlx-community/Qwen3.8-27B-OBLITERATED-OptiQ-4bit"
 )
 
 supports_thinking() {
@@ -129,6 +141,25 @@ MISTRAL_MODELS=(
 uses_mistral_lenient_template() {
   local m
   for m in "${MISTRAL_MODELS[@]}"; do
+    if [[ "$m" == "$MODEL" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# OptiQ-quantized models (mixed 4/8-bit per layer) carry an MTP sidecar that
+# stock `mlx_lm.server` can't load. `import optiq` registers the architecture +
+# sidecar, so these are launched through `python -c "import optiq; …"` instead of
+# the `mlx_lm.server` console script (see the exec at the bottom).
+OPTIQ_MODELS=(
+  "mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit"
+  "mlx-community/Qwen3.8-27B-OBLITERATED-OptiQ-4bit"
+)
+
+uses_optiq() {
+  local m
+  for m in "${OPTIQ_MODELS[@]}"; do
     if [[ "$m" == "$MODEL" ]]; then
       return 0
     fi
@@ -233,11 +264,14 @@ if uses_mistral_lenient_template; then
 JINJA
 fi
 
-ARGS=(--model "$MODEL" --port "$PORT" \
+ARGS=(--model "$MODEL" --port "$PORT" --host "127.0.0.1" \
   --max-tokens "$MAX_TOKENS" \
   --temp "$TEMP" \
   --top-p "$TOP_P" \
-  --top-k "$TOP_K")
+  --top-k "$TOP_K" \
+  --prompt-concurrency 1 \
+  --decode-concurrency 1 \
+  --prompt-cache-bytes "${PROMPT_CACHE_BYTES_GB}GB")
 if ! uses_rotating_kv; then
   ARGS+=(--kv-bits "$KV_BITS")
 fi
@@ -253,4 +287,13 @@ fi
 # at 0 bytes. The classic LFS path downloads and resumes cleanly instead.
 export HF_HUB_DISABLE_XET=1
 
-exec mlx_lm.server "${ARGS[@]}"
+if uses_optiq; then
+  # Launch through the same Python interpreter that backs `mlx_lm.server` (read
+  # from its shebang), with the registration import first — the model cards'
+  # documented hand-off: `import optiq; from mlx_lm.server import main; main()`.
+  MLX_SERVER_BIN="$(command -v mlx_lm.server)"
+  MLX_PYTHON="$(head -1 "$MLX_SERVER_BIN" 2>/dev/null | sed 's/^#!//' | tr -d '[:space:]')"
+  exec "${MLX_PYTHON:-python3}" -c "import optiq; from mlx_lm.server import main; main()" "${ARGS[@]}"
+else
+  exec mlx_lm.server "${ARGS[@]}"
+fi

@@ -22,15 +22,24 @@ struct ModelProfile: Hashable {
     /// on the first request — these models are served with a full-precision KV
     /// cache instead.
     let rotatingKVCache: Bool
+    /// True when the model's weights are OptiQ-quantized (mixed 4/8-bit per layer)
+    /// and carry an MTP sidecar (`mtp_file` in config). These don't load on stock
+    /// `mlx_lm.server` — the `optiq` package registers the architecture + MTP
+    /// sidecar, so they must be launched via
+    /// `python -c "import optiq; from mlx_lm.server import main; main()"` instead
+    /// of the `mlx_lm.server` console script directly.
+    let requiresOptiQ: Bool
 
     init(maxContext: Int,
          thinkingSupported: Bool,
          weightGB: Double,
-         rotatingKVCache: Bool = false) {
+         rotatingKVCache: Bool = false,
+         requiresOptiQ: Bool = false) {
         self.maxContext = maxContext
         self.thinkingSupported = thinkingSupported
         self.weightGB = weightGB
         self.rotatingKVCache = rotatingKVCache
+        self.requiresOptiQ = requiresOptiQ
     }
 }
 
@@ -314,7 +323,26 @@ final class ServerController: ObservableObject {
                     params: "30B (3B active)",
                     summary: "Reduced-refusal GLM-4.7-Flash (koute derestricted) — experimental, chat-only.",
                     highlights: ["Reduced refusal", "Derestricted", "Experimental"],
-                    agentNote: "Reduced-refusal (derestricted) — experimental, chat-only. No tool calling, so it has no shell/network/secrets access; evaluate only on authorized or sandboxed targets.")
+                    agentNote: "Reduced-refusal (derestricted) — experimental, chat-only. No tool calling, so it has no shell/network/secrets access; evaluate only on authorized or sandboxed targets."),
+        // --- OptiQ (mlx-optiq runtime) — reduced-refusal, experimental ---
+        // Mixed 4/8-bit per-layer quants with an MTP sidecar. They only load via
+        // `import optiq`, which is why these carry `requiresOptiQ: true` and are
+        // launched through `python -c "import optiq; …"` rather than the
+        // `mlx_lm.server` console script.
+        ModelOption(repoID: "mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit",
+                    displayName: "Qwen3.8-27B Uncensored OptiQ (4-bit)",
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 19.8, requiresOptiQ: true),
+                    params: "27B",
+                    summary: "Reduced-refusal Qwen3.8-27B (Uncensored) in OptiQ mixed 4/8-bit — experimental, served via the mlx-optiq runtime.",
+                    highlights: ["OptiQ 4/8-bit", "MTP", "Reduced refusal", "Experimental"],
+                    agentNote: "Reduced-refusal (uncensored) OptiQ model — experimental and requires the mlx-optiq runtime. Tool calling is declared but not validated against this app's serving stack yet, so treat it as chat-only: it has no shell/network/secrets access. Evaluate only on authorized or sandboxed targets."),
+        ModelOption(repoID: "mlx-community/Qwen3.8-27B-OBLITERATED-OptiQ-4bit",
+                    displayName: "Qwen3.8-27B OBLITERATED OptiQ (4-bit)",
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 20.7, requiresOptiQ: true),
+                    params: "27B",
+                    summary: "Reduced-refusal Qwen3.8-27B (OBLITERATED) in OptiQ mixed 4/8-bit — experimental, served via the mlx-optiq runtime.",
+                    highlights: ["OptiQ 4/8-bit", "MTP", "Reduced refusal", "Experimental"],
+                    agentNote: "Reduced-refusal (obliterated) OptiQ model — experimental and requires the mlx-optiq runtime. Tool calling is declared but not validated against this app's serving stack yet, so treat it as chat-only: it has no shell/network/secrets access. Evaluate only on authorized or sandboxed targets.")
     ]
 
     /// Guards the CLI-detection probes so opening the panel in quick succession
@@ -355,6 +383,7 @@ final class ServerController: ObservableObject {
     @Published private(set) var bridgeRunning: Bool = false
     @Published private(set) var portConflictMessage: String?
     @Published private(set) var mlxLMHealthy: Bool = true
+    @Published private(set) var optiqHealthy: Bool = false
     @Published private(set) var mlxOutOfMemory: Bool = false
 
     // MARK: - Update checking
@@ -655,6 +684,7 @@ final class ServerController: ObservableObject {
             killAllServers()
         }
         checkMLXLM()
+        checkOptiQ()
     }
 
     /// Kills every `mlx_lm.server` process and the app's own LiteLLM bridge,
@@ -784,14 +814,29 @@ final class ServerController: ObservableObject {
             state = .failed(block)
             return
         }
-        guard let exe = resolvedExecutable else {
-            state = .failed("mlx_lm.server not found. Set its full path in Advanced.")
-            return
-        }
+        let serverArgs = arguments(model: selectedModel.repoID, port: port)
 
         let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: exe)
-        proc.arguments = arguments(model: selectedModel.repoID, port: port)
+        if selectedModel.profile.requiresOptiQ {
+            // OptiQ weights carry an MTP sidecar + mixed 4/8-bit architecture that
+            // stock `mlx_lm.server` can't load. `import optiq` registers both, so
+            // launch the server through the Python interpreter with the registration
+            // import first (the model cards' documented hand-off:
+            // `import optiq; from mlx_lm.server import main; main()`).
+            guard let python = resolvePython() else {
+                state = .failed("Python not found — needed to run the mlx-optiq runtime. Install Python, then mlx-optiq.")
+                return
+            }
+            proc.executableURL = URL(fileURLWithPath: python)
+            proc.arguments = ["-c", "import optiq; from mlx_lm.server import main; main()"] + serverArgs
+        } else {
+            guard let exe = resolvedExecutable else {
+                state = .failed("mlx_lm.server not found. Set its full path in Advanced.")
+                return
+            }
+            proc.executableURL = URL(fileURLWithPath: exe)
+            proc.arguments = serverArgs
+        }
 
         let outPipe = Pipe()
         let errPipe = Pipe()
@@ -815,7 +860,8 @@ final class ServerController: ObservableObject {
         state = .starting
         log = ""
         mlxOutOfMemory = false
-        appendLog("$ \(exe) " + arguments(model: selectedModel.repoID, port: port).joined(separator: " ") + "\n\n")
+        let launchLine = ([proc.executableURL?.path ?? ""] + (proc.arguments ?? [])).joined(separator: " ")
+        appendLog("$ \(launchLine)\n\n")
 
         proc.terminationHandler = { [weak self] finished in
             DispatchQueue.main.async {
@@ -1206,6 +1252,22 @@ final class ServerController: ObservableObject {
         }
     }
 
+    /// Confirms the `optiq` package imports into the discovered Python environment.
+    /// Only meaningful for OptiQ models (see `ModelProfile.requiresOptiQ`), which
+    /// can't load without it. Off the main thread so the UI doesn't stall.
+    func checkOptiQ() {
+        guard let python = resolvePython() else {
+            optiqHealthy = false
+            return
+        }
+        DispatchQueue.global(qos: .utility).async {
+            let healthy = Self.optiqHealthy(at: python)
+            DispatchQueue.main.async {
+                self.optiqHealthy = healthy
+            }
+        }
+    }
+
     /// Re-resolves the HuggingFace `hf` CLI (nil if not installed).
     func checkHF() {
         hfPath = Self.findHF()
@@ -1232,6 +1294,7 @@ final class ServerController: ObservableObject {
         checkPython()
         checkPortConflicts()
         checkMLXLM()
+        checkOptiQ()
     }
 
     /// Whether every prerequisite is met: mlx-lm installed, the selected model
@@ -1240,6 +1303,7 @@ final class ServerController: ObservableObject {
     var isReady: Bool {
         resolvedExecutable != nil &&
         mlxLMHealthy == true &&
+        (!selectedModel.profile.requiresOptiQ || optiqHealthy) &&
         pythonPath != nil &&
         hfPath != nil &&
         modelCached == true &&
@@ -1261,6 +1325,9 @@ final class ServerController: ObservableObject {
             missing.append("mlx-lm")
         } else if !mlxLMHealthy {
             missing.append("mlx-lm (broken)")
+        }
+        if selectedModel.profile.requiresOptiQ && !optiqHealthy {
+            missing.append("mlx-optiq")
         }
         if hfPath == nil { missing.append("Hugging Face CLI (hf)") }
         if modelCached != true { missing.append("model files") }
@@ -1298,6 +1365,11 @@ final class ServerController: ObservableObject {
         } else if !mlxLMHealthy {
             steps.append(.init(title: "mlx-lm (broken)",
                                hint: "Click Repair in Requirements to reinstall and clear the dependency conflict.",
+                               optional: false))
+        }
+        if selectedModel.profile.requiresOptiQ && !optiqHealthy {
+            steps.append(.init(title: "mlx-optiq",
+                               hint: "Click Install in Requirements — installs the mlx-optiq runtime this OptiQ model needs.",
                                optional: false))
         }
         if hfPath == nil {
@@ -1390,6 +1462,30 @@ final class ServerController: ObservableObject {
             self.appendInstallOutput(status == 0 ? "\n[mlx-lm installed]\n" : "\n[install failed (status \(status))]\n")
             self.refreshExecutableResolution()
             self.checkMLXLM()
+        })
+    }
+
+    /// Installs `mlx-optiq` — the second runtime that registers the OptiQ
+    /// architecture + MTP sidecar that stock `mlx_lm.server` can't load — into
+    /// the discovered Python environment, streaming output to `installOutput`.
+    /// Only needed for the OptiQ models in the picker (see `requiresOptiQ`).
+    func installOptiQ() {
+        guard !isInstalling else { return }
+        guard let python = Self.findPython(executableOverride: executablePath) else {
+            installOutput = "Could not find a Python interpreter to install into.\n"
+            return
+        }
+        isInstalling = true
+        installOutput = ""
+        appendInstallOutput("$ \(python) -m pip install --upgrade mlx-optiq\n\n")
+        runStreaming(executable: python,
+                     arguments: ["-m", "pip", "install", "--upgrade", "mlx-optiq"],
+                     sink: { [weak self] in self?.appendInstallOutput($0) },
+                     completion: { [weak self] status in
+            guard let self else { return }
+            self.isInstalling = false
+            self.appendInstallOutput(status == 0 ? "\n[mlx-optiq installed]\n" : "\n[install failed (status \(status))]\n")
+            self.checkOptiQ()
         })
     }
 
@@ -2765,6 +2861,23 @@ final class ServerController: ObservableObject {
             }
         }
         return false
+    }
+
+    /// Whether `import optiq` succeeds in the given Python interpreter. A clean
+    /// import prints nothing and exits 0; a missing package exits non-zero.
+    private static func optiqHealthy(at python: String) -> Bool {
+        let proc = Process()
+        proc.executableURL = URL(fileURLWithPath: python)
+        proc.arguments = ["-c", "import optiq"]
+        proc.standardOutput = FileHandle.nullDevice
+        proc.standardError = FileHandle.nullDevice
+        do {
+            try proc.run()
+            proc.waitUntilExit()
+            return proc.terminationStatus == 0
+        } catch {
+            return false
+        }
     }
 
     private static func resolveViaLoginShell(command: String) -> String? {

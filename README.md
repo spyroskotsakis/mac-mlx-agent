@@ -21,9 +21,10 @@ rather than a browser:
 curl -fsSL https://raw.githubusercontent.com/spyroskotsakis/mac-mlx-agent/main/install.sh | bash
 ```
 
-Then open **MLX Server**, pick a model, and click **Start**. It installs `mlx-lm`,
-downloads the model, and sets up OpenCode and Claude Code automatically — so you
-can skip the manual steps below. Prefer to download the zip yourself? See
+Then open **MLX Server**, pick a model, and click **Start**. It installs `mlx-lm`
+(and `mlx-optiq`, if you pick an OptiQ model), downloads the model, and sets up
+OpenCode and Claude Code automatically — so you can skip the manual steps below.
+Prefer to download the zip yourself? See
 [Use the menu-bar app](#use-the-menu-bar-app-recommended).
 
 ---
@@ -175,6 +176,7 @@ missing, so a fresh machine shows its gaps up front.
 |---|---|---|
 | **Python 3** | base runtime for mlx-lm, `hf`, and the server | warning + "How to install Python" instructions |
 | **mlx-lm** (`mlx_lm.server`) | the local server | one-click **Install** (`pip install mlx-lm uvicorn fastapi huggingface_hub 'brotli>=1.2.0'`) |
+| **mlx-optiq** | second runtime for OptiQ (mixed 4/8-bit + MTP) models | one-click **Install** (`pip install mlx-optiq`) — only needed for the OptiQ models |
 | **`hf` CLI** (`huggingface_hub`) | downloads models | one-click **Install** (`pip install huggingface_hub 'brotli>=1.2.0'`) |
 | **Model files** | the weights to serve | one-click **Download** with a progress bar |
 | **OpenCode** | recommended agent | "How to install OpenCode" fold-out (not pip — manual) |
@@ -198,8 +200,8 @@ needed (Python included) so you know at a glance what to install and where.
 ## Quick start — one command (non-GUI)
 
 Skip the manual steps below: `setup.sh` checks every prerequisite, installs
-what's missing (`mlx-lm`, `hf`/`huggingface_hub`, `uvicorn`/`fastapi`, the
-LiteLLM venv, and the OpenCode CLI), then downloads a model of your choice and
+what's missing (`mlx-lm`, `mlx-optiq`, `hf`/`huggingface_hub`, `uvicorn`/`fastapi`,
+the LiteLLM venv, and the OpenCode CLI), then downloads a model of your choice and
 writes the OpenCode + Claude Code configs that point at it.
 
 ```bash
@@ -209,7 +211,7 @@ writes the OpenCode + Claude Code configs that point at it.
 ./setup.sh --model mlx-community/Qwen3-14B-4bit     # a specific model
 ```
 
-The menu offers the same 24 models as the app (see the table in Step 2).
+The menu offers the same 30 models as the app (see the table in Step 2).
 Everything below is the manual, step-by-step version of what `setup.sh` does.
 
 ---
@@ -221,6 +223,19 @@ pip install mlx-lm
 ```
 
 This pulls in `mlx`, `mlx-metal`, `mlx-lm`, and its CLI tools.
+
+> **OptiQ models need a second runtime.** The two OptiQ-quantized models
+> (`Qwen3.8-27B-Uncensored-OptiQ-4bit`, `Qwen3.8-27B-OBLITERATED-OptiQ-4bit`) are
+> mixed 4/8-bit-per-layer with an MTP sidecar that stock `mlx_lm.server` can't
+> load. Install `mlx-optiq` (which registers the architecture) into the same
+> Python env:
+>
+> ```bash
+> python3 -m pip install --upgrade mlx-optiq
+> ```
+>
+> `start_server.sh` and the app both launch those models through
+> `python -c "import optiq; from mlx_lm.server import main; main()"` automatically.
 
 > **Note:** `mlx-lm` upgrades `transformers`/`tokenizers` to recent versions.
 > If you share a Python env with `litellm`, `sentence-transformers`, or
@@ -267,17 +282,20 @@ generation but aren't the pick for agentic work. Pick one that fits your RAM;
 | `tthoman79/Foundation-Sec-8B-Reasoning-mlx-8bit` | 8B | 8.03 GB | 131,072 | — | — | **Pentesting** — findings analysis, vuln prioritization, threat modeling; 8-bit, chat only. |
 | `mlx-community/glm-4.7-flash-abliterated-8bit` | 30B (3B active) | 29.94 GB | 202,752 | — | — | **Reduced-refusal** — huihui-ai abliterated; 8-bit, chat only, experimental. |
 | `mlx-community/GLM-4.7-Flash-Derestricted-8bit-gs32` | 30B (3B active) | 29.94 GB | 202,752 | — | — | **Reduced-refusal** — koute derestricted; 8-bit, chat only, experimental. |
+| `mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit` | 27B | 19.8 GB | 262,144 | ✅ | — | **Uncensored (OptiQ)** — reduced-refusal Qwen3.8 in mixed 4/8-bit; requires `mlx-optiq`, experimental, chat only. |
+| `mlx-community/Qwen3.8-27B-OBLITERATED-OptiQ-4bit` | 27B | 20.7 GB | 262,144 | ✅ | — | **Uncensored (OptiQ)** — reduced-refusal Qwen3.8 in mixed 4/8-bit; requires `mlx-optiq`, experimental, chat only. |
 
 > **Security / pentesting models** (WhiteRabbitNeo, Foundation-Sec) are 8-bit
 > quantizations for cybersecurity lab work — code review, vulnerability analysis,
 > threat modeling, and DevSecOps. They're chat/generation models, not agents, and
 > are for **authorized** testing on systems you own or are cleared to assess.
 
-> **Reduced-refusal (abliterated/derestricted) models** are experimental chat-only
-> models with safety/refusal training removed. They are **not** wired to tool
-> calling, so selecting one does not grant it shell, network, or secrets access.
-> Treat their output with caution and evaluate only on authorized or sandboxed
-> targets.
+> **Reduced-refusal (abliterated/derestricted) and Uncensored/Obliterated (OptiQ)
+> models** are experimental chat-only models with safety/refusal training removed.
+> They are **not** wired to tool calling, so selecting one does not grant it shell,
+> network, or secrets access. The OptiQ variants also require the `mlx-optiq`
+> runtime (see Step 1). Treat their output with caution and evaluate only on
+> authorized or sandboxed targets.
 
 > **Params:** dense models list total parameters; MoE models list `total (active per token)`. Gemma 4 “E” models are MoE and list *effective* parameters (their totals are higher).
 
@@ -289,6 +307,10 @@ generation but aren't the pick for agentic work. Pick one that fits your RAM;
 > instead of an answer. (`Qwen3-Coder-30B-A3B` drops the `<tool_call>` wrapper,
 > `Qwen3-Coder-Next` is unvalidated, and `Qwen2.5-Coder-14B` wraps its call in
 > `<tools>` instead — same symptom.)
+>
+> The **Uncensored/Obliterated OptiQ** models are Qwen3.8-family but their tool
+> calling is **declared, not validated** against this stack yet — treat them as
+> chat-only for now.
 >
 > **GPT-OSS is a thinking model, not an agent.** It always answers inside
 > deliberative-alignment tags (`<|channel|>analysis<|message|> … <|end|>` then
@@ -325,6 +347,12 @@ mlx_lm.server --model "$MODEL" --port "$PORT" \
   --temp "$TEMP" --top-p "$TOP_P" --top-k "$TOP_K" \
   --chat-template-args '{"enable_thinking":false}'
 ```
+
+> **OptiQ models** are launched through the `mlx-optiq` runtime instead of the
+> `mlx_lm.server` script: `start_server.sh` (and the app) run
+> `python -c "import optiq; from mlx_lm.server import main; main()"` for them, so
+> the `import optiq` registers the OptiQ architecture + MTP sidecar first. Install
+> `mlx-optiq` before serving those two models (see Step 1).
 
 The server loads the model and listens on `http://127.0.0.1:8080` (port `8080`
 by default). Useful flags: `--host`, `--port`, `--max-tokens`, `--temp`,
@@ -396,7 +424,7 @@ applies the quarantine flag, so it opens with no `xattr` step.
 > reliable one-liner — use the full path so a conda/PATH `xattr` can't shadow it;
 > right-click → **Open** isn't usually offered for ad-hoc builds.)
 
-So **Steps 1–3 below are optional** — they're kept to explain what the app does
+So **Steps 1–3 above are optional** — they're kept to explain what the app does
 under the hood and for people who prefer the terminal. The app defaults to the
 same flags as `start_server.sh` — `--kv-bits 4 --max-tokens 8192 --temp 0.2
 --top-p 0.8 --top-k 20` — all editable in its **Model settings** section, plus a

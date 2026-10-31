@@ -57,6 +57,8 @@ MODELS_REPO=(
   "tthoman79/Foundation-Sec-8B-Reasoning-mlx-8bit"
   "mlx-community/glm-4.7-flash-abliterated-8bit"
   "mlx-community/GLM-4.7-Flash-Derestricted-8bit-gs32"
+  "mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit"
+  "mlx-community/Qwen3.8-27B-OBLITERATED-OptiQ-4bit"
 )
 MODELS_NAME=(
   "Qwen3.5-35B-A3B (4-bit)"
@@ -87,10 +89,12 @@ MODELS_NAME=(
   "Foundation-Sec 8B Reasoning (8-bit)"
   "GLM-4.7-Flash Abliterated (8-bit)"
   "GLM-4.7-Flash Derestricted (8-bit)"
+  "Qwen3.8-27B Uncensored OptiQ (4-bit)"
+  "Qwen3.8-27B OBLITERATED OptiQ (4-bit)"
 )
-MODELS_CTX=(262144 262144 262144 40960 262144 32768 262144 262144 393216 262144 262144 131072 131072 262144 131072 262144 262144 131072 131072 131072 262144 202752 128000 128000 32768 131072 202752 202752)
-MODELS_WGT=(18 18 14 7 6 4.28 3.03 1.72 15.10 10.99 5.60 5.15 3.55 2.75 1.81 44.84 17.18 18.43 63.39 12.08 15.61 16.85 12.49 0.66 7.62 8.03 29.94 29.94)
-MODELS_THINK=(yes yes yes yes yes no yes yes no no no no no no no no no no no no no no no no no no no no)
+MODELS_CTX=(262144 262144 262144 40960 262144 32768 262144 262144 393216 262144 262144 131072 131072 262144 131072 262144 262144 131072 131072 131072 262144 202752 128000 128000 32768 131072 202752 202752 262144 262144)
+MODELS_WGT=(18 18 14 7 6 4.28 3.03 1.72 15.10 10.99 5.60 5.15 3.55 2.75 1.81 44.84 17.18 18.43 63.39 12.08 15.61 16.85 12.49 0.66 7.62 8.03 29.94 29.94 19.8 20.7)
+MODELS_THINK=(yes yes yes yes yes no yes yes no no no no no no no no no no no no no no no no no no no no yes yes)
 DEFAULT_INDEX=0
 
 # --- flags ---------------------------------------------------------------------
@@ -147,6 +151,7 @@ check_status() {
   fi
 
   if "$PYTHON" -c "import mlx_lm" >/dev/null 2>&1; then ok "mlx-lm"; MLXLM_OK=1; else bad "mlx-lm"; MLXLM_OK=0; fi
+  if "$PYTHON" -c "import optiq" >/dev/null 2>&1; then ok "mlx-optiq (OptiQ runtime)"; OPTIQ_OK=1; else bad "mlx-optiq (OptiQ runtime)"; OPTIQ_OK=0; fi
   if find_hf; then ok "hf (huggingface_hub) → $HF_BIN"; HF_OK=1; else bad "hf (huggingface_hub)"; HF_OK=0; fi
   if "$PYTHON" -c "import uvicorn, fastapi" >/dev/null 2>&1; then ok "uvicorn + fastapi"; UVICORN_OK=1; else bad "uvicorn + fastapi"; UVICORN_OK=0; fi
   if have opencode || [[ -x "$HOME/.opencode/bin/opencode" ]]; then ok "OpenCode (recommended agent)"; OPENCODE_OK=1; else bad "OpenCode (recommended agent)"; OPENCODE_OK=0; fi
@@ -157,17 +162,18 @@ check_status() {
 
 # --- installers ----------------------------------------------------------------
 install_python_pkgs() {
-  if [[ "${MLXLM_OK:-0}" -eq 1 && "${HF_OK:-0}" -eq 1 && "${UVICORN_OK:-0}" -eq 1 ]]; then
+  if [[ "${MLXLM_OK:-0}" -eq 1 && "${HF_OK:-0}" -eq 1 && "${UVICORN_OK:-0}" -eq 1 && "${OPTIQ_OK:-0}" -eq 1 ]]; then
     ok "Python packages already installed — nothing to do."
     return 0
   fi
-  say "Installing mlx-lm, uvicorn, fastapi, and huggingface_hub (the \`hf\` CLI)…"
-  "$PYTHON" -m pip install --upgrade mlx-lm uvicorn fastapi huggingface_hub 'brotli>=1.2.0' || {
+  say "Installing mlx-lm, mlx-optiq, uvicorn, fastapi, and huggingface_hub (the \`hf\` CLI)…"
+  "$PYTHON" -m pip install --upgrade mlx-lm mlx-optiq uvicorn fastapi huggingface_hub 'brotli>=1.2.0' || {
     say "pip install failed. If you use a venv, re-run with: PYTHON=/path/to/venv/bin/python ./setup.sh" >&2
     return 1
   }
   ok "Python packages installed."
   "$PYTHON" -c "import mlx_lm" >/dev/null 2>&1 && MLXLM_OK=1 || MLXLM_OK=0
+  "$PYTHON" -c "import optiq" >/dev/null 2>&1 && OPTIQ_OK=1 || OPTIQ_OK=0
   "$PYTHON" -c "import uvicorn, fastapi" >/dev/null 2>&1 && UVICORN_OK=1 || UVICORN_OK=0
   find_hf && HF_OK=1 || HF_OK=0
 }
@@ -228,10 +234,10 @@ pick_model() {
   if [[ "$ASSUME_YES" -eq 1 ]]; then SELECTED_INDEX=$DEFAULT_INDEX; return 0; fi
 
   list_models
-  local choice re="^[1-${#MODELS_REPO[@]}]$"
+  local choice
   read -r -p "Choose a model [1-${#MODELS_REPO[@]}, default 1]: " choice
   choice="${choice:-1}"
-  if [[ "$choice" =~ $re ]]; then
+  if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#MODELS_REPO[@]} )); then
     SELECTED_INDEX=$((choice - 1))
   else
     say "Invalid choice, using the default." >&2
@@ -440,7 +446,6 @@ if [[ "$CHECK_ONLY" -eq 1 ]]; then
 fi
 
 if [[ "$ASSUME_YES" -ne 1 ]]; then
-  local ans
   read -r -p "Install missing components now? [Y/n] " ans
   if [[ "$ans" =~ ^[Nn] ]]; then
     say "Skipping install. Re-run ./setup.sh when ready."

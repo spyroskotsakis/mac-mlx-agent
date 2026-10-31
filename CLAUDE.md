@@ -21,6 +21,13 @@ MLX  (Apple's Metal / Neural-Engine array framework, unified memory)
 The one fact that connects everything: the server exposes **whatever model is
 loaded under the alias `default_model`** on `http://127.0.0.1:8080/v1`.
 
+There is a **second runtime path** for OptiQ-quantized models (mixed 4/8-bit per
+layer with an MTP sidecar): stock `mlx_lm.server` can't load them, so the `optiq`
+package registers the architecture and the server launches via
+`python -c "import optiq; from mlx_lm.server import main; main()"`. This is gated
+by `ModelProfile.requiresOptiQ` in `ServerController` and `OPTIQ_MODELS` in
+`start_server.sh`; `setup.sh` and the app both install `mlx-optiq`.
+
 ## Repo layout
 
 - `MLXServer/` — the **product**: a native macOS menu-bar app (Swift/SwiftUI).
@@ -41,8 +48,8 @@ loaded under the alias `default_model`** on `http://127.0.0.1:8080/v1`.
 ## Two ways to run it
 
 1. **Menu-bar app (recommended):** build `MLXServer/`, run it, click **Start**. It
-   installs mlx-lm, downloads the model, writes OpenCode + Claude Code config, and
-   starts the server + bridge.
+   installs mlx-lm (and mlx-optiq, for OptiQ models), downloads the model, writes
+   OpenCode + Claude Code config, and starts the server + bridge.
 2. **Terminal:** `./setup.sh` installs the prerequisites and downloads a model,
    then `./start_server.sh` (server on 8080); for Claude Code:
    `.venv-litellm/bin/litellm --config litellm-mlx.yaml --host 127.0.0.1 --port 4001`
@@ -62,6 +69,10 @@ use. `weightGB` is the guard's conservative RAM estimate.
 
 Do **not** switch to `Qwen3-Coder-30B-A3B` or `Qwen2.5-Coder-14B` for agents — they
 emit tool calls the server can't parse and stall the loop.
+
+OptiQ models (`Qwen3.8-27B-{Uncensored,OBLITERATED}-OptiQ-4bit`) are
+reduced-refusal/experimental and chat-only: their tool calling is declared but
+not validated, so they get no shell/network/secrets access.
 
 ## Critical invariants (do not violate)
 

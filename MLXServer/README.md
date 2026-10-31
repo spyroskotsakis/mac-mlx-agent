@@ -1,16 +1,19 @@
 # MLX Server (menu bar app)
 
 A small native macOS **menu-bar app** that starts and stops the local
-`mlx_lm.server` for the **Qwen3.5-35B-A3B** model, so you don't have to run
-`./start_server.sh` by hand. It lives in the menu bar, next to the clock.
+`mlx_lm.server` (or the `mlx-optiq` runtime for OptiQ models) for any of the 30
+models in the picker, so you don't have to run `./start_server.sh` by hand. It
+lives in the menu bar, next to the clock.
 
 ## What it does
 
 - **Start / Stop** the MLX-LM server (OpenAI-compatible,
   `http://127.0.0.1:8080/v1`).
-- **Pick the model** — 15 models (Qwen3.5/3.6-35B-A3B, Qwen3.8-27B, Qwen3-14B,
-  Qwen3.5-9B/4B/2B, Qwen2.5-Coder-7B, Devstral 24B, Gemma 4, Ministral 3, and
-  Llama 3.2 3B), each with its own profile, description, and highlights.
+- **Pick the model** — 30 models (the Qwen3/3.5/3.6/3.8 family, Qwen2.5-Coder,
+  Devstral, Gemma 4, Ministral 3, Llama 3.2, GPT-OSS, GLM-4.7, LFM2, DeepSeek-R1,
+  the WhiteRabbitNeo / Foundation-Sec pentesting pair, the reduced-refusal GLM
+  pair, and the two OptiQ Qwen3.8 Uncensored/Obliterated models), each with its
+  own profile, description, and highlights.
 - Shows a **live log** of the server (model load progress, requests, errors).
 - Lets you override the **port** and the **`mlx_lm.server` path** under *Advanced*.
 - **Model settings** — per-model **thinking mode** toggle and **max context**
@@ -46,6 +49,7 @@ install instruction) when it's missing:
 |---|---|---|
 | **Python 3** | base runtime for mlx-lm, `hf`, and the server | warning + "How to install Python" instructions |
 | **mlx-lm** (`mlx_lm.server`) | the local server | **Install** (`pip install mlx-lm uvicorn fastapi huggingface_hub 'brotli>=1.2.0'`) |
+| **mlx-optiq** | second runtime for OptiQ (4/8-bit + MTP) models | **Install** (`pip install mlx-optiq`) — only shown for OptiQ models |
 | **`hf` CLI** (`huggingface_hub`) | downloads models | **Install** (`pip install huggingface_hub 'brotli>=1.2.0'`) |
 | **Model files** | the weights to serve | **Download** with a live progress bar |
 | **OpenCode** | recommended agent | "How to install OpenCode" fold-out |
@@ -199,20 +203,33 @@ Edit `ServerController.availableModels` in `MLXServer/ServerController.swift`:
 static let availableModels: [ModelOption] = [
     ModelOption(repoID: "mlx-community/Qwen3.5-35B-A3B-4bit",
                 displayName: "Qwen3.5-35B-A3B (4-bit)",
-                profile: ModelProfile(maxContext: 262_144, thinkingSupported: true,
-                                      toolCallingSupported: true, weightGB: 18)),
+                profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 18),
+                params: "35B (3B active)",
+                summary: "Flagship mixture-of-experts coder — reliable agent tool calling.",
+                highlights: ["MoE", "Tool calling", "Vision"]),
     ModelOption(repoID: "mlx-community/Qwen3-14B-4bit",
                 displayName: "Qwen3-14B (4-bit)",
-                profile: ModelProfile(maxContext: 40_960, thinkingSupported: true,
-                                      toolCallingSupported: true, weightGB: 7)),
+                profile: ModelProfile(maxContext: 40_960, thinkingSupported: true, weightGB: 7),
+                params: "14B",
+                summary: "Balanced 14B — the memory-safe default for most Macs.",
+                highlights: ["Tool calling", "Memory-safe default"]),
+    ModelOption(repoID: "mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit",
+                displayName: "Qwen3.8-27B Uncensored OptiQ (4-bit)",
+                profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 19.8,
+                                      requiresOptiQ: true),
+                params: "27B",
+                summary: "Reduced-refusal Qwen3.8 in OptiQ mixed 4/8-bit — experimental.",
+                highlights: ["OptiQ 4/8-bit", "MTP", "Reduced refusal", "Experimental"]),
     ModelOption(repoID: "mlx-community/Your-New-Model-4bit",
                 displayName: "Your New Model (4-bit)",
-                profile: ModelProfile(maxContext: 32768, thinkingSupported: false,
-                                      toolCallingSupported: false, weightGB: 4)),
+                profile: ModelProfile(maxContext: 32768, thinkingSupported: false, weightGB: 4),
+                params: "…",
+                summary: "…",
+                highlights: ["…"]),
 ]
 ```
 
-Each model carries a **profile** with four fields:
+Each model carries a **profile** with five fields:
 
 - `maxContext` — the model's maximum context length (its
   `max_position_embeddings`); this is shown in **Model settings** and written to
@@ -220,11 +237,13 @@ Each model carries a **profile** with four fields:
 - `thinkingSupported` — whether the model's chat template accepts
   `enable_thinking`; when false the **Thinking mode** toggle is disabled for that
   model.
-- `toolCallingSupported` — whether the model reliably emits parseable tool calls
-  for coding agents (OpenCode / Claude Code). Only the Qwen3-family models set
-  this true; chat models (Llama, Gemma, Ministral, Devstral, Qwen Coder) set it
-  false and show a warning when selected.
 - `weightGB` — approximate 4-bit weight RAM, used by the memory-safety guard.
+- `rotatingKVCache` — true for models whose KV cache is mlx_lm's
+  `RotatingKVCache` (Gemma 4, Ministral 3, Llama 3.2 sliding-window, GPT-OSS);
+  these skip `--kv-bits` (no quantized form yet).
+- `requiresOptiQ` — true for OptiQ-quantized models (mixed 4/8-bit + MTP
+  sidecar); they launch through `python -c "import optiq; …"` and need the
+  `mlx-optiq` package.
 
 The **Max tokens** output limit is *not* per-model — every Qwen3-family model
 generates at most 32,768 tokens per response, so it lives as a single constant
