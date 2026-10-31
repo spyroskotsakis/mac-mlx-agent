@@ -2111,6 +2111,107 @@ final class ServerController: ObservableObject {
         "mlx-community/Ministral-3-3B-Instruct-2512-4bit"
     ]
 
+    /// Lenient Mistral-family chat template. The stock template enforces strict
+    /// user/assistant role alternation and raises "conversation roles must
+    /// alternate" (which mlx_lm.server surfaces as a 404) on OpenCode's
+    /// tool-call follow-ups. This drops that one check so Mistral models
+    /// behave like the Qwen/Gemma templates (which don't reject it), keeping
+    /// the exact `[SYSTEM_PROMPT]` / `[INST]` / `[TOOL_CALLS]` token format.
+    /// The only stock difference this flattens is Ministral 3's baked-in
+    /// `default_system_message` (used solely when the client sends no system
+    /// message — a bare curl smoke test). Agents always send a system prompt,
+    /// so the OpenCode/Claude Code/Xcode path is byte-for-byte identical.
+    private static let lenientMistralChatTemplate = """
+    {#- Default system message if no system prompt is passed. #}
+    {%- set default_system_message = '' %}
+    {{- bos_token }}
+    {%- if messages[0]['role'] == 'system' %}
+        {{- '[SYSTEM_PROMPT]' -}}
+        {%- if messages[0]['content'] is string %}
+            {{- messages[0]['content'] -}}
+        {%- else %}
+            {%- for block in messages[0]['content'] %}
+                {%- if block['type'] == 'text' %}
+                    {{- block['text'] }}
+                {%- else %}
+                    {{- raise_exception('Only text chunks are supported in system message contents.') }}
+                {%- endif %}
+            {%- endfor %}
+        {%- endif %}
+        {{- '[/SYSTEM_PROMPT]' -}}
+        {%- set loop_messages = messages[1:] %}
+    {%- else %}
+        {%- set loop_messages = messages %}
+        {%- if default_system_message != '' %}
+            {{- '[SYSTEM_PROMPT]' + default_system_message + '[/SYSTEM_PROMPT]' }}
+        {%- endif %}
+    {%- endif %}
+    {%- set tools_definition = '' %}
+    {%- set has_tools = false %}
+    {%- if tools is defined and tools is not none and tools|length > 0 %}
+        {%- set has_tools = true %}
+        {%- set tools_definition = '[AVAILABLE_TOOLS]' + (tools| tojson) + '[/AVAILABLE_TOOLS]' %}
+        {{- tools_definition }}
+    {%- endif %}
+    {%- for message in loop_messages %}
+        {%- if message['role'] == 'user' %}
+            {%- if message['content'] is string %}
+                {{- '[INST]' + message['content'] + '[/INST]' }}
+            {%- elif message['content'] | length > 0 %}
+                {{- '[INST]' }}
+                {%- if message['content'] | length == 2 %}
+                    {%- set blocks = message['content'] | sort(attribute='type') %}
+                {%- else %}
+                    {%- set blocks = message['content'] %}
+                {%- endif %}
+                {%- for block in blocks %}
+                    {%- if block['type'] == 'text' %}
+                        {{- block['text'] }}
+                    {%- elif block['type'] in ['image', 'image_url'] %}
+                        {{- '[IMG]' }}
+                    {%- else %}
+                        {{- raise_exception('Only text, image and image_url chunks are supported in user message content.') }}
+                    {%- endif %}
+                {%- endfor %}
+                {{- '[/INST]' }}
+            {%- else %}
+                {{- raise_exception('User message must have a string or a list of chunks in content') }}
+            {%- endif %}
+        {%- elif message['role'] == 'assistant' %}
+            {%- if (message['content'] is none or message['content'] == '' or message['content']|length == 0) and (message['tool_calls'] is not defined or message['tool_calls'] is none or message['tool_calls']|length == 0) %}
+                {{- raise_exception('Assistant message must have a string or a list of chunks in content or a list of tool calls.') }}
+            {%- endif %}
+            {%- if message['content'] is string %}
+                {{- message['content'] }}
+            {%- elif message['content'] | length > 0 %}
+                {%- for block in message['content'] %}
+                    {%- if block['type'] == 'text' %}
+                        {{- block['text'] }}
+                    {%- else %}
+                        {{- raise_exception('Only text chunks are supported in assistant message contents.') }}
+                    {%- endif %}
+                {%- endfor %}
+            {%- endif %}
+            {%- if message['tool_calls'] is defined and message['tool_calls'] is not none and message['tool_calls']|length > 0 %}
+                {%- for tool in message['tool_calls'] %}
+                    {%- set arguments = tool['function']['arguments'] %}
+                    {%- if arguments is not string %}
+                        {%- set arguments = arguments|tojson|safe %}
+                    {%- elif arguments == '' %}
+                        {%- set arguments = '{}' %}
+                    {%- endif %}
+                    {{- '[TOOL_CALLS]' + tool['function']['name'] + '[ARGS]' + arguments }}
+                {%- endfor %}
+            {%- endif %}
+            {{- eos_token }}
+        {%- elif message['role'] == 'tool' %}
+            {{- '[TOOL_RESULTS]' + message['content']|string + '[/TOOL_RESULTS]' }}
+        {%- else %}
+            {{- raise_exception('Only user, assistant and tool roles are supported, got ' + message['role'] + '.') }}
+        {%- endif %}
+    {%- endfor %}
+    """
+
     /// True when the selected model needs OpenCode v2's assistant-after-tool
     /// bridge. OpenCode auto-defaults this only for Mistral-family *model IDs*,
     /// but mlx_lm.server serves every model under the fixed alias `default_model`,
@@ -2315,6 +2416,13 @@ final class ServerController: ObservableObject {
         // Devstral) don't — passing it there is meaningless noise.
         if selectedModel.profile.thinkingSupported {
             args += ["--chat-template-args", "{\"enable_thinking\":\(enableThinking ? "true" : "false")}"]
+        }
+        // Mistral-family templates reject OpenCode's tool-call follow-ups with
+        // "conversation roles must alternate" (a 404 through mlx_lm.server).
+        // Serve them with a lenient template that keeps the same token format
+        // but drops that one alternation check, matching Qwen/Gemma behaviour.
+        if Self.mistralFamilyRepoIDs.contains(model) {
+            args += ["--chat-template", Self.lenientMistralChatTemplate]
         }
         return args
     }

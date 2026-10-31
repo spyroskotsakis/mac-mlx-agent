@@ -110,6 +110,125 @@ uses_rotating_kv() {
   return 1
 }
 
+# Mistral-family models whose chat template enforces strict user/assistant role
+# alternation and raises "conversation roles must alternate" (a 404 through
+# mlx_lm.server) on OpenCode's tool-call follow-ups. They're served with a
+# lenient copy of the template instead — same [SYSTEM_PROMPT]/[INST]/[TOOL_CALLS]
+# token format, alternation check removed. Keep in sync with
+# `lenientMistralChatTemplate` in MLXServer/MLXServer/ServerController.swift.
+MISTRAL_MODELS=(
+  "mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit"
+  "mlx-community/Ministral-3-8B-Instruct-2512-4bit"
+  "mlx-community/Ministral-3-3B-Instruct-2512-4bit"
+)
+
+uses_mistral_lenient_template() {
+  local m
+  for m in "${MISTRAL_MODELS[@]}"; do
+    if [[ "$m" == "$MODEL" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# The lenient template (see MISTRAL_MODELS above) is read into a variable and
+# passed verbatim via --chat-template. It is the exact same template embedded as
+# `lenientMistralChatTemplate` in MLXServer/MLXServer/ServerController.swift.
+LENIENT_MISTRAL_TEMPLATE=''
+if uses_mistral_lenient_template; then
+  read -r -d '' LENIENT_MISTRAL_TEMPLATE <<'JINJA' || true
+  {#- Default system message if no system prompt is passed. #}
+  {%- set default_system_message = '' %}
+  {{- bos_token }}
+  {%- if messages[0]['role'] == 'system' %}
+      {{- '[SYSTEM_PROMPT]' -}}
+      {%- if messages[0]['content'] is string %}
+          {{- messages[0]['content'] -}}
+      {%- else %}
+          {%- for block in messages[0]['content'] %}
+              {%- if block['type'] == 'text' %}
+                  {{- block['text'] }}
+              {%- else %}
+                  {{- raise_exception('Only text chunks are supported in system message contents.') }}
+              {%- endif %}
+          {%- endfor %}
+      {%- endif %}
+      {{- '[/SYSTEM_PROMPT]' -}}
+      {%- set loop_messages = messages[1:] %}
+  {%- else %}
+      {%- set loop_messages = messages %}
+      {%- if default_system_message != '' %}
+          {{- '[SYSTEM_PROMPT]' + default_system_message + '[/SYSTEM_PROMPT]' }}
+      {%- endif %}
+  {%- endif %}
+  {%- set tools_definition = '' %}
+  {%- set has_tools = false %}
+  {%- if tools is defined and tools is not none and tools|length > 0 %}
+      {%- set has_tools = true %}
+      {%- set tools_definition = '[AVAILABLE_TOOLS]' + (tools| tojson) + '[/AVAILABLE_TOOLS]' %}
+      {{- tools_definition }}
+  {%- endif %}
+  {%- for message in loop_messages %}
+      {%- if message['role'] == 'user' %}
+          {%- if message['content'] is string %}
+              {{- '[INST]' + message['content'] + '[/INST]' }}
+          {%- elif message['content'] | length > 0 %}
+              {{- '[INST]' }}
+              {%- if message['content'] | length == 2 %}
+                  {%- set blocks = message['content'] | sort(attribute='type') %}
+              {%- else %}
+                  {%- set blocks = message['content'] %}
+              {%- endif %}
+              {%- for block in blocks %}
+                  {%- if block['type'] == 'text' %}
+                      {{- block['text'] }}
+                  {%- elif block['type'] in ['image', 'image_url'] %}
+                      {{- '[IMG]' }}
+                  {%- else %}
+                      {{- raise_exception('Only text, image and image_url chunks are supported in user message content.') }}
+                  {%- endif %}
+              {%- endfor %}
+              {{- '[/INST]' }}
+          {%- else %}
+              {{- raise_exception('User message must have a string or a list of chunks in content') }}
+          {%- endif %}
+      {%- elif message['role'] == 'assistant' %}
+          {%- if (message['content'] is none or message['content'] == '' or message['content']|length == 0) and (message['tool_calls'] is not defined or message['tool_calls'] is none or message['tool_calls']|length == 0) %}
+              {{- raise_exception('Assistant message must have a string or a list of chunks in content or a list of tool calls.') }}
+          {%- endif %}
+          {%- if message['content'] is string %}
+              {{- message['content'] }}
+          {%- elif message['content'] | length > 0 %}
+              {%- for block in message['content'] %}
+                  {%- if block['type'] == 'text' %}
+                      {{- block['text'] }}
+                  {%- else %}
+                      {{- raise_exception('Only text chunks are supported in assistant message contents.') }}
+                  {%- endif %}
+              {%- endfor %}
+          {%- endif %}
+          {%- if message['tool_calls'] is defined and message['tool_calls'] is not none and message['tool_calls']|length > 0 %}
+              {%- for tool in message['tool_calls'] %}
+                  {%- set arguments = tool['function']['arguments'] %}
+                  {%- if arguments is not string %}
+                      {%- set arguments = arguments|tojson|safe %}
+                  {%- elif arguments == '' %}
+                      {%- set arguments = '{}' %}
+                  {%- endif %}
+                  {{- '[TOOL_CALLS]' + tool['function']['name'] + '[ARGS]' + arguments }}
+              {%- endfor %}
+          {%- endif %}
+          {{- eos_token }}
+      {%- elif message['role'] == 'tool' %}
+          {{- '[TOOL_RESULTS]' + message['content']|string + '[/TOOL_RESULTS]' }}
+      {%- else %}
+          {{- raise_exception('Only user, assistant and tool roles are supported, got ' + message['role'] + '.') }}
+      {%- endif %}
+  {%- endfor %}
+JINJA
+fi
+
 ARGS=(--model "$MODEL" --port "$PORT" \
   --max-tokens "$MAX_TOKENS" \
   --temp "$TEMP" \
@@ -120,6 +239,9 @@ if ! uses_rotating_kv; then
 fi
 if supports_thinking; then
   ARGS+=(--chat-template-args "{\"enable_thinking\":${ENABLE_THINKING}}")
+fi
+if uses_mistral_lenient_template; then
+  ARGS+=(--chat-template "$LENIENT_MISTRAL_TEMPLATE")
 fi
 
 # Disable hf_xet's Xet backend — its CAS reconstruction API hangs on anonymous
