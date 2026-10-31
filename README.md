@@ -226,32 +226,34 @@ agents (Xcode / OpenCode / Claude Code); the rest are great for chat and
 generation but aren't the pick for agentic work. Pick one that fits your RAM;
 4-bit weights ≈ (parameters in billions) × 0.55 GB.
 
-| Model | 4-bit weight (RAM) | Max context | Thinking | Tool calling | Notes |
-|-------|-------------------|-------------|----------|--------------|-------|
-| `mlx-community/Qwen3.5-35B-A3B-4bit` | 18 GB | 262,144 | ✅ | ✅ | **Default.** MoE coder (3B active → fast); tool calls parse reliably. |
-| `mlx-community/Qwen3.6-35B-A3B-4bit` | 18 GB | 262,144 | ✅ | ✅ | MoE coder (3B active), newer sibling of the default. |
-| `mlx-community/Qwen3.8-27B-4bit` | 14 GB | 262,144 | ✅ | ✅ | 27B mid-size option. |
-| `mlx-community/Qwen3-14B-4bit` | 7 GB | 40,960 | ✅ | ✅ | Smaller; natural pick for "concurrent requests" mode. |
-| `mlx-community/Qwen3.5-9B-4bit` | 6 GB | 262,144 | ✅ | ✅ | Compact daily driver. |
-| `mlx-community/Qwen2.5-Coder-7B-Instruct-4bit` | 4.28 GB | 32,768 | — | — | Code specialist; chat/generation only. |
-| `mlx-community/Qwen3.5-4B-4bit` | 3.03 GB | 262,144 | ✅ | ✅ | Tiny + long context. |
-| `mlx-community/Qwen3.5-2B-4bit` | 1.72 GB | 262,144 | ✅ | ✅ | Smallest Qwen. |
-| `mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit` | 15.10 GB | 393,216 | — | — | Mistral coding specialist; chat/generation only. |
-| `mlx-community/gemma-4-12B-it-qat-4bit` | 10.99 GB | 262,144 | — | — | Google, multilingual; chat/generation only. |
-| `mlx-community/Ministral-3-8B-Instruct-2512-4bit` | 5.60 GB | 262,144 | — | — | Edge/on-device, multilingual; chat/generation only. |
-| `mlx-community/gemma-4-e4b-it-4bit` | 5.15 GB | 131,072 | — | — | Efficient + vision; chat/generation only. |
-| `mlx-community/gemma-4-e2b-it-4bit` | 3.55 GB | 131,072 | — | — | Small + vision; chat/generation only. |
-| `mlx-community/Ministral-3-3B-Instruct-2512-4bit` | 2.75 GB | 262,144 | — | — | Tiny, multilingual; chat/generation only. |
-| `mlx-community/Llama-3.2-3B-Instruct-4bit` | 1.81 GB | 131,072 | — | — | On-device, multilingual; chat/generation only. |
-| `mlx-community/Qwen3-Coder-Next-4bit` | 44.84 GB | 262,144 | — | — | Next-gen Qwen coder MoE (10 active); chat/generation only. |
-| `mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit` | 17.18 GB | 262,144 | — | — | Coder MoE; drops the `<tool_call>` wrapper → chat/generation only. |
-| `mlx-community/DeepSeek-R1-Distill-Qwen-32B-4bit` | 18.43 GB | 131,072 | — | — | DeepSeek-R1 reasoning distilled into Qwen 32B; chat/generation only. |
-| `mlx-community/gpt-oss-120b-MXFP4-Q8` | 63.39 GB | 131,072 | — | — | OpenAI's 120B MoE; chat/generation only (needs a maxed-out Mac). |
-| `mlx-community/gpt-oss-20b-MXFP4-Q8` | 12.08 GB | 131,072 | — | — | OpenAI's 20B MoE; chat/generation only. |
-| `mlx-community/gemma-4-26B-A4B-it-qat-4bit` | 15.61 GB | 262,144 | — | — | Google 26B-A4B MoE, multilingual; chat/generation only. |
-| `mlx-community/GLM-4.7-Flash-4bit` | 16.85 GB | 202,752 | — | — | Zhipu GLM-4.7-Flash MoE; chat/generation only. |
-| `mlx-community/LFM2-24B-A2B-4bit` | 12.49 GB | 128,000 | — | — | Liquid AI 24B-A2B MoE; chat/generation only. |
-| `mlx-community/LFM2.5-1.2B-Instruct-4bit` | 0.66 GB | 128,000 | — | — | Liquid AI tiny 1.2B; chat/generation only. |
+| Model | Params | 4-bit weight (RAM) | Max context | Thinking | Tool calling | Notes |
+|-------|:------:|-------------------|-------------|----------|--------------|-------|
+| `mlx-community/Qwen3.5-35B-A3B-4bit` | 35B (3B active) | 18 GB | 262,144 | ✅ | ✅ | **Default.** MoE coder (3B active → fast); tool calls parse reliably. |
+| `mlx-community/Qwen3.6-35B-A3B-4bit` | 35B (3B active) | 18 GB | 262,144 | ✅ | ✅ | MoE coder (3B active), newer sibling of the default. |
+| `mlx-community/Qwen3.8-27B-4bit` | 27B | 14 GB | 262,144 | ✅ | ✅ | 27B mid-size option. |
+| `mlx-community/Qwen3-14B-4bit` | 14B | 7 GB | 40,960 | ✅ | ✅ | Smaller; natural pick for "concurrent requests" mode. |
+| `mlx-community/Qwen3.5-9B-4bit` | 9B | 6 GB | 262,144 | ✅ | ✅ | Compact daily driver. |
+| `mlx-community/Qwen2.5-Coder-7B-Instruct-4bit` | 7B | 4.28 GB | 32,768 | — | — | Code specialist; chat/generation only. |
+| `mlx-community/Qwen3.5-4B-4bit` | 4B | 3.03 GB | 262,144 | ✅ | ✅ | Tiny + long context. |
+| `mlx-community/Qwen3.5-2B-4bit` | 2B | 1.72 GB | 262,144 | ✅ | ✅ | Smallest Qwen. |
+| `mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit` | 24B | 15.10 GB | 393,216 | — | — | Mistral coding specialist; chat/generation only. |
+| `mlx-community/gemma-4-12B-it-qat-4bit` | 12B | 10.99 GB | 262,144 | — | — | Google, multilingual; chat/generation only. |
+| `mlx-community/Ministral-3-8B-Instruct-2512-4bit` | 8B | 5.60 GB | 262,144 | — | — | Edge/on-device, multilingual; chat/generation only. |
+| `mlx-community/gemma-4-e4b-it-4bit` | 4.5B effective | 5.15 GB | 131,072 | — | — | Efficient + vision; chat/generation only. |
+| `mlx-community/gemma-4-e2b-it-4bit` | 2.3B effective | 3.55 GB | 131,072 | — | — | Small + vision; chat/generation only. |
+| `mlx-community/Ministral-3-3B-Instruct-2512-4bit` | 3B | 2.75 GB | 262,144 | — | — | Tiny, multilingual; chat/generation only. |
+| `mlx-community/Llama-3.2-3B-Instruct-4bit` | 3B | 1.81 GB | 131,072 | — | — | On-device, multilingual; chat/generation only. |
+| `mlx-community/Qwen3-Coder-Next-4bit` | 80B (3B active) | 44.84 GB | 262,144 | — | — | Next-gen Qwen coder MoE (10 active); chat/generation only. |
+| `mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit` | 30B (3B active) | 17.18 GB | 262,144 | — | — | Coder MoE; drops the `<tool_call>` wrapper → chat/generation only. |
+| `mlx-community/DeepSeek-R1-Distill-Qwen-32B-4bit` | 32B | 18.43 GB | 131,072 | — | — | DeepSeek-R1 reasoning distilled into Qwen 32B; chat/generation only. |
+| `mlx-community/gpt-oss-120b-MXFP4-Q8` | 117B (5.1B active) | 63.39 GB | 131,072 | — | — | OpenAI's 120B MoE; chat/generation only (needs a maxed-out Mac). |
+| `mlx-community/gpt-oss-20b-MXFP4-Q8` | 21B (3.6B active) | 12.08 GB | 131,072 | — | — | OpenAI's 20B MoE; chat/generation only. |
+| `mlx-community/gemma-4-26B-A4B-it-qat-4bit` | 26B (4B active) | 15.61 GB | 262,144 | — | — | Google 26B-A4B MoE, multilingual; chat/generation only. |
+| `mlx-community/GLM-4.7-Flash-4bit` | 30B (3B active) | 16.85 GB | 202,752 | — | — | Zhipu GLM-4.7-Flash MoE; chat/generation only. |
+| `mlx-community/LFM2-24B-A2B-4bit` | 24B (2B active) | 12.49 GB | 128,000 | — | — | Liquid AI 24B-A2B MoE; chat/generation only. |
+| `mlx-community/LFM2.5-1.2B-Instruct-4bit` | 1.2B | 0.66 GB | 128,000 | — | — | Liquid AI tiny 1.2B; chat/generation only. |
+
+> **Params:** dense models list total parameters; MoE models list `total (active per token)`. Gemma 4 “E” models are MoE and list *effective* parameters (their totals are higher).
 
 > **Use only the Qwen3-family models for agent/tool-calling work.** The rest of
 > the list (Llama, Gemma, Ministral, Devstral, GPT-OSS, GLM, LFM, DeepSeek-R1,
