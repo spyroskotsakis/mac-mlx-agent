@@ -1,5 +1,19 @@
 # Mac Local AI Setup with Xcode Support
 
+<p align="center">
+  <img src="docs/mlx-server.png" alt="MLX Server menu-bar app control panel" width="720">
+</p>
+
+**MLX Server** is a native **macOS menu-bar app** — pick a model, click **Start**,
+and it serves a local OpenAI-compatible API for Xcode, OpenCode, and Claude Code.
+It installs `mlx-lm` (and `mlx-optiq`, for OptiQ models), downloads the model, and
+writes the OpenCode + Claude Code configs for you.
+
+Prefer the terminal? The **same 30-model stack** runs from the **CLI** —
+[`setup.sh`](#quick-start-one-command-non-gui) installs the prerequisites and
+downloads a model, then [`start_server.sh`](#step-3-start-the-server) starts the
+server with the same memory-safety and sampling flags the app uses.
+
 Run a fully **local** agentic AI stack on an Apple Silicon Mac — no cloud, no API
 keys — and use it as the model behind your coding agents and Xcode itself.
 
@@ -429,10 +443,6 @@ under the hood and for people who prefer the terminal. The app defaults to the
 same flags as `start_server.sh` — `--kv-bits 4 --max-tokens 8192 --temp 0.2
 --top-p 0.8 --top-k 20` — all editable in its **Model settings** section, plus a
 per-model **Thinking mode** toggle and a per-model **Max context** display.
-
-<p align="center">
-  <img src="docs/mlx-server.png" alt="MLX Server menu-bar app control panel" width="480">
-</p>
 
 - Click the **MLX Server** icon in the menu bar to open the control panel.
 - **Start / Stop** the server, pick the model, and watch the live log.
