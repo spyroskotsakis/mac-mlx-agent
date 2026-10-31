@@ -20,11 +20,17 @@ Everything runs on your own hardware. Your code never leaves your Mac.
 > tests against. See [Which agent to use](#which-agent-to-use). This note will be
 > removed when Claude Code is usable again.
 
-> **Just want it to work?** Download the **MLX Server** menu-bar app from the
-> [latest release](https://github.com/spyroskotsakis/mac-mlx-agent/releases/latest)
-> and run it — it installs `mlx-lm`, downloads the model, and sets up OpenCode
-> and Claude Code automatically, so you can skip the manual steps below. See
-> [Use the menu-bar app](#use-the-menu-bar-app-recommended).
+> **Just want it to work?** Paste this into Terminal — it downloads the latest
+> **MLX Server** menu-bar app and installs it **without** the Gatekeeper warning
+> (the download goes through `curl`, not a browser, so no `xattr` step is needed):
+>
+> ```bash
+> curl -fsSL https://raw.githubusercontent.com/spyroskotsakis/mac-mlx-agent/main/install.sh | bash
+> ```
+>
+> The app then installs `mlx-lm`, downloads the model, and sets up OpenCode and
+> Claude Code automatically, so you can skip the manual steps below. Prefer a
+> manual download? See [Use the menu-bar app](#use-the-menu-bar-app-recommended).
 
 ---
 
@@ -330,7 +336,19 @@ Endpoints exposed:
 ## Use the menu-bar app (recommended)
 
 This repo also ships a native macOS **menu-bar app** (`MLXServer/`) that
-**installs itself** — it replaces all the manual steps below with one download:
+**installs itself** — it replaces all the manual steps below.
+
+**Install in one command (recommended — skips the Gatekeeper warning):**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/spyroskotsakis/mac-mlx-agent/main/install.sh | bash
+```
+
+This fetches the *latest* release, unzips it to `/Applications`, and launches it.
+Because the download goes through `curl` rather than a browser, macOS never
+applies the quarantine flag, so it opens with no `xattr` step.
+
+**Or download it manually:**
 
 1. Download `MLXServer-<version>.zip` from the
    [latest release](https://github.com/spyroskotsakis/mac-mlx-agent/releases/latest).
@@ -344,7 +362,7 @@ This repo also ships a native macOS **menu-bar app** (`MLXServer/`) that
    the LiteLLM bridge on port 4001 — or shows you the exact config to write by
    hand.
 
-> **First launch: macOS will block the app.** The build is ad-hoc signed (no
+> **Manually downloaded? macOS will block the app on first launch.** The build is ad-hoc signed (no
 > Apple Developer ID, not notarized), so Gatekeeper shows *“Apple could not
 > verify MLXServer is free of malware….”* Clear the quarantine flag once, then
 > open it normally:
@@ -765,6 +783,7 @@ chat/generation model — it can't drive OpenCode/Claude Code agent loops.
 ## Related files in this repo
 
 - `setup.sh` — one-command terminal setup: check/install prerequisites, download a model, write configs.
+- `install.sh` — one-line installer: downloads + installs the latest `MLXServer.app` via `curl` (no Gatekeeper prompt).
 - `start_server.sh` — launches the MLX-LM server with the KV-cache + sampling fixes.
 - `litellm-mlx.yaml` — LiteLLM config for the Anthropic→OpenAI bridge.
 - `claude-local.sh` — launches Claude Code pointed at the local bridge.

@@ -31,6 +31,7 @@ loaded under the alias `default_model`** on `http://127.0.0.1:8080/v1`.
   - `MLXServer/MLXServer.xcodeproj` — the Xcode project.
   - `MLXServer/build/` — (gitignored) build products, signed `.app`, and release `.zip`.
 - `setup.sh` — one-command terminal setup: check/install prerequisites, download a model, write OpenCode + Claude Code configs.
+- `install.sh` — one-line `curl | bash` installer: fetches the latest GitHub release and installs `MLXServer.app` via curl/ditto, so no Gatekeeper quarantine (version-agnostic; README points at `main/install.sh`).
 - `start_server.sh` — terminal launcher for `mlx_lm.server` (KV-cache + sampling fixes).
 - `claude-local.sh` — launches Claude Code pointed at the local LiteLLM bridge.
 - `litellm-mlx.yaml` — LiteLLM config translating Anthropic → OpenAI for the bridge.
@@ -105,6 +106,17 @@ emit tool calls the server can't parse and stall the loop.
   Use the full `/usr/bin/xattr` path — Anaconda's `xattr` (when it shadows on
   `PATH`) has no `-r` flag and fails with "option -r not recognized". See
   [Build & release](#build--release).
+- **Every release ships the one-line installer.** `install.sh` on `main` fetches
+  the latest release dynamically (no version hardcoded), so the Gatekeeper-free
+  install path is version-agnostic and never needs a version bump. **Every**
+  release — no exceptions — must keep the README and the GitHub release notes
+  pointing at this one-liner, and must keep `install.sh` at the repo root on the
+  default branch:
+
+      curl -fsSL https://raw.githubusercontent.com/spyroskotsakis/mac-mlx-agent/main/install.sh | bash
+
+  Never rename/move `install.sh` or change the default branch without updating
+  every place this URL is referenced.
 
 ## Agent recommendations (which agent for which job)
 
@@ -168,6 +180,19 @@ Use the full `/usr/bin/xattr` path — Anaconda's `xattr` (when it shadows on `P
 has no `-r` flag and fails with "option -r not recognized". Clearing
 `com.apple.quarantine` once per downloaded copy is all that's needed; a locally
 built `.app` carries no quarantine flag and opens without this step.
+
+### One-line installer (required in every release)
+
+Every release must also ship the **one-line installer** — the Gatekeeper-free
+install path. It works because `curl` + `ditto` don't stamp `com.apple.quarantine`
+(unlike a browser download), so the app opens with no `xattr` step at all.
+`install.sh` fetches the *latest* release via the GitHub API, so this URL is
+version-agnostic and never needs a version bump:
+
+    curl -fsSL https://raw.githubusercontent.com/spyroskotsakis/mac-mlx-agent/main/install.sh | bash
+
+Keep `install.sh` at the repo root on the default branch (`main`); the release
+notes must include this one-liner alongside the Gatekeeper unblock above.
 
 ## Key endpoints (when running)
 
