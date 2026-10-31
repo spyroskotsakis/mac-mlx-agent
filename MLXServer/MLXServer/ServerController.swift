@@ -12,7 +12,7 @@ import Darwin
 struct ModelProfile: Hashable {
     let maxContext: Int
     let thinkingSupported: Bool
-    /// Approximate RAM (GiB) the 4-bit weights occupy once loaded. Used by the
+    /// Approximate RAM (GiB) the quantized weights occupy once loaded. Used by the
     /// memory-safety guard to decide whether concurrent requests (full-precision
     /// KV cache, no byte cap) can fit alongside the model on this machine.
     let weightGB: Double
@@ -284,7 +284,22 @@ final class ServerController: ObservableObject {
                     params: "1.2B",
                     summary: "Liquid AI's tiny 1.2B — near-instant; agent integration isn't validated.",
                     highlights: ["Tiny", "Fast", "128K ctx"],
-                    agentNote: "Experimental in this app — agent/tool-calling integration isn't validated. Works for plain chat via curl/OpenAI SDK.")
+                    agentNote: "Experimental in this app — agent/tool-calling integration isn't validated. Works for plain chat via curl/OpenAI SDK."),
+        // --- Security / pentesting (8-bit, chat-only) ---
+        ModelOption(repoID: "tthoman79/WhiteRabbitNeo-V3-7B-mlx-8bit",
+                    displayName: "WhiteRabbitNeo V3 7B (8-bit)",
+                    profile: ModelProfile(maxContext: 32_768, thinkingSupported: false, weightGB: 7.62),
+                    params: "7B",
+                    summary: "Security-focused Qwen2.5-Coder fine-tune for code review, vulnerability discussion, and DevSecOps.",
+                    highlights: ["Pentesting", "DevSecOps", "Code review"],
+                    agentNote: "Pentesting/security model — chat only; tool calling isn't validated. Use a Qwen3 model for agent work."),
+        ModelOption(repoID: "tthoman79/Foundation-Sec-8B-Reasoning-mlx-8bit",
+                    displayName: "Foundation-Sec 8B Reasoning (8-bit)",
+                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, weightGB: 8.03),
+                    params: "8B",
+                    summary: "Security reasoning model for findings analysis, vulnerability prioritization, and threat modeling.",
+                    highlights: ["Pentesting", "Threat modeling", "128K ctx"],
+                    agentNote: "Pentesting/security model — chat only; tool calling isn't validated. Use a Qwen3 model for agent work.")
     ]
 
     /// Guards the CLI-detection probes so opening the panel in quick succession

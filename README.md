@@ -235,9 +235,9 @@ The model must be **MLX format** — i.e. a pre-converted weight from the
 The Qwen3-family models are the ones that **support tool calling** reliably for
 agents (Xcode / OpenCode / Claude Code); the rest are great for chat and
 generation but aren't the pick for agentic work. Pick one that fits your RAM;
-4-bit weights ≈ (parameters in billions) × 0.55 GB.
+4-bit weights ≈ (parameters in billions) × 0.55 GB, 8-bit ≈ × 1 GB.
 
-| Model | Params | 4-bit weight (RAM) | Max context | Thinking | Tool calling | Notes |
+| Model | Params | Weight (RAM) | Max context | Thinking | Tool calling | Notes |
 |-------|:------:|-------------------|-------------|----------|--------------|-------|
 | `mlx-community/Qwen3.5-35B-A3B-4bit` | 35B (3B active) | 18 GB | 262,144 | ✅ | ✅ | **Default.** MoE coder (3B active → fast); tool calls parse reliably. |
 | `mlx-community/Qwen3.6-35B-A3B-4bit` | 35B (3B active) | 18 GB | 262,144 | ✅ | ✅ | MoE coder (3B active), newer sibling of the default. |
@@ -263,6 +263,13 @@ generation but aren't the pick for agentic work. Pick one that fits your RAM;
 | `mlx-community/GLM-4.7-Flash-4bit` | 30B (3B active) | 16.85 GB | 202,752 | — | — | Zhipu GLM-4.7-Flash MoE; chat/generation only. |
 | `mlx-community/LFM2-24B-A2B-4bit` | 24B (2B active) | 12.49 GB | 128,000 | — | — | Liquid AI 24B-A2B MoE; chat/generation only. |
 | `mlx-community/LFM2.5-1.2B-Instruct-4bit` | 1.2B | 0.66 GB | 128,000 | — | — | Liquid AI tiny 1.2B; chat/generation only. |
+| `tthoman79/WhiteRabbitNeo-V3-7B-mlx-8bit` | 7B | 7.62 GB | 32,768 | — | — | **Pentesting** — code review, vuln discussion, DevSecOps (Qwen2.5-Coder fine-tune); 8-bit, chat only. |
+| `tthoman79/Foundation-Sec-8B-Reasoning-mlx-8bit` | 8B | 8.03 GB | 131,072 | — | — | **Pentesting** — findings analysis, vuln prioritization, threat modeling; 8-bit, chat only. |
+
+> **Security / pentesting models** (WhiteRabbitNeo, Foundation-Sec) are 8-bit
+> quantizations for cybersecurity lab work — code review, vulnerability analysis,
+> threat modeling, and DevSecOps. They're chat/generation models, not agents, and
+> are for **authorized** testing on systems you own or are cleared to assess.
 
 > **Params:** dense models list total parameters; MoE models list `total (active per token)`. Gemma 4 “E” models are MoE and list *effective* parameters (their totals are higher).
 

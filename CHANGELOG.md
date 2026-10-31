@@ -6,6 +6,16 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.17.0] — 2026-10-31
+
+### Added
+
+- **Two pentesting/security models.** WhiteRabbitNeo V3 7B (8-bit, Apache-2.0) and
+  Foundation-Sec 8B Reasoning (8-bit, Llama 3.1) — chat-only cybersecurity models
+  for code review, vulnerability analysis, threat modeling, and DevSecOps. Flagged
+  as "Pentesting" in the picker; tool calling isn't validated, so they're
+  chat/generation only.
+
 ## [1.16.0] — 2026-10-31
 
 ### Added
