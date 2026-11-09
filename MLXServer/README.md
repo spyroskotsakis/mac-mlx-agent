@@ -9,11 +9,12 @@ lives in the menu bar, next to the clock.
 
 - **Start / Stop** the MLX-LM server (OpenAI-compatible,
   `http://127.0.0.1:8080/v1`).
-- **Pick the model** — 30 models (the Qwen3/3.5/3.6/3.8 family, Qwen2.5-Coder,
+- **Pick the model** — 31 models (the Qwen3/3.5/3.6/3.8 family, Qwen2.5-Coder,
   Devstral, Gemma 4, Ministral 3, Llama 3.2, GPT-OSS, GLM-4.7, LFM2, DeepSeek-R1,
   the WhiteRabbitNeo / Foundation-Sec pentesting pair, the reduced-refusal GLM
-  pair, and the two OptiQ Qwen3.8 Uncensored/Obliterated models), each with its
-  own profile, description, and highlights.
+  pair, the Qwen3.8-9B Heretic Uncensored, and the two OptiQ Qwen3.8
+  Uncensored/Obliterated models), each with its own profile, description, and
+  highlights.
 - Shows a **live log** of the server (model load progress, requests, errors).
 - Lets you override the **port** and the **`mlx_lm.server` path** under *Advanced*.
 - **Model settings** — per-model **thinking mode** toggle and **max context**

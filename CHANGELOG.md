@@ -6,6 +6,23 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.20.0] — 2026-11-09
+
+### Added
+
+- **Qwen3.8-9B Heretic Uncensored (5-bit MLX).**
+  `Foresee/Qwen3.8-9B-heretic-uncensored-5bit-MLX` (~6.9 GB) — a 9B
+  reduced-refusal Qwen3.8 in 5-bit. 262,144 context, thinking supported, and it
+  loads on stock `mlx_lm.server` (no `mlx-optiq` runtime needed). Experimental
+  and chat-only: tool calling is declared but not validated against this stack,
+  so it has no shell/network/secrets access; evaluate only on authorized or
+  sandboxed targets.
+
+### Changed
+
+- **Model count is now 31** across the app (`ServerController.availableModels`),
+  `setup.sh`, `start_server.sh`, and the docs.
+
 ## [1.19.0] — 2026-10-31
 
 ### Added
@@ -569,6 +586,7 @@ First tagged release of the **MLX Server** menu-bar app.
 - `start_server.sh` now matches the app: added the `enable_thinking` flag, the
   four-model list with per-model context, and the 32768 output-ceiling note.
 
+[1.20.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.20.0
 [1.19.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.19.0
 [1.18.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.18.0
 [1.17.0]: https://github.com/spyroskotsakis/mac-mlx-agent/releases/tag/v1.17.0

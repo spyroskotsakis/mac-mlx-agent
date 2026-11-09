@@ -324,6 +324,13 @@ final class ServerController: ObservableObject {
                     summary: "Reduced-refusal GLM-4.7-Flash (koute derestricted) — experimental, chat-only.",
                     highlights: ["Reduced refusal", "Derestricted", "Experimental"],
                     agentNote: "Reduced-refusal (derestricted) — experimental, chat-only. No tool calling, so it has no shell/network/secrets access; evaluate only on authorized or sandboxed targets."),
+        ModelOption(repoID: "Foresee/Qwen3.8-9B-heretic-uncensored-5bit-MLX",
+                    displayName: "Qwen3.8-9B Heretic Uncensored (5-bit)",
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 6.9),
+                    params: "9B",
+                    summary: "Reduced-refusal Qwen3.8-9B (Heretic Uncensored) in 5-bit — experimental, chat-only.",
+                    highlights: ["Reduced refusal", "Uncensored", "5-bit", "Experimental"],
+                    agentNote: "Reduced-refusal (uncensored) — experimental, chat-only. Tool calling is declared but not validated against this app's serving stack, so it has no shell/network/secrets access; evaluate only on authorized or sandboxed targets."),
         // --- OptiQ (mlx-optiq runtime) — reduced-refusal, experimental ---
         // Mixed 4/8-bit per-layer quants with an MTP sidecar. They only load via
         // `import optiq`, which is why these carry `requiresOptiQ: true` and are

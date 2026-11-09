@@ -19,7 +19,7 @@ MODEL="${1:-mlx-community/Qwen3.5-35B-A3B-4bit}"
 PORT="${PORT:-8080}"
 
 # The server ships the same models as the menu-bar app (MLXServer/) and the
-# `./setup.sh` picker — 30 total. Pass any of their ids to `./start_server.sh <id>`.
+# `./setup.sh` picker — 31 total. Pass any of their ids to `./start_server.sh <id>`.
 # The server reads each model's own max context from its config, so no context
 # flag is needed here. Only the client needs the matching per-model value
 # (OpenCode's `limit.context`) — setup.sh / the app writes that for you; set it by
@@ -85,6 +85,7 @@ THINKING_MODELS=(
   "mlx-community/Qwen3.5-9B-4bit"
   "mlx-community/Qwen3.5-4B-4bit"
   "mlx-community/Qwen3.5-2B-4bit"
+  "Foresee/Qwen3.8-9B-heretic-uncensored-5bit-MLX"
   "mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit"
   "mlx-community/Qwen3.8-27B-OBLITERATED-OptiQ-4bit"
 )

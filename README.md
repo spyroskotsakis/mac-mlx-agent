@@ -14,7 +14,7 @@ and it serves a local OpenAI-compatible API for Xcode, OpenCode, and Claude Code
 It installs `mlx-lm` (and `mlx-optiq`, for OptiQ models), downloads the model, and
 writes the OpenCode + Claude Code configs for you.
 
-Prefer the terminal? The **same 30-model stack** runs from the **CLI** —
+Prefer the terminal? The **same 31-model stack** runs from the **CLI** —
 [`setup.sh`](#quick-start-one-command-non-gui) installs the prerequisites and
 downloads a model, then [`start_server.sh`](#step-3-start-the-server) starts the
 server with the same memory-safety and sampling flags the app uses.
@@ -230,7 +230,7 @@ writes the OpenCode + Claude Code configs that point at it.
 ./setup.sh --model mlx-community/Qwen3-14B-4bit     # a specific model
 ```
 
-The menu offers the same 30 models as the app (see the table in Step 2).
+The menu offers the same 31 models as the app (see the table in Step 2).
 Everything below is the manual, step-by-step version of what `setup.sh` does.
 
 ---
@@ -301,6 +301,7 @@ generation but aren't the pick for agentic work. Pick one that fits your RAM;
 | `tthoman79/Foundation-Sec-8B-Reasoning-mlx-8bit` | 8B | 8.03 GB | 131,072 | — | — | **Pentesting** — findings analysis, vuln prioritization, threat modeling; 8-bit, chat only. |
 | `mlx-community/glm-4.7-flash-abliterated-8bit` | 30B (3B active) | 29.94 GB | 202,752 | — | — | **Reduced-refusal** — huihui-ai abliterated; 8-bit, chat only, experimental. |
 | `mlx-community/GLM-4.7-Flash-Derestricted-8bit-gs32` | 30B (3B active) | 29.94 GB | 202,752 | — | — | **Reduced-refusal** — koute derestricted; 8-bit, chat only, experimental. |
+| `Foresee/Qwen3.8-9B-heretic-uncensored-5bit-MLX` | 9B | 6.9 GB | 262,144 | ✅ | — | **Uncensored** — Qwen3.8-9B Heretic Uncensored; 5-bit, chat only, experimental. |
 | `mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit` | 27B | 19.8 GB | 262,144 | ✅ | — | **Uncensored (OptiQ)** — reduced-refusal Qwen3.8 in mixed 4/8-bit; requires `mlx-optiq`, experimental, chat only. |
 | `mlx-community/Qwen3.8-27B-OBLITERATED-OptiQ-4bit` | 27B | 20.7 GB | 262,144 | ✅ | — | **Uncensored (OptiQ)** — reduced-refusal Qwen3.8 in mixed 4/8-bit; requires `mlx-optiq`, experimental, chat only. |
 
@@ -309,8 +310,9 @@ generation but aren't the pick for agentic work. Pick one that fits your RAM;
 > threat modeling, and DevSecOps. They're chat/generation models, not agents, and
 > are for **authorized** testing on systems you own or are cleared to assess.
 
-> **Reduced-refusal (abliterated/derestricted) and Uncensored/Obliterated (OptiQ)
-> models** are experimental chat-only models with safety/refusal training removed.
+> **Reduced-refusal (abliterated/derestricted), Uncensored (5-bit), and
+> Uncensored/Obliterated (OptiQ) models** are experimental chat-only models with
+> safety/refusal training removed.
 > They are **not** wired to tool calling, so selecting one does not grant it shell,
 > network, or secrets access. The OptiQ variants also require the `mlx-optiq`
 > runtime (see Step 1). Treat their output with caution and evaluate only on
