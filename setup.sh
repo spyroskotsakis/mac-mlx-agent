@@ -58,6 +58,9 @@ MODELS_REPO=(
   "mlx-community/glm-4.7-flash-abliterated-8bit"
   "mlx-community/GLM-4.7-Flash-Derestricted-8bit-gs32"
   "Foresee/Qwen3.8-9B-heretic-uncensored-5bit-MLX"
+  "avan-ag/Qwen3.5-4B-Uncensored-MLX-4bit"
+  "RolanDorisTech/Qwen3.8-4B-Distill-MLX-4bit"
+  "RolanDorisTech/Qwen3.8-2B-Distill-MLX-4bit"
   "mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit"
   "mlx-community/Qwen3.8-27B-OBLITERATED-OptiQ-4bit"
 )
@@ -91,12 +94,15 @@ MODELS_NAME=(
   "GLM-4.7-Flash Abliterated (8-bit)"
   "GLM-4.7-Flash Derestricted (8-bit)"
   "Qwen3.8-9B Heretic Uncensored (5-bit)"
+  "Qwen3.5-4B Uncensored (4-bit)"
+  "Qwen3.8-4B Distill (4-bit)"
+  "Qwen3.8-2B Distill (4-bit)"
   "Qwen3.8-27B Uncensored OptiQ (4-bit)"
   "Qwen3.8-27B OBLITERATED OptiQ (4-bit)"
 )
-MODELS_CTX=(262144 262144 262144 40960 262144 32768 262144 262144 393216 262144 262144 131072 131072 262144 131072 262144 262144 131072 131072 131072 262144 202752 128000 128000 32768 131072 202752 202752 262144 262144 262144)
-MODELS_WGT=(18 18 14 7 6 4.28 3.03 1.72 15.10 10.99 5.60 5.15 3.55 2.75 1.81 44.84 17.18 18.43 63.39 12.08 15.61 16.85 12.49 0.66 7.62 8.03 29.94 29.94 6.9 19.8 20.7)
-MODELS_THINK=(yes yes yes yes yes no yes yes no no no no no no no no no no no no no no no no no no no no yes yes yes)
+MODELS_CTX=(262144 262144 262144 40960 262144 32768 262144 262144 393216 262144 262144 131072 131072 262144 131072 262144 262144 131072 131072 131072 262144 202752 128000 128000 32768 131072 202752 202752 262144 262144 262144 262144 262144 262144)
+MODELS_WGT=(18 18 14 7 6 4.28 3.03 1.72 15.10 10.99 5.60 5.15 3.55 2.75 1.81 44.84 17.18 18.43 63.39 12.08 15.61 16.85 12.49 0.66 7.62 8.03 29.94 29.94 6.9 2.37 2.49 1.11 19.8 20.7)
+MODELS_THINK=(yes yes yes yes yes no yes yes no no no no no no no no no no no no no no no no no no no no yes yes yes yes yes yes)
 DEFAULT_INDEX=0
 
 # --- flags ---------------------------------------------------------------------
