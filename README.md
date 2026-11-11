@@ -271,8 +271,24 @@ agents (Xcode / OpenCode / Claude Code); the rest are great for chat and
 generation but aren't the pick for agentic work. Pick one that fits your RAM;
 4-bit weights ≈ (parameters in billions) × 0.55 GB, 8-bit ≈ × 1 GB.
 
-| Model | Params | Weight (RAM) | Max context | Thinking | Tool calling | Notes |
-|-------|:------:|-------------------|-------------|----------|--------------|-------|
+**Capability tags.** Each model is labeled with a short primary tag so you can
+tell at a glance what it can and can't do:
+
+| Tag | What it means | Drives an agent? |
+|---|---|---|
+| **Agent** | validated tool calling through `mlx_lm.server` (Qwen3 family only) | ✅ OpenCode / Xcode / Claude Code |
+| **Code** | strong at code, but agent tool calling isn't validated | ❌ chat / refactor only |
+| **Chat** | general assistant / generation | ❌ |
+| **Reasoning** | extended reasoning / thinking | ❌ |
+| **Pentesting** | security / offensive chat (authorized use only) | ❌ chat only |
+| **Uncensored** | reduced-refusal, experimental | ❌ chat only — no shell/network/secrets |
+
+There is **no `Vision` tag** — no model here serves image input (see below).
+The same tags appear as `#hashtags` under the selected model in the menu-bar app,
+and are mirrored in the table's **Agent** column.
+
+| Model | Params | Weight (RAM) | Max context | Thinking | Agent | Notes |
+|-------|:------:|-------------------|-------------|----------|:-----:|-------|
 | `mlx-community/Qwen3.5-35B-A3B-4bit` | 35B (3B active) | 18 GB | 262,144 | ✅ | ✅ | **Default.** MoE coder (3B active → fast); tool calls parse reliably. |
 | `mlx-community/Qwen3.6-35B-A3B-4bit` | 35B (3B active) | 18 GB | 262,144 | ✅ | ✅ | MoE coder (3B active), newer sibling of the default. |
 | `mlx-community/Qwen3.8-27B-4bit` | 27B | 14 GB | 262,144 | ✅ | ✅ | 27B mid-size option. |
@@ -286,8 +302,8 @@ generation but aren't the pick for agentic work. Pick one that fits your RAM;
 | `mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit` | 24B | 15.10 GB | 393,216 | — | — | Mistral coding specialist; chat/generation only. |
 | `mlx-community/gemma-4-12B-it-qat-4bit` | 12B | 10.99 GB | 262,144 | — | — | Google, multilingual; chat/generation only. |
 | `mlx-community/Ministral-3-8B-Instruct-2512-4bit` | 8B | 5.60 GB | 262,144 | — | — | Edge/on-device, multilingual; chat/generation only. |
-| `mlx-community/gemma-4-e4b-it-4bit` | 4.5B effective | 5.15 GB | 131,072 | — | — | Efficient + vision; chat/generation only. |
-| `mlx-community/gemma-4-e2b-it-4bit` | 2.3B effective | 3.55 GB | 131,072 | — | — | Small + vision; chat/generation only. |
+| `mlx-community/gemma-4-e4b-it-4bit` | 4.5B effective | 5.15 GB | 131,072 | — | — | Efficient; chat/generation only. |
+| `mlx-community/gemma-4-e2b-it-4bit` | 2.3B effective | 3.55 GB | 131,072 | — | — | Small; chat/generation only. |
 | `mlx-community/Ministral-3-3B-Instruct-2512-4bit` | 3B | 2.75 GB | 262,144 | — | — | Tiny, multilingual; chat/generation only. |
 | `mlx-community/Llama-3.2-3B-Instruct-4bit` | 3B | 1.81 GB | 131,072 | — | — | On-device, multilingual; chat/generation only. |
 | `mlx-community/Qwen3-Coder-Next-4bit` | 80B (3B active) | 44.84 GB | 262,144 | — | — | Next-gen Qwen coder MoE (10 active); chat/generation only. |
@@ -301,8 +317,8 @@ generation but aren't the pick for agentic work. Pick one that fits your RAM;
 | `mlx-community/LFM2.5-1.2B-Instruct-4bit` | 1.2B | 0.66 GB | 128,000 | — | — | Liquid AI tiny 1.2B; chat/generation only. |
 | `tthoman79/WhiteRabbitNeo-V3-7B-mlx-8bit` | 7B | 7.62 GB | 32,768 | — | — | **Pentesting** — code review, vuln discussion, DevSecOps (Qwen2.5-Coder fine-tune); 8-bit, chat only. |
 | `tthoman79/Foundation-Sec-8B-Reasoning-mlx-8bit` | 8B | 8.03 GB | 131,072 | — | — | **Pentesting** — findings analysis, vuln prioritization, threat modeling; 8-bit, chat only. |
-| `mlx-community/glm-4.7-flash-abliterated-8bit` | 30B (3B active) | 29.94 GB | 202,752 | — | — | **Reduced-refusal** — huihui-ai abliterated; 8-bit, chat only, experimental. |
-| `mlx-community/GLM-4.7-Flash-Derestricted-8bit-gs32` | 30B (3B active) | 29.94 GB | 202,752 | — | — | **Reduced-refusal** — koute derestricted; 8-bit, chat only, experimental. |
+| `mlx-community/glm-4.7-flash-abliterated-8bit` | 30B (3B active) | 29.94 GB | 202,752 | — | — | **Uncensored** — huihui-ai abliterated; 8-bit, chat only, experimental. |
+| `mlx-community/GLM-4.7-Flash-Derestricted-8bit-gs32` | 30B (3B active) | 29.94 GB | 202,752 | — | — | **Uncensored** — koute derestricted; 8-bit, chat only, experimental. |
 | `Foresee/Qwen3.8-9B-heretic-uncensored-5bit-MLX` | 9B | 6.9 GB | 262,144 | ✅ | — | **Uncensored** — Qwen3.8-9B Heretic Uncensored; 5-bit, chat only, experimental. |
 | `avan-ag/Qwen3.5-4B-Uncensored-MLX-4bit` | 4B | 2.37 GB | 262,144 | ✅ | — | **Uncensored** — Qwen3.5-4B (Heretic-based); 4-bit, chat only, experimental. |
 | `mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit` | 27B | 19.8 GB | 262,144 | ✅ | — | **Uncensored (OptiQ)** — reduced-refusal Qwen3.8 in mixed 4/8-bit; requires `mlx-optiq`, experimental, chat only. |
@@ -322,6 +338,15 @@ generation but aren't the pick for agentic work. Pick one that fits your RAM;
 > authorized or sandboxed targets.
 
 > **Params:** dense models list total parameters; MoE models list `total (active per token)`. Gemma 4 “E” models are MoE and list *effective* parameters (their totals are higher).
+
+> **No model serves image input — every model here is text-only.** Several models
+> declare a `vision_config` and carry vision-tower weights, but `mlx_lm.server`
+> can't use them yet: its image-processor registry (`mlx_lm/processors/__init__.py`)
+> only implements `muse_spark`, so `load_processor()` returns `None` for every
+> model in this list and any `image_url` content part is rejected with
+> `ValueError("Only 'text' content type is supported.")`. Keep image requests out
+> of `curl`/OpenAI SDK calls and keep the OpenCode config text-only. If `mlx-lm`
+> later adds image processors for `qwen3_5` / `gemma4` / `mistral3`, revisit.
 
 > **Use only the Qwen3-family models for agent/tool-calling work.** The rest of
 > the list (Llama, Gemma, Ministral, Devstral, GPT-OSS, GLM, LFM, DeepSeek-R1,

@@ -6,6 +6,37 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.22.0] — 2026-11-11
+
+### Added
+
+- **Capability classification for all 34 models.** Every model in the picker now
+  carries a short primary capability tag — `Agent`, `Code`, `Chat`, `Reasoning`,
+  `Pentesting`, or `Uncensored` (with `OptiQ` / `Distill` modifiers where they
+  apply) — plus a one-line description. The `Agent` tag is reserved for the 7
+  validated Qwen3-family models that can drive OpenCode / Xcode / Claude Code;
+  every other model carries an `agentNote` explaining why it's chat/generation
+  only.
+
+- **CLI model picker now shows the same tags and descriptions.** `setup.sh`
+  gained two parallel arrays (`MODELS_TAG`, `MODELS_DESC`) mirroring the app's
+  `highlights[0]` and `summary`, and `list_models` prints each model's tag and
+  description so the terminal picker matches the menu-bar app.
+
+### Changed
+
+- **Corrected model descriptions and tags** across `ServerController.swift`,
+  `README.md`, and `MLXServer/README.md`, and documented the classification
+  taxonomy in `CLAUDE.md` (plus a "how to add a model" checklist) so future
+  additions stay consistent.
+
+### Fixed
+
+- **Clarified that no model serves image input.** Several models declare a
+  `vision_config` and carry vision-tower weights, but `mlx_lm.server`'s
+  image-processor registry only implements `muse_spark`, so every model here is
+  text-only; the docs no longer imply image support.
+
 ## [1.21.0] — 2026-11-11
 
 ### Added

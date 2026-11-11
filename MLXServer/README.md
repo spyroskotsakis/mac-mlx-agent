@@ -206,21 +206,23 @@ static let availableModels: [ModelOption] = [
                 displayName: "Qwen3.5-35B-A3B (4-bit)",
                 profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 18),
                 params: "35B (3B active)",
-                summary: "Flagship mixture-of-experts coder — reliable agent tool calling.",
-                highlights: ["MoE", "Tool calling", "Vision"]),
-    ModelOption(repoID: "mlx-community/Qwen3-14B-4bit",
-                displayName: "Qwen3-14B (4-bit)",
-                profile: ModelProfile(maxContext: 40_960, thinkingSupported: true, weightGB: 7),
-                params: "14B",
-                summary: "Balanced 14B — the memory-safe default for most Macs.",
-                highlights: ["Tool calling", "Memory-safe default"]),
+                summary: "Flagship Qwen MoE — the strongest agentic coding and reasoning here.",
+                highlights: ["Agent", "MoE 3B active", "262K ctx"]),
+    ModelOption(repoID: "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit",
+                displayName: "Qwen2.5-Coder-7B-Instruct (4-bit)",
+                profile: ModelProfile(maxContext: 32_768, thinkingSupported: false, weightGB: 4.28),
+                params: "7B",
+                summary: "Dedicated code model — strong at snippets and refactors; no agent tool calling.",
+                highlights: ["Code", "Fast", "No thinking", "32K ctx"],
+                agentNote: "Code-specialist model; OpenCode/Claude Code integration isn't validated — use a Qwen3 model for agent work."),
     ModelOption(repoID: "mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit",
                 displayName: "Qwen3.8-27B Uncensored OptiQ (4-bit)",
                 profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 19.8,
                                       requiresOptiQ: true),
                 params: "27B",
-                summary: "Reduced-refusal Qwen3.8 in OptiQ mixed 4/8-bit — experimental.",
-                highlights: ["OptiQ 4/8-bit", "MTP", "Reduced refusal", "Experimental"]),
+                summary: "Reduced-refusal Qwen3.8 in OptiQ mixed 4/8-bit — experimental, chat-only.",
+                highlights: ["Uncensored", "OptiQ", "Experimental"],
+                agentNote: "Reduced-refusal OptiQ model — experimental, chat-only. No shell/network/secrets access; evaluate only on authorized or sandboxed targets."),
     ModelOption(repoID: "mlx-community/Your-New-Model-4bit",
                 displayName: "Your New Model (4-bit)",
                 profile: ModelProfile(maxContext: 32768, thinkingSupported: false, weightGB: 4),
@@ -230,6 +232,25 @@ static let availableModels: [ModelOption] = [
 ]
 ```
 
+**Capability tags.** The *first* entry in `highlights` must be the model's primary
+capability, drawn from a fixed vocabulary: `Agent` (validated tool calling —
+Qwen3 family only), `Code`, `Chat`, `Reasoning`, `Pentesting`, `Uncensored`.
+Add modifiers after it when true: `OptiQ`, `Distill`. There is **no `Vision`
+tag** — image input isn't served: `mlx_lm.server`'s image-processor registry only
+implements `muse_spark`, so `load_processor()` returns `None` for every model and
+an `image_url` content part is rejected. These tags are rendered as `#hashtags`
+under the selected model and mirrored in the main `README.md` table.
+
+The same description + tag must also reach the **CLI** picker: `setup.sh` mirrors
+`summary` → `MODELS_DESC` and `highlights[0]` → `MODELS_TAG` (parallel arrays, in
+`MODELS_REPO` order). Update those two arrays with every new model, or the model
+appears in `./setup.sh`'s list with no tag and no description.
+
+**`agentNote` is the agent-eligibility signal.** Leave it `nil` only for a
+Qwen3-family model whose tool calls are validated to parse here (the 7 `Agent`
+models). Every other model must carry a non-nil `agentNote` — one sentence on
+what it's for and why it can't drive OpenCode/Xcode/Claude Code.
+
 Each model carries a **profile** with five fields:
 
 - `maxContext` — the model's maximum context length (its
@@ -238,7 +259,10 @@ Each model carries a **profile** with five fields:
 - `thinkingSupported` — whether the model's chat template accepts
   `enable_thinking`; when false the **Thinking mode** toggle is disabled for that
   model.
-- `weightGB` — approximate 4-bit weight RAM, used by the memory-safety guard.
+- `weightGB` — weight RAM in **decimal GB = safetensors bytes ÷ 1e9**, used by the
+  memory-safety guard. Read real file sizes from
+  `GET https://huggingface.co/api/models/{repo}/tree/main` — the HF
+  `safetensors.total` API field under-reports, so don't use it.
 - `rotatingKVCache` — true for models whose KV cache is mlx_lm's
   `RotatingKVCache` (Gemma 4, Ministral 3, Llama 3.2 sliding-window, GPT-OSS);
   these skip `--kv-bits` (no quantized form yet).

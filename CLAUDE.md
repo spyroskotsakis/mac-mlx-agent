@@ -55,10 +55,29 @@ by `ModelProfile.requiresOptiQ` in `ServerController` and `OPTIQ_MODELS` in
    `.venv-litellm/bin/litellm --config litellm-mlx.yaml --host 127.0.0.1 --port 4001`
    and `./claude-local.sh`.
 
-## Models
+## Models & capability classification
 
-Only these (in `ServerController.availableModels`) work for **agent/tool-calling**
-use. `weightGB` is the guard's conservative RAM estimate.
+`ServerController.availableModels` is the single source of truth for the picker
+(34 models). Every model is classified by a **primary capability tag**, which must
+be the *first* entry in its `highlights` array, plus optional modifiers. The tag
+vocabulary is fixed — don't invent new primary tags without updating this file,
+`README.md`, and `MLXServer/README.md` together.
+
+| Primary tag | Meaning | Can it drive OpenCode / Xcode / Claude Code? |
+|---|---|---|
+| `Agent` | tool calling validated through mlx_lm.server's Qwen parser | **Yes — only these** |
+| `Code` | strong code generation, but tool calling not validated here | No — chat / refactor only |
+| `Chat` | general assistant / generation | No |
+| `Reasoning` | extended reasoning / thinking | No |
+| `Pentesting` | security / offensive chat | No — chat only |
+| `Uncensored` | reduced-refusal (safety training removed) | No — chat only, no shell/network/secrets |
+
+Modifier tags (add after the primary tag when true): `OptiQ` (requires the
+`mlx-optiq` runtime), `Distill` (community distill, oQe quant). There is **no
+`Vision` tag** — image input isn't served (see below).
+
+**The agent-capable set is exactly the Qwen3 family — 7 models** (the only ones
+with `agentNote == nil`):
 
 | repoID | weightGB | maxContext | thinking |
 |---|---|---|---|
@@ -66,13 +85,56 @@ use. `weightGB` is the guard's conservative RAM estimate.
 | `mlx-community/Qwen3.6-35B-A3B-4bit` | 18 | 262144 | yes |
 | `mlx-community/Qwen3.8-27B-4bit` | 14 | 262144 | yes |
 | `mlx-community/Qwen3-14B-4bit` | 7 | 40960 | yes |
+| `mlx-community/Qwen3.5-9B-4bit` | 6 | 262144 | yes |
+| `mlx-community/Qwen3.5-4B-4bit` | 3.03 | 262144 | yes |
+| `mlx-community/Qwen3.5-2B-4bit` | 1.72 | 262144 | yes |
 
-Do **not** switch to `Qwen3-Coder-30B-A3B` or `Qwen2.5-Coder-14B` for agents — they
-emit tool calls the server can't parse and stall the loop.
+Do **not** switch to `Qwen3-Coder-30B-A3B`, `Qwen3-Coder-Next`, or
+`Qwen2.5-Coder-7B` for agents — they emit tool calls the server can't parse and
+stall the loop. Every non-agent model carries a non-nil `agentNote` explaining
+why; `agentNote == nil` is reserved for the 7 validated agent models above.
 
-OptiQ models (`Qwen3.8-27B-{Uncensored,OBLITERATED}-OptiQ-4bit`) are
-reduced-refusal/experimental and chat-only: their tool calling is declared but
+OptiQ models (`Qwen3.8-27B-{Uncensored,OBLITERATED}-OptiQ-4bit`) and all
+reduced-refusal/uncensored models are chat-only: tool calling is declared but
 not validated, so they get no shell/network/secrets access.
+
+**No model serves image input — every model is text-only.** `mlx_lm.server`'s
+image-processor registry (`mlx_lm/processors/__init__.py` → `PROCESSORS`) only
+implements `muse_spark`, so `load_processor()` returns `None` for every model here,
+`keep_images` is `False`, and an `image_url` content part raises
+`ValueError("Only 'text' content type is supported.")`. Several models declare a
+`vision_config` and carry vision-tower weights, but that is *latent* — it does not
+work end-to-end through mlx-lm today. Do **not** label any model `Vision`, and keep
+the OpenCode config text-only (`modalities` / `attachment` in `opencode.jsonc`). If
+mlx-lm later gains image processors for `qwen3_5` / `gemma4` / `mistral3`, revisit.
+
+### How to add a model (do all of these, or the picker lies to users)
+
+1. Add one `ModelOption` to `ServerController.availableModels`.
+2. Set `profile` correctly:
+   - `maxContext` = the model's `max_position_embeddings`.
+   - `thinkingSupported` = whether its chat template accepts `enable_thinking`.
+   - `weightGB` = **decimal GB = safetensors bytes ÷ 1e9**. Do **not** use the HF
+     `safetensors.total` field (unreliable — it under-reports). Read real file sizes
+     from `GET https://huggingface.co/api/models/{repo}/tree/main`.
+   - `rotatingKVCache: true` for Gemma 4 / Ministral 3 / Llama 3.2 / GPT-OSS
+     (they have no quantized KV form, so `--kv-bits` must be skipped).
+   - `requiresOptiQ: true` for OptiQ-quantized models.
+3. Classify: first `highlight` = one of the six primary tags. Do **not** add a
+   `Vision` tag — image input isn't served (see above). Add `Distill` / `OptiQ` as
+   applicable.
+4. Set a non-nil `agentNote` for **every** model that isn't a validated Qwen3-family
+   agent — one sentence on what it's for and why agent work isn't validated.
+5. Keep `summary` to one sentence stating the capability. `summary` and the first
+   `highlight` (the primary tag) are the model's **description + tag**, surfaced in
+   *both* the macOS app and the CLI picker — the two must stay in sync (step 6).
+6. Mirror the model into `setup.sh` (**all 7 parallel arrays**: `MODELS_REPO`,
+   `MODELS_NAME`, `MODELS_CTX`, `MODELS_WGT`, `MODELS_THINK`, **`MODELS_TAG`** =
+   `highlights[0]`, **`MODELS_DESC`** = `summary`), `start_server.sh`
+   (`THINKING_MODELS`; `OPTIQ_MODELS` or the rotating-KV list as needed), and the
+   `README.md` model table (keep its "Agent" column accurate). The description and
+   tags are a **standard, non-optional step** — a model added to the app but not to
+   `MODELS_TAG` / `MODELS_DESC` shows up in the CLI with no tag or description.
 
 ## Critical invariants (do not violate)
 
