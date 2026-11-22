@@ -6,6 +6,18 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.23.2] — 2026-11-22
+
+### Fixed
+
+- **Start blocked until the model is downloaded.** The Start button no longer
+  launches `mlx_lm.server` on a model that isn't in the local HuggingFace cache.
+  Previously it would run anyway, making the server try to fetch the model itself
+  at startup — bypassing the app's managed download (and its `HF_HUB_DISABLE_XET`
+  fix), with no progress UI, or exit immediately. The button now disables with an
+  explanatory tooltip until the model is downloaded, and `start()` hard-blocks on
+  a fresh on-disk check as a backstop.
+
 ## [1.23.1] — 2026-11-22
 
 ### Changed

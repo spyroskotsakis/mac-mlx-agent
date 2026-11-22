@@ -1405,6 +1405,7 @@ struct ContentView: View {
         .controlSize(.large)
         .tint(server.state == .running ? .red : .accentColor)
         .disabled(server.primaryDisabled)
+        .help(server.primaryDisabledReason ?? "Start the MLX server and LiteLLM bridge")
     }
 
     private var advancedSection: some View {

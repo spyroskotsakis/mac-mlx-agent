@@ -704,8 +704,27 @@ final class ServerController: ObservableObject {
         }
     }
 
+    /// Why the Start button is disabled (nil when it can start). Only applies in
+    /// the stopped/failed states — while starting or running the button is
+    /// "Cancel"/"Stop", which must stay enabled.
+    var primaryDisabledReason: String? {
+        switch state {
+        case .starting, .running, .stopping:
+            return nil
+        case .stopped, .failed:
+            break
+        }
+        if resolvedExecutable == nil {
+            return "mlx_lm.server not found — install mlx-lm first."
+        }
+        if modelCached != true {
+            return "This model isn't downloaded yet — download it in Requirements first."
+        }
+        return nil
+    }
+
     var primaryDisabled: Bool {
-        state == .stopping || resolvedExecutable == nil
+        state == .stopping || primaryDisabledReason != nil
     }
 
     func primaryAction() {
@@ -861,6 +880,15 @@ final class ServerController: ObservableObject {
         // model) can exhaust unified memory and take the whole machine down.
         if let block = memorySafetyBlock() {
             state = .failed(block)
+            return
+        }
+        // Hard block: starting a model that isn't on disk yet makes
+        // `mlx_lm.server` fetch it itself at startup — bypassing the managed
+        // download (and its HF_HUB_DISABLE_XET fix), with no progress UI — or
+        // exit immediately. Require a complete snapshot, checked fresh here so a
+        // stale cached flag can't sneak a start through.
+        if !Self.modelIsCached(repoID: selectedModel.repoID) {
+            state = .failed("Model isn't downloaded yet — download it in Requirements, then start.")
             return
         }
         let serverArgs = arguments(model: selectedModel.repoID, port: port)
