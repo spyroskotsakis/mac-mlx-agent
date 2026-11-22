@@ -535,7 +535,8 @@ struct ContentView: View {
                         Text("Homebrew (recommended):")
                             .font(.caption)
                         codeBlock(title: "bash", code: "brew install python@3.12")
-                        Text("Or download from https://www.python.org/downloads/.")
+                        Link("Or download from python.org/downloads →",
+                             destination: URL(string: "https://www.python.org/downloads/")!)
                             .font(.caption)
                         Text("Then click \"Check status\" (or reopen the panel) so it re-detects Python.")
                             .font(.caption)

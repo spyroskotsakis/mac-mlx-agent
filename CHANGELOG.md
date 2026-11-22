@@ -6,6 +6,14 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.23.1] — 2026-11-22
+
+### Changed
+
+- **Clickable Python download link.** The "How to install Python" help in the app
+  (shown when Python is missing) now links to python.org/downloads instead of
+  showing a plain-text URL.
+
 ## [1.23.0] — 2026-11-22
 
 ### Added
