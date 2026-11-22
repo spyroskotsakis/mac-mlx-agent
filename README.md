@@ -14,7 +14,7 @@ and it serves a local OpenAI-compatible API for Xcode, OpenCode, and Claude Code
 It installs `mlx-lm` (and `mlx-optiq`, for OptiQ models), downloads the model, and
 writes the OpenCode + Claude Code configs for you.
 
-Prefer the terminal? The **same 34-model stack** runs from the **CLI** —
+Prefer the terminal? The **same 36-model stack** runs from the **CLI** —
 [`setup.sh`](#quick-start-one-command-non-gui) installs the prerequisites and
 downloads a model, then [`start_server.sh`](#step-3-start-the-server) starts the
 server with the same memory-safety and sampling flags the app uses.
@@ -230,7 +230,7 @@ writes the OpenCode + Claude Code configs that point at it.
 ./setup.sh --model mlx-community/Qwen3-14B-4bit     # a specific model
 ```
 
-The menu offers the same 34 models as the app (see the table in Step 2).
+The menu offers the same 36 models as the app (see the table in Step 2).
 Everything below is the manual, step-by-step version of what `setup.sh` does.
 
 ---
@@ -291,6 +291,7 @@ and are mirrored in the table's **Agent** column.
 |-------|:------:|-------------------|-------------|----------|:-----:|-------|
 | `mlx-community/Qwen3.5-35B-A3B-4bit` | 35B (3B active) | 18 GB | 262,144 | ✅ | ✅ | **Default.** MoE coder (3B active → fast); tool calls parse reliably. |
 | `mlx-community/Qwen3.6-35B-A3B-4bit` | 35B (3B active) | 18 GB | 262,144 | ✅ | ✅ | MoE coder (3B active), newer sibling of the default. |
+| `ornith-ai/Ornith-1.5-35B-A3B-MLX-4bit` | 35B (3B active) | 19.51 GB | 262,144 | — | — | Ornith self-improving coding MoE (Qwen3.5-based); chat/generation only — ships no chat template. |
 | `mlx-community/Qwen3.8-27B-4bit` | 27B | 14 GB | 262,144 | ✅ | ✅ | 27B mid-size option. |
 | `mlx-community/Qwen3-14B-4bit` | 14B | 7 GB | 40,960 | ✅ | ✅ | Smaller; natural pick for "concurrent requests" mode. |
 | `mlx-community/Qwen3.5-9B-4bit` | 9B | 6 GB | 262,144 | ✅ | ✅ | Compact daily driver. |
@@ -311,7 +312,8 @@ and are mirrored in the table's **Agent** column.
 | `mlx-community/DeepSeek-R1-Distill-Qwen-32B-4bit` | 32B | 18.43 GB | 131,072 | — | — | DeepSeek-R1 reasoning distilled into Qwen 32B; chat/generation only. |
 | `mlx-community/gpt-oss-120b-MXFP4-Q8` | 117B (5.1B active) | 63.39 GB | 131,072 | — | — | OpenAI's 120B MoE; thinking model, chat/generation only (needs a maxed-out Mac). |
 | `mlx-community/gpt-oss-20b-MXFP4-Q8` | 21B (3.6B active) | 12.08 GB | 131,072 | — | — | OpenAI's 20B MoE; thinking model, chat/generation only. |
-| `mlx-community/gemma-4-26B-A4B-it-qat-4bit` | 26B (4B active) | 15.61 GB | 262,144 | — | — | Google 26B-A4B MoE, multilingual; chat/generation only. |
+| `mlx-community/gemma-4-26B-A4B-it-qat-4bit` | 26B (4B active) | 15.61 GB | 262,144 | — | — | Google 26B-A4B MoE, **QAT** (quantization-aware) 4-bit — the higher-quality build; chat/generation only. |
+| `mlx-community/gemma-4-26b-a4b-it-4bit` | 26B (4B active) | 15.34 GB | 262,144 | — | — | Google 26B-A4B MoE, **standard (non-QAT)** 4-bit — same assistant, slightly smaller with a small quality tradeoff; chat/generation only. |
 | `mlx-community/GLM-4.7-Flash-4bit` | 30B (3B active) | 16.85 GB | 202,752 | — | — | Zhipu GLM-4.7-Flash MoE; chat/generation only. |
 | `mlx-community/LFM2-24B-A2B-4bit` | 24B (2B active) | 12.49 GB | 128,000 | — | — | Liquid AI 24B-A2B MoE; chat/generation only. |
 | `mlx-community/LFM2.5-1.2B-Instruct-4bit` | 1.2B | 0.66 GB | 128,000 | — | — | Liquid AI tiny 1.2B; chat/generation only. |
@@ -323,6 +325,13 @@ and are mirrored in the table's **Agent** column.
 | `avan-ag/Qwen3.5-4B-Uncensored-MLX-4bit` | 4B | 2.37 GB | 262,144 | ✅ | — | **Uncensored** — Qwen3.5-4B (Heretic-based); 4-bit, chat only, experimental. |
 | `mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit` | 27B | 19.8 GB | 262,144 | ✅ | — | **Uncensored (OptiQ)** — reduced-refusal Qwen3.8 in mixed 4/8-bit; requires `mlx-optiq`, experimental, chat only. |
 | `mlx-community/Qwen3.8-27B-OBLITERATED-OptiQ-4bit` | 27B | 20.7 GB | 262,144 | ✅ | — | **Uncensored (OptiQ)** — reduced-refusal Qwen3.8 in mixed 4/8-bit; requires `mlx-optiq`, experimental, chat only. |
+
+> **QAT vs standard 4-bit:** two variants of the same model are listed — a
+> `…-qat-4bit` build (**quantization-aware trained**: the 4-bit rounding was part
+> of training, so accuracy holds up better, and the files are slightly larger) and
+> a plain `…-4bit` build (**post-training quantized**: weights rounded after
+> training — a touch smaller but with a small accuracy tradeoff). Both run on MLX;
+> the QAT build is the higher-quality choice when you have the RAM for it.
 
 > **Security / pentesting models** (WhiteRabbitNeo, Foundation-Sec) are 8-bit
 > quantizations for cybersecurity lab work — code review, vulnerability analysis,

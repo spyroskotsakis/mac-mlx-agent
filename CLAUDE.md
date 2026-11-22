@@ -58,7 +58,7 @@ by `ModelProfile.requiresOptiQ` in `ServerController` and `OPTIQ_MODELS` in
 ## Models & capability classification
 
 `ServerController.availableModels` is the single source of truth for the picker
-(34 models). Every model is classified by a **primary capability tag**, which must
+(36 models). Every model is classified by a **primary capability tag**, which must
 be the *first* entry in its `highlights` array, plus optional modifiers. The tag
 vocabulary is fixed — don't invent new primary tags without updating this file,
 `README.md`, and `MLXServer/README.md` together.
@@ -110,6 +110,13 @@ mlx-lm later gains image processors for `qwen3_5` / `gemma4` / `mistral3`, revis
 
 ### How to add a model (do all of these, or the picker lies to users)
 
+0. **Verify the model is MLX-compatible first.** Only add an MLX-format repo that
+   `mlx_lm.server` (or the OptiQ runtime) actually loads — `mlx-community/*`-style
+   `.safetensors` shards plus a `config.json` with an MLX `quantization` dict and a
+   `model_type` mlx-lm supports. Never add a raw GGUF or Transformers/PyTorch-only
+   model — it won't load here and lies to users. Check
+   `GET https://huggingface.co/api/models/{repo}` and its `config.json` first.
+
 1. Add one `ModelOption` to `ServerController.availableModels`.
 2. Set `profile` correctly:
    - `maxContext` = the model's `max_position_embeddings`.
@@ -138,6 +145,11 @@ mlx-lm later gains image processors for `qwen3_5` / `gemma4` / `mistral3`, revis
 
 ## Critical invariants (do not violate)
 
+- **Only add MLX-compatible models.** Every model in `availableModels` must be an
+  MLX-format repo that `mlx_lm.server` (or the OptiQ runtime) actually loads —
+  `mlx-community/*` safetensors with an MLX `quantization` dict, never a GGUF or
+  Transformers/PyTorch-only repo. Verify before adding (see "How to add a model",
+  step 0).
 - **Memory safety / whole-machine OOM.** The 35B model combined with "Allow
   concurrent requests" (full-precision KV cache, no byte cap) can exhaust the
   *entire Mac's* unified memory and take the whole machine down — not just the

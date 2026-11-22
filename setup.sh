@@ -31,6 +31,7 @@ PYTHON="${PYTHON:-python3}"
 MODELS_REPO=(
   "mlx-community/Qwen3.5-35B-A3B-4bit"
   "mlx-community/Qwen3.6-35B-A3B-4bit"
+  "ornith-ai/Ornith-1.5-35B-A3B-MLX-4bit"
   "mlx-community/Qwen3.8-27B-4bit"
   "mlx-community/Qwen3-14B-4bit"
   "mlx-community/Qwen3.5-9B-4bit"
@@ -50,6 +51,7 @@ MODELS_REPO=(
   "mlx-community/gpt-oss-120b-MXFP4-Q8"
   "mlx-community/gpt-oss-20b-MXFP4-Q8"
   "mlx-community/gemma-4-26B-A4B-it-qat-4bit"
+  "mlx-community/gemma-4-26b-a4b-it-4bit"
   "mlx-community/GLM-4.7-Flash-4bit"
   "mlx-community/LFM2-24B-A2B-4bit"
   "mlx-community/LFM2.5-1.2B-Instruct-4bit"
@@ -67,6 +69,7 @@ MODELS_REPO=(
 MODELS_NAME=(
   "Qwen3.5-35B-A3B (4-bit)"
   "Qwen3.6-35B-A3B (4-bit)"
+  "Ornith-1.5-35B-A3B (MLX 4-bit)"
   "Qwen3.8-27B (4-bit)"
   "Qwen3-14B (4-bit)"
   "Qwen3.5-9B (4-bit)"
@@ -86,6 +89,7 @@ MODELS_NAME=(
   "GPT-OSS 120B (MXFP4-Q8)"
   "GPT-OSS 20B (MXFP4-Q8)"
   "Gemma 4 26B A4B IT QAT (4-bit)"
+  "Gemma 4 26B A4B IT (4-bit)"
   "GLM-4.7-Flash (4-bit)"
   "LFM2 24B A2B (4-bit)"
   "LFM2.5 1.2B Instruct (4-bit)"
@@ -100,12 +104,13 @@ MODELS_NAME=(
   "Qwen3.8-27B Uncensored OptiQ (4-bit)"
   "Qwen3.8-27B OBLITERATED OptiQ (4-bit)"
 )
-MODELS_CTX=(262144 262144 262144 40960 262144 32768 262144 262144 393216 262144 262144 131072 131072 262144 131072 262144 262144 131072 131072 131072 262144 202752 128000 128000 32768 131072 202752 202752 262144 262144 262144 262144 262144 262144)
-MODELS_WGT=(18 18 14 7 6 4.28 3.03 1.72 15.10 10.99 5.60 5.15 3.55 2.75 1.81 44.84 17.18 18.43 63.39 12.08 15.61 16.85 12.49 0.66 7.62 8.03 29.94 29.94 6.9 2.37 2.49 1.11 19.8 20.7)
-MODELS_THINK=(yes yes yes yes yes no yes yes no no no no no no no no no no no no no no no no no no no no yes yes yes yes yes yes)
+MODELS_CTX=(262144 262144 262144 262144 40960 262144 32768 262144 262144 393216 262144 262144 131072 131072 262144 131072 262144 262144 131072 131072 131072 262144 262144 202752 128000 128000 32768 131072 202752 202752 262144 262144 262144 262144 262144 262144)
+MODELS_WGT=(18 18 19.51 14 7 6 4.28 3.03 1.72 15.10 10.99 5.60 5.15 3.55 2.75 1.81 44.84 17.18 18.43 63.39 12.08 15.61 15.34 16.85 12.49 0.66 7.62 8.03 29.94 29.94 6.9 2.37 2.49 1.11 19.8 20.7)
+MODELS_THINK=(yes yes no yes yes yes no yes yes no no no no no no no no no no no no no no no no no no no no no yes yes yes yes yes yes)
 MODELS_TAG=(
   "Agent"
   "Agent"
+  "Code"
   "Agent"
   "Agent"
   "Agent"
@@ -128,6 +133,7 @@ MODELS_TAG=(
   "Chat"
   "Chat"
   "Chat"
+  "Chat"
   "Pentesting"
   "Pentesting"
   "Uncensored"
@@ -142,6 +148,7 @@ MODELS_TAG=(
 MODELS_DESC=(
   "Flagship Qwen MoE (35B total, 3B active) — the strongest agentic coding and reasoning here."
   "Newest Qwen MoE (35B total, 3B active) — refined reasoning and tool use for long agent sessions."
+  "Ornith's 35B-A3B self-improving coding MoE (Qwen3.5-based) — strong coding/agentic scores, but chat-only here since it ships no chat template."
   "Dense 27B — consistent coding and multi-turn agent work."
   "Balanced 14B — fast tool calling and solid reasoning; the memory-safe default for most Macs."
   "Compact 9B with huge context — quick daily coding and chat that still fits smaller-RAM Macs."
@@ -160,7 +167,8 @@ MODELS_DESC=(
   "DeepSeek-R1 reasoning distilled into Qwen 32B — strong reasoning; agent tool calling isn't validated in this app."
   "OpenAI's largest open MoE (120B, 4 active) in mixed MXFP4/Q8 — a thinking model (analysis/final channels); chat only, no tools."
   "OpenAI's open 20B MoE (4 active) in mixed MXFP4/Q8 — a thinking model (analysis/final channels); chat only, no tools."
-  "Google's 26B-A4B MoE with quantized-aware training — strong multilingual assistant with long context."
+  "Google's 26B-A4B MoE with quantization-aware training (QAT) — the higher-quality 4-bit build, strong multilingual assistant with long context."
+  "Google's 26B-A4B MoE in standard 4-bit (post-training quant, no QAT) — the same multilingual assistant, slightly smaller than the QAT build with a small quality tradeoff."
   "Zhipu's GLM-4.7-Flash MoE — fast general assistant with large context."
   "Liquid AI's 24B-A2B MoE — efficient; agent integration isn't validated."
   "Liquid AI's tiny 1.2B — near-instant; agent integration isn't validated."

@@ -1,7 +1,7 @@
 # MLX Server (menu bar app)
 
 A small native macOS **menu-bar app** that starts and stops the local
-`mlx_lm.server` (or the `mlx-optiq` runtime for OptiQ models) for any of the 34
+`mlx_lm.server` (or the `mlx-optiq` runtime for OptiQ models) for any of the 36
 models in the picker, so you don't have to run `./start_server.sh` by hand. It
 lives in the menu bar, next to the clock.
 
@@ -9,7 +9,7 @@ lives in the menu bar, next to the clock.
 
 - **Start / Stop** the MLX-LM server (OpenAI-compatible,
   `http://127.0.0.1:8080/v1`).
-- **Pick the model** — 34 models (the Qwen3/3.5/3.6/3.8 family, Qwen2.5-Coder,
+- **Pick the model** — 36 models (the Qwen3/3.5/3.6/3.8 family, Qwen2.5-Coder,
   Devstral, Gemma 4, Ministral 3, Llama 3.2, GPT-OSS, GLM-4.7, LFM2, DeepSeek-R1,
   the WhiteRabbitNeo / Foundation-Sec pentesting pair, the reduced-refusal GLM
   pair, the Qwen3.8-9B Heretic Uncensored and Qwen3.5-4B Uncensored, the

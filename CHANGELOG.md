@@ -6,6 +6,26 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.23.0] — 2026-11-22
+
+### Added
+
+- **Two new models (36 total).** Added `mlx-community/gemma-4-26b-a4b-it-4bit`
+  (the standard post-training 4-bit build of the Gemma 4 26B-A4B MoE, alongside
+  the existing QAT variant) and `ornith-ai/Ornith-1.5-35B-A3B-MLX-4bit` (a
+  Qwen3.5-based self-improving coding MoE). The Gemma pair is tagged `QAT` vs
+  `PTQ` in the picker so the accuracy/size tradeoff is visible; Ornith ships no
+  chat template, so it's served chat/generation-only (no tools or thinking).
+
+- **MLX-compatibility hard rule.** Documented in `CLAUDE.md` and a new
+  `AGENTS.md`: only add models in MLX format that `mlx_lm.server` (or the OptiQ
+  runtime) actually loads — never GGUF or Transformers/PyTorch-only repos.
+
+### Changed
+
+- **QAT vs standard 4-bit distinction** now appears in the app's tag line, the
+  CLI picker, and the README model table, with a short explainer note.
+
 ## [1.22.0] — 2026-11-11
 
 ### Added

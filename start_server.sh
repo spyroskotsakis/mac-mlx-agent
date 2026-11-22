@@ -19,7 +19,7 @@ MODEL="${1:-mlx-community/Qwen3.5-35B-A3B-4bit}"
 PORT="${PORT:-8080}"
 
 # The server ships the same models as the menu-bar app (MLXServer/) and the
-# `./setup.sh` picker — 34 total. Pass any of their ids to `./start_server.sh <id>`.
+# `./setup.sh` picker — 36 total. Pass any of their ids to `./start_server.sh <id>`.
 # The server reads each model's own max context from its config, so no context
 # flag is needed here. Only the client needs the matching per-model value
 # (OpenCode's `limit.context`) — setup.sh / the app writes that for you; set it by
@@ -116,6 +116,7 @@ ROTATING_KV_MODELS=(
   "mlx-community/Ministral-3-3B-Instruct-2512-4bit"
   "mlx-community/Llama-3.2-3B-Instruct-4bit"
   "mlx-community/gemma-4-26B-A4B-it-qat-4bit"
+  "mlx-community/gemma-4-26b-a4b-it-4bit"
   "mlx-community/gpt-oss-120b-MXFP4-Q8"
   "mlx-community/gpt-oss-20b-MXFP4-Q8"
 )
