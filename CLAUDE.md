@@ -116,11 +116,22 @@ mlx-lm later gains image processors for `qwen3_5` / `gemma4` / `mistral3`, revis
    `model_type` mlx-lm supports. Never add a raw GGUF or Transformers/PyTorch-only
    model — it won't load here and lies to users. Check
    `GET https://huggingface.co/api/models/{repo}` and its `config.json` first.
+   **Also read the model card (`README.md`) and its front-matter tags** — they state
+   the model's real capability (tool-use / agentic, cybersecurity, thinking, param
+   count, documented context) and any special requirements (e.g. "always run with
+   thinking enabled"). The card is authoritative over `config.json` when they
+   disagree.
 
 1. Add one `ModelOption` to `ServerController.availableModels`.
 2. Set `profile` correctly:
-   - `maxContext` = the model's `max_position_embeddings`.
+   - `maxContext` = the model's `max_position_embeddings`, **cross-checked against
+     the model card's documented context**. `max_position_embeddings` may live at
+     the top level *or* under `text_config` (multimodal models), and can be a
+     misleading RoPE ceiling — e.g. Spark2.5's config says 1,048,576 while its card
+     documents 131,072 native. Use the card's native context when they disagree.
    - `thinkingSupported` = whether its chat template accepts `enable_thinking`.
+     The template often lives in a **separate `chat_template.jinja` file**, not
+     `config.json` / `tokenizer_config.json` — check all three.
    - `weightGB` = **decimal GB = safetensors bytes ÷ 1e9**. Do **not** use the HF
      `safetensors.total` field (unreliable — it under-reports). Read real file sizes
      from `GET https://huggingface.co/api/models/{repo}/tree/main`.
@@ -131,7 +142,11 @@ mlx-lm later gains image processors for `qwen3_5` / `gemma4` / `mistral3`, revis
    `Vision` tag — image input isn't served (see above). Add `Distill` / `OptiQ` as
    applicable.
 4. Set a non-nil `agentNote` for **every** model that isn't a validated Qwen3-family
-   agent — one sentence on what it's for and why agent work isn't validated.
+   agent — one sentence on what it's for and why agent work isn't validated. If the
+   card advertises tool-use / agentic ability but the model is uncensored/reduced-
+   refusal (or otherwise unvalidated), say so explicitly: it's kept chat-only here
+   (no shell/network/secrets) *despite* its agentic design. Record special
+   requirements too — e.g. "enable thinking; degrades severely without it".
 5. Keep `summary` to one sentence stating the capability. `summary` and the first
    `highlight` (the primary tag) are the model's **description + tag**, surfaced in
    *both* the macOS app and the CLI picker — the two must stay in sync (step 6).

@@ -325,7 +325,7 @@ and are mirrored in the table's **Agent** column.
 | `Foresee/Qwen3.8-9B-heretic-uncensored-5bit-MLX` | 9B | 6.9 GB | 262,144 | ✅ | — | **Uncensored** — Qwen3.8-9B Heretic Uncensored; 5-bit, chat only, experimental. |
 | `avan-ag/Qwen3.5-4B-Uncensored-MLX-4bit` | 4B | 2.37 GB | 262,144 | ✅ | — | **Uncensored** — Qwen3.5-4B (Heretic-based); 4-bit, chat only, experimental. |
 | `froggeric/Qwen3.6-35B-A3B-Uncensored-Heretic-MLX-4bit` | 35B (3B active) | 20.40 GB | 262,144 | ✅ | — | **Uncensored** — Qwen3.6-35B-A3B Heretic Uncensored; 4-bit, chat only, experimental. |
-| `FrostWolfAI/Frost-Cyber-Mini-Uncensored-v1.1-MLX-8bit` | 4B | 4.37 GB | 1,048,576 | ✅ | — | **Uncensored** — Frost-Cyber-Mini (Spark2.5); 8-bit, chat only, experimental. |
+| `FrostWolfAI/Frost-Cyber-Mini-Uncensored-v1.1-MLX-8bit` | 4B | 4.37 GB | 131,072 | ✅ | — | **Uncensored** — abliterated cybersecurity agentic tool-use (Spark2.5); 8-bit, chat only, needs thinking. |
 | `mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit` | 27B | 19.8 GB | 262,144 | ✅ | — | **Uncensored (OptiQ)** — reduced-refusal Qwen3.8 in mixed 4/8-bit; requires `mlx-optiq`, experimental, chat only. |
 | `mlx-community/Qwen3.8-27B-OBLITERATED-OptiQ-4bit` | 27B | 20.7 GB | 262,144 | ✅ | — | **Uncensored (OptiQ)** — reduced-refusal Qwen3.8 in mixed 4/8-bit; requires `mlx-optiq`, experimental, chat only. |
 

@@ -6,6 +6,25 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.24.1] — 2026-11-23
+
+### Fixed
+
+- **Corrected the Frost-Cyber-Mini metadata.** Its card describes it as a
+  *cybersecurity agentic tool-use* model that requires thinking enabled, not a
+  plain reduced-refusal model — and its native context is 131,072, not the
+  1,048,576 its `config.json` reports (a misleading RoPE ceiling). Tag, summary,
+  `agentNote`, and max context are now accurate: `Uncensored` + `Cyber`, chat-only
+  (no shell/network/secrets) despite its agentic design, with the "enable thinking"
+  warning.
+
+### Changed
+
+- **Hardened the add-a-model checklist** in `CLAUDE.md`: read the model card (not
+  just `config.json`), cross-check `maxContext` against the card's documented
+  context, check `thinkingSupported` in `chat_template.jinja`, and reflect
+  tool-use/agentic capability + special requirements in the `agentNote`.
+
 ## [1.24.0] — 2026-11-23
 
 ### Added

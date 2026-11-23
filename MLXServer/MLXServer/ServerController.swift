@@ -382,11 +382,11 @@ final class ServerController: ObservableObject {
                     agentNote: "Reduced-refusal (uncensored) — experimental, chat-only. Tool calling is declared but not validated against this app's serving stack, so it has no shell/network/secrets access; evaluate only on authorized or sandboxed targets."),
         ModelOption(repoID: "FrostWolfAI/Frost-Cyber-Mini-Uncensored-v1.1-MLX-8bit",
                     displayName: "Frost-Cyber-Mini Uncensored (8-bit)",
-                    profile: ModelProfile(maxContext: 1_048_576, thinkingSupported: true, weightGB: 4.37, rotatingKVCache: true),
+                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: true, weightGB: 4.37, rotatingKVCache: true),
                     params: "4B",
-                    summary: "Reduced-refusal Frost-Cyber-Mini (Spark2.5) in 8-bit — experimental, chat-only.",
-                    highlights: ["Uncensored", "8-bit", "1M ctx"],
-                    agentNote: "Reduced-refusal (uncensored) — experimental, chat-only. Tool calling is declared but not validated against this app's serving stack, so it has no shell/network/secrets access; evaluate only on authorized or sandboxed targets."),
+                    summary: "Abliterated cybersecurity agentic tool-use Spark2.5 fine-tune — chat-only in this app; enable thinking.",
+                    highlights: ["Uncensored", "Cyber", "131K ctx"],
+                    agentNote: "Uncensored (abliterated) cybersecurity tool-use model — kept chat-only in this app (no shell/network/secrets access) despite its agentic design, since reduced-refusal models aren't granted agent access. Enable thinking: it degrades severely without it."),
         // --- OptiQ (mlx-optiq runtime) — reduced-refusal, experimental ---
         // Mixed 4/8-bit per-layer quants with an MTP sidecar. They only load via
         // `import optiq`, which is why these carry `requiresOptiQ: true` and are

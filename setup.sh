@@ -108,7 +108,7 @@ MODELS_NAME=(
   "Qwen3.8-27B Uncensored OptiQ (4-bit)"
   "Qwen3.8-27B OBLITERATED OptiQ (4-bit)"
 )
-MODELS_CTX=(262144 262144 262144 262144 40960 262144 32768 262144 262144 393216 262144 262144 131072 131072 262144 131072 262144 262144 131072 131072 131072 262144 262144 202752 128000 128000 32768 131072 202752 202752 262144 262144 262144 1048576 262144 262144 262144 262144)
+MODELS_CTX=(262144 262144 262144 262144 40960 262144 32768 262144 262144 393216 262144 262144 131072 131072 262144 131072 262144 262144 131072 131072 131072 262144 262144 202752 128000 128000 32768 131072 202752 202752 262144 262144 262144 131072 262144 262144 262144 262144)
 MODELS_WGT=(18 18 19.51 14 7 6 4.28 3.03 1.72 15.10 10.99 5.60 5.15 3.55 2.75 1.81 44.84 17.18 18.43 63.39 12.08 15.61 15.34 16.85 12.49 0.66 7.62 8.03 29.94 29.94 6.9 2.37 20.40 4.37 2.49 1.11 19.8 20.7)
 MODELS_THINK=(yes yes no yes yes yes no yes yes no no no no no no no no no no no no no no no no no no no no no yes yes yes yes yes yes yes yes)
 MODELS_TAG=(
@@ -185,7 +185,7 @@ MODELS_DESC=(
   "Reduced-refusal Qwen3.8-9B (Heretic Uncensored) in 5-bit — experimental, chat-only."
   "Reduced-refusal Qwen3.5-4B (Heretic-based Uncensored) — experimental, chat-only."
   "Reduced-refusal Qwen3.6-35B-A3B (Heretic Uncensored) in 4-bit — experimental, chat-only."
-  "Reduced-refusal Frost-Cyber-Mini (Spark2.5) in 8-bit — experimental, chat-only."
+  "Abliterated cybersecurity agentic tool-use Spark2.5 fine-tune — chat-only in this app; enable thinking."
   "Community Qwen3.8-4B distill (oQe 4-bit) — compact reasoning/chat; agent tool calling not validated."
   "Community Qwen3.8-2B distill (oQe 4-bit) — tiny reasoning/chat; agent tool calling not validated."
   "Reduced-refusal Qwen3.8-27B (Uncensored) in OptiQ mixed 4/8-bit — experimental, served via the mlx-optiq runtime."
