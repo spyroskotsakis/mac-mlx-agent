@@ -67,7 +67,14 @@ is started with may follow the active backend.
 
 1. **Additive only.** No unrelated refactors, renames, or reformatting. With
    oMLX not selected, every existing behavior must stay exactly as today.
-2. **One codebase, two launch paths.** Backend is a setting, not a fork.
+2. **One codebase, two launch paths — no duplicated code.** Backend is a
+   setting, not a fork, and shared logic is implemented once: process-tree
+   stop/exit confirmation, health polling, client-config writing, the memory
+   guard, and port checks are parameterized per backend — never a copy-pasted
+   second server controller. A refactor to make sharing possible IS allowed,
+   but only with a written analysis first (what is duplicated, why the current
+   shape blocks sharing, the exact blast radius, and what behavior must stay
+   byte-identical) — never a refactor for its own sake.
 3. **MLX is the default.** Missing or invalid preference → MLX, silently, on
    both surfaces (fresh installs *and* upgrades).
 4. **One backend at a time.** Never run both servers simultaneously.
@@ -136,7 +143,10 @@ is started with may follow the active backend.
   same lifecycle as `OMLXServer`): `omlx.cli serve --headless --port 8000
   --model-dir … --paged-ssd-cache-max-size 20GB`, launched from the managed
   Python (an Advanced-path setting, like `executablePath`) or an embedded
-  runtime when present.
+  runtime when present. **Reuse the existing helpers instead of duplicating
+  them** — the process-tree/exit-confirmation loop, the health-poll task, the
+  port-conflict sweep, and the config writers are shared between backends
+  (hard constraint 2).
 - Env isolation: strip inherited `OMLX_*` / `PYTHON*` vars; set
   `OMLX_BASE_PATH` to the oMLX state dir
   (`~/Library/Application Support/MLXServer/omlx/`).
@@ -168,7 +178,12 @@ is started with may follow the active backend.
    TodoWrite using the phases below.
 2. **grep before edit.** `rg` each symbol, read the surrounding region, then
    patch minimally. Never trust remembered line numbers.
-3. **Implement in phases; build after each phase; commit per phase.**
+3. **Deduplication analysis before any refactor.** If sharing a lifecycle
+   primitive across backends forces touching existing code, first write the
+   analysis in `PLAN.md`: the duplication inventory, why the current shape
+   blocks sharing, the blast radius, and the behavior-preservation plan.
+   Refactors happen only with that written justification — never for style.
+4. **Implement in phases; build after each phase; commit per phase.**
    - **A — Foundation (app):** `Backend` enum, `Keys.backend`, init
      resolution, `canSwitchBackend`, picker UI, runtime probe.
    - **B — Lifecycle (app):** `OMLXBackendController`, `switchBackend(to:)`
@@ -178,13 +193,13 @@ is started with may follow the active backend.
    - **D — CLI:** `setup.sh` / `start_server.sh` backend flag + state file +
      `.venv-omlx` install + dispatch.
    - **E — Docs:** README "Backends" subsection, CHANGELOG entry.
-4. **Build gates (run after A/B/C):**
+5. **Build gates (run after A/B/C):**
    ```bash
    cd MLXServer && xcodebuild -project MLXServer.xcodeproj -scheme MLXServer \
      -configuration Debug build   # zero errors
    bash -n setup.sh start_server.sh claude-local.sh
    ```
-5. **No fabricated output.** Every verification result below must come from
+6. **No fabricated output.** Every verification result below must come from
    real command output, pasted into the report.
 
 ## 6. Definition of Done — the 5 scenarios (all must pass)
