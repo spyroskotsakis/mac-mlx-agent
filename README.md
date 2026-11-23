@@ -15,7 +15,7 @@ and it serves a local OpenAI-compatible API for Xcode, OpenCode, and Claude Code
 It installs `mlx-lm` (and `mlx-optiq`, for OptiQ models), downloads the model, and
 writes the OpenCode + Claude Code configs for you.
 
-Prefer the terminal? The **same 38-model stack** runs from the **CLI** —
+Prefer the terminal? The **same 45-model stack** runs from the **CLI** —
 [`setup.sh`](#quick-start-one-command-non-gui) installs the prerequisites and
 downloads a model, then [`start_server.sh`](#step-3-start-the-server) starts the
 server with the same memory-safety and sampling flags the app uses.
@@ -231,7 +231,7 @@ writes the OpenCode + Claude Code configs that point at it.
 ./setup.sh --model mlx-community/Qwen3-14B-4bit     # a specific model
 ```
 
-The menu offers the same 38 models as the app (see the table in Step 2).
+The menu offers the same 45 models as the app (see the table in Step 2).
 Everything below is the manual, step-by-step version of what `setup.sh` does.
 
 ---
@@ -320,12 +320,19 @@ and are mirrored in the table's **Agent** column.
 | `mlx-community/LFM2.5-1.2B-Instruct-4bit` | 1.2B | 0.66 GB | 128,000 | — | — | Liquid AI tiny 1.2B. |
 | `tthoman79/WhiteRabbitNeo-V3-7B-mlx-8bit` | 7B | 7.62 GB | 32,768 | — | — | **Pentesting** — code review, vuln discussion, DevSecOps (Qwen2.5-Coder fine-tune); 8-bit. |
 | `tthoman79/Foundation-Sec-8B-Reasoning-mlx-8bit` | 8B | 8.03 GB | 131,072 | — | — | **Pentesting** — findings analysis, vuln prioritization, threat modeling; 8-bit. |
+| `ahmedandaloes/CyberStrike-OffSec-35B-MLX-6bit` | 35B (3B active) | 28.17 GB | 262,144 | — | — | **Pentesting** — offensive-security Qwen3.6-35B-A3B MoE (red-team, pen-testing, CTF); 6-bit. |
+| `MK4-Research/LOREA-cyber-v5.5` | 9B | 5.04 GB | 1,048,576 | ✅ | — | **Pentesting** — guarded cybersecurity Qwen3.5 (Qwythos 9B); security analysis, CTFs, reverse engineering. |
+| `sahilchachra/Qwensploit-V2-9B-MXFP4` | 9B | 5.67 GB | 1,048,576 | ✅ | — | **Pentesting** — red-team Qwensploit V2 9B (Qwen3.5); MXFP4. |
+| `mlx-community/Apriel-1.5-15b-Thinker-CYBERSEC-MERGED-4bit` | 15B | 8.12 GB | 262,400 | — | — | **Pentesting** — cybersecurity Apriel-1.5-15B (LlaVA); 4-bit, vision latent. |
+| `peculiar-ragdoll/Cyber-Tiel-Coder-35B-A3B-MLX-oQ4e` | 35B (3B active) | 21.63 GB | 262,144 | ✅ | — | **Pentesting** — coding + cybersecurity Qwen3.6-35B-A3B MoE (agentic tool-use); oQe 4-bit. |
 | `mlx-community/glm-4.7-flash-abliterated-8bit` | 30B (3B active) | 29.94 GB | 202,752 | — | — | **Uncensored** — huihui-ai abliterated; 8-bit, experimental. |
 | `mlx-community/GLM-4.7-Flash-Derestricted-8bit-gs32` | 30B (3B active) | 29.94 GB | 202,752 | — | — | **Uncensored** — koute derestricted; 8-bit, experimental. |
 | `Foresee/Qwen3.8-9B-heretic-uncensored-5bit-MLX` | 9B | 6.9 GB | 262,144 | ✅ | — | **Uncensored** — Qwen3.8-9B Heretic Uncensored; 5-bit, experimental. |
 | `avan-ag/Qwen3.5-4B-Uncensored-MLX-4bit` | 4B | 2.37 GB | 262,144 | ✅ | — | **Uncensored** — Qwen3.5-4B (Heretic-based); 4-bit, experimental. |
 | `froggeric/Qwen3.6-35B-A3B-Uncensored-Heretic-MLX-4bit` | 35B (3B active) | 20.40 GB | 262,144 | ✅ | — | **Uncensored** — Qwen3.6-35B-A3B Heretic Uncensored; 4-bit, experimental. |
 | `FrostWolfAI/Frost-Cyber-Mini-Uncensored-v1.1-MLX-8bit` | 4B | 4.37 GB | 131,072 | ✅ | — | **Uncensored** — abliterated cybersecurity agentic tool-use (Spark2.5); 8-bit, needs thinking. |
+| `FrostWolfAI/Frost-Cyber-Mini-Uncensored-v1.1-MLX` | 4B | 2.32 GB | 131,072 | ✅ | — | **Uncensored** — abliterated cybersecurity agentic tool-use (Spark2.5); 4-bit, needs thinking. |
+| `cmdhawk/Cyber-Ornith-1.5-9B-OBLITERATED-MLX-6bit` | 9B | 7.28 GB | 262,144 | ✅ | — | **Uncensored** — obliterated Cyber-Ornith 9B; cybersecurity, terminal, Hermes-style tool calls. |
 | `mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit` | 27B | 19.8 GB | 262,144 | ✅ | — | **Uncensored (OptiQ)** — reduced-refusal Qwen3.8 in mixed 4/8-bit; requires `mlx-optiq`, experimental. |
 | `mlx-community/Qwen3.8-27B-OBLITERATED-OptiQ-4bit` | 27B | 20.7 GB | 262,144 | ✅ | — | **Uncensored (OptiQ)** — reduced-refusal Qwen3.8 in mixed 4/8-bit; requires `mlx-optiq`, experimental. |
 

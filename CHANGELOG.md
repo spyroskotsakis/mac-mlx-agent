@@ -6,6 +6,20 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.26.0] — 2026-11-23
+
+### Added
+
+- **Seven new cybersecurity models (45 total).** Added
+  `ahmedandaloes/CyberStrike-OffSec-35B-MLX-6bit` (offensive-security Qwen3.6 MoE,
+  6-bit), `MK4-Research/LOREA-cyber-v5.5` (guarded 9B Qwen3.5), `sahilchachra/Qwensploit-V2-9B-MXFP4`
+  (red-team MXFP4), `mlx-community/Apriel-1.5-15b-Thinker-CYBERSEC-MERGED-4bit`
+  (LlaVA 4-bit), `peculiar-ragdoll/Cyber-Tiel-Coder-35B-A3B-MLX-oQ4e` (coding +
+  cybersecurity oQe 4-bit), `FrostWolfAI/Frost-Cyber-Mini-Uncensored-v1.1-MLX`
+  (4-bit Spark2.5, rotating KV), and `cmdhawk/Cyber-Ornith-1.5-9B-OBLITERATED-MLX-6bit`
+  (6-bit). All verified MLX-format with supported model types, mirrored across the
+  app, `setup.sh`, `start_server.sh`, and the README.
+
 ## [1.25.0] — 2026-11-23
 
 ### Changed

@@ -58,7 +58,7 @@ by `ModelProfile.requiresOptiQ` in `ServerController` and `OPTIQ_MODELS` in
 ## Models & capability classification
 
 `ServerController.availableModels` is the single source of truth for the picker
-(38 models). Every model is classified by a **primary capability tag**, which must
+(45 models). Every model is classified by a **primary capability tag**, which must
 be the *first* entry in its `highlights` array, plus optional modifiers. The tag
 vocabulary is fixed — don't invent new primary tags without updating this file,
 `README.md`, and `MLXServer/README.md` together.
