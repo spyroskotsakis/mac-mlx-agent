@@ -373,6 +373,20 @@ final class ServerController: ObservableObject {
                     summary: "Reduced-refusal Qwen3.5-4B (Heretic-based Uncensored) — experimental, chat-only.",
                     highlights: ["Uncensored", "Tiny", "262K ctx"],
                     agentNote: "Reduced-refusal (uncensored) — experimental, chat-only. Tool calling is declared but not validated against this app's serving stack, so it has no shell/network/secrets access; evaluate only on authorized or sandboxed targets."),
+        ModelOption(repoID: "froggeric/Qwen3.6-35B-A3B-Uncensored-Heretic-MLX-4bit",
+                    displayName: "Qwen3.6-35B-A3B Heretic Uncensored (4-bit)",
+                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 20.40),
+                    params: "35B (3B active)",
+                    summary: "Reduced-refusal Qwen3.6-35B-A3B (Heretic Uncensored) in 4-bit — experimental, chat-only.",
+                    highlights: ["Uncensored", "MoE 3B active", "262K ctx"],
+                    agentNote: "Reduced-refusal (uncensored) — experimental, chat-only. Tool calling is declared but not validated against this app's serving stack, so it has no shell/network/secrets access; evaluate only on authorized or sandboxed targets."),
+        ModelOption(repoID: "FrostWolfAI/Frost-Cyber-Mini-Uncensored-v1.1-MLX-8bit",
+                    displayName: "Frost-Cyber-Mini Uncensored (8-bit)",
+                    profile: ModelProfile(maxContext: 1_048_576, thinkingSupported: true, weightGB: 4.37, rotatingKVCache: true),
+                    params: "4B",
+                    summary: "Reduced-refusal Frost-Cyber-Mini (Spark2.5) in 8-bit — experimental, chat-only.",
+                    highlights: ["Uncensored", "8-bit", "1M ctx"],
+                    agentNote: "Reduced-refusal (uncensored) — experimental, chat-only. Tool calling is declared but not validated against this app's serving stack, so it has no shell/network/secrets access; evaluate only on authorized or sandboxed targets."),
         // --- OptiQ (mlx-optiq runtime) — reduced-refusal, experimental ---
         // Mixed 4/8-bit per-layer quants with an MTP sidecar. They only load via
         // `import optiq`, which is why these carry `requiresOptiQ: true` and are

@@ -6,6 +6,21 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.24.0] — 2026-11-23
+
+### Added
+
+- **Two new Uncensored models (38 total).** Added
+  `froggeric/Qwen3.6-35B-A3B-Uncensored-Heretic-MLX-4bit` (a reduced-refusal
+  4-bit Qwen3.6-35B-A3B MoE — 20.40 GB, 262K context, thinking) and
+  `FrostWolfAI/Frost-Cyber-Mini-Uncensored-v1.1-MLX-8bit` (a reduced-refusal
+  8-bit Spark2.5 mini model — 4.37 GB, 1M context, thinking, rotating KV cache).
+  Both are chat-only, tagged `Uncensored`, with no shell/network/secrets access.
+
+### Changed
+
+- **Updated the README screenshots** to a two-image layout showing the menu-bar app.
+
 ## [1.23.2] — 2026-11-22
 
 ### Fixed

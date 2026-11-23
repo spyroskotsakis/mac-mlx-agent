@@ -87,6 +87,8 @@ THINKING_MODELS=(
   "mlx-community/Qwen3.5-2B-4bit"
   "Foresee/Qwen3.8-9B-heretic-uncensored-5bit-MLX"
   "avan-ag/Qwen3.5-4B-Uncensored-MLX-4bit"
+  "froggeric/Qwen3.6-35B-A3B-Uncensored-Heretic-MLX-4bit"
+  "FrostWolfAI/Frost-Cyber-Mini-Uncensored-v1.1-MLX-8bit"
   "RolanDorisTech/Qwen3.8-4B-Distill-MLX-4bit"
   "RolanDorisTech/Qwen3.8-2B-Distill-MLX-4bit"
   "mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit"
@@ -119,6 +121,7 @@ ROTATING_KV_MODELS=(
   "mlx-community/gemma-4-26b-a4b-it-4bit"
   "mlx-community/gpt-oss-120b-MXFP4-Q8"
   "mlx-community/gpt-oss-20b-MXFP4-Q8"
+  "FrostWolfAI/Frost-Cyber-Mini-Uncensored-v1.1-MLX-8bit"
 )
 
 uses_rotating_kv() {
