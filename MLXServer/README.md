@@ -213,17 +213,15 @@ static let availableModels: [ModelOption] = [
                 displayName: "Qwen2.5-Coder-7B-Instruct (4-bit)",
                 profile: ModelProfile(maxContext: 32_768, thinkingSupported: false, weightGB: 4.28),
                 params: "7B",
-                summary: "Dedicated code model — strong at snippets and refactors; no agent tool calling.",
-                highlights: ["Code", "Fast", "No thinking", "32K ctx"],
-                agentNote: "Code-specialist model; OpenCode/Claude Code integration isn't validated — use a Qwen3 model for agent work."),
+                summary: "Dedicated code model — strong at snippets and refactors.",
+                highlights: ["Code", "Fast", "No thinking", "32K ctx"]),
     ModelOption(repoID: "mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit",
                 displayName: "Qwen3.8-27B Uncensored OptiQ (4-bit)",
                 profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 19.8,
                                       requiresOptiQ: true),
                 params: "27B",
-                summary: "Reduced-refusal Qwen3.8 in OptiQ mixed 4/8-bit — experimental, chat-only.",
-                highlights: ["Uncensored", "OptiQ", "Experimental"],
-                agentNote: "Reduced-refusal OptiQ model — experimental, chat-only. No shell/network/secrets access; evaluate only on authorized or sandboxed targets."),
+                summary: "Reduced-refusal Qwen3.8 in OptiQ mixed 4/8-bit — experimental.",
+                highlights: ["Uncensored", "OptiQ", "Experimental"]),
     ModelOption(repoID: "mlx-community/Your-New-Model-4bit",
                 displayName: "Your New Model (4-bit)",
                 profile: ModelProfile(maxContext: 32768, thinkingSupported: false, weightGB: 4),
@@ -234,8 +232,8 @@ static let availableModels: [ModelOption] = [
 ```
 
 **Capability tags.** The *first* entry in `highlights` must be the model's primary
-capability, drawn from a fixed vocabulary: `Agent` (validated tool calling —
-Qwen3 family only), `Code`, `Chat`, `Reasoning`, `Pentesting`, `Uncensored`.
+capability, drawn from a fixed vocabulary: `Agent` (agentic / tool-calling
+oriented), `Code`, `Chat`, `Reasoning`, `Pentesting`, `Uncensored`.
 Add modifiers after it when true: `OptiQ`, `Distill`. There is **no `Vision`
 tag** — image input isn't served: `mlx_lm.server`'s image-processor registry only
 implements `muse_spark`, so `load_processor()` returns `None` for every model and
@@ -247,10 +245,9 @@ The same description + tag must also reach the **CLI** picker: `setup.sh` mirror
 `MODELS_REPO` order). Update those two arrays with every new model, or the model
 appears in `./setup.sh`'s list with no tag and no description.
 
-**`agentNote` is the agent-eligibility signal.** Leave it `nil` only for a
-Qwen3-family model whose tool calls are validated to parse here (the 7 `Agent`
-models). Every other model must carry a non-nil `agentNote` — one sentence on
-what it's for and why it can't drive OpenCode/Xcode/Claude Code.
+**Every model is served with full tool/agent capability.** There is no
+`agentNote` restriction — `summary` carries any special note (e.g. "enable
+thinking").
 
 Each model carries a **profile** with five fields:
 

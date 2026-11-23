@@ -63,40 +63,25 @@ be the *first* entry in its `highlights` array, plus optional modifiers. The tag
 vocabulary is fixed — don't invent new primary tags without updating this file,
 `README.md`, and `MLXServer/README.md` together.
 
-| Primary tag | Meaning | Can it drive OpenCode / Xcode / Claude Code? |
-|---|---|---|
-| `Agent` | tool calling validated through mlx_lm.server's Qwen parser | **Yes — only these** |
-| `Code` | strong code generation, but tool calling not validated here | No — chat / refactor only |
-| `Chat` | general assistant / generation | No |
-| `Reasoning` | extended reasoning / thinking | No |
-| `Pentesting` | security / offensive chat | No — chat only |
-| `Uncensored` | reduced-refusal (safety training removed) | No — chat only, no shell/network/secrets |
+| Primary tag | Meaning |
+|---|---|
+| `Agent` | agentic / tool-calling oriented |
+| `Code` | strong code generation |
+| `Chat` | general assistant / generation |
+| `Reasoning` | extended reasoning / thinking |
+| `Pentesting` | security / offensive |
+| `Uncensored` | reduced-refusal (safety training removed) |
 
 Modifier tags (add after the primary tag when true): `OptiQ` (requires the
 `mlx-optiq` runtime), `Distill` (community distill, oQe quant). There is **no
 `Vision` tag** — image input isn't served (see below).
 
-**The agent-capable set is exactly the Qwen3 family — 7 models** (the only ones
-with `agentNote == nil`):
-
-| repoID | weightGB | maxContext | thinking |
-|---|---|---|---|
-| `mlx-community/Qwen3.5-35B-A3B-4bit` | 18 | 262144 | yes |
-| `mlx-community/Qwen3.6-35B-A3B-4bit` | 18 | 262144 | yes |
-| `mlx-community/Qwen3.8-27B-4bit` | 14 | 262144 | yes |
-| `mlx-community/Qwen3-14B-4bit` | 7 | 40960 | yes |
-| `mlx-community/Qwen3.5-9B-4bit` | 6 | 262144 | yes |
-| `mlx-community/Qwen3.5-4B-4bit` | 3.03 | 262144 | yes |
-| `mlx-community/Qwen3.5-2B-4bit` | 1.72 | 262144 | yes |
-
-Do **not** switch to `Qwen3-Coder-30B-A3B`, `Qwen3-Coder-Next`, or
-`Qwen2.5-Coder-7B` for agents — they emit tool calls the server can't parse and
-stall the loop. Every non-agent model carries a non-nil `agentNote` explaining
-why; `agentNote == nil` is reserved for the 7 validated agent models above.
-
-OptiQ models (`Qwen3.8-27B-{Uncensored,OBLITERATED}-OptiQ-4bit`) and all
-reduced-refusal/uncensored models are chat-only: tool calling is declared but
-not validated, so they get no shell/network/secrets access.
+**Every model is served with full tool/agent capability — nothing is blocked.**
+The OpenCode config writes `"tools": true` for every model, and no model carries an
+`agentNote` restriction. The user is responsible for how each model is used. A model
+whose tool-call format differs from the server's Qwen parser (e.g. the Qwen3-Coder
+line, `Qwen2.5-Coder`) or that ships no chat template may not *reliably* round-trip
+tool calls — that is a model limitation, not a restriction this app imposes.
 
 **No model serves image input — every model is text-only.** `mlx_lm.server`'s
 image-processor registry (`mlx_lm/processors/__init__.py` → `PROCESSORS`) only
@@ -141,12 +126,9 @@ mlx-lm later gains image processors for `qwen3_5` / `gemma4` / `mistral3`, revis
 3. Classify: first `highlight` = one of the six primary tags. Do **not** add a
    `Vision` tag — image input isn't served (see above). Add `Distill` / `OptiQ` as
    applicable.
-4. Set a non-nil `agentNote` for **every** model that isn't a validated Qwen3-family
-   agent — one sentence on what it's for and why agent work isn't validated. If the
-   card advertises tool-use / agentic ability but the model is uncensored/reduced-
-   refusal (or otherwise unvalidated), say so explicitly: it's kept chat-only here
-   (no shell/network/secrets) *despite* its agentic design. Record special
-   requirements too — e.g. "enable thinking; degrades severely without it".
+4. Do **not** set `agentNote` — no model is blocked from tool/agent use; the field
+   stays `nil` for every model. Record any special requirement (e.g. "enable
+   thinking; degrades severely without it") in `summary` instead.
 5. Keep `summary` to one sentence stating the capability. `summary` and the first
    `highlight` (the primary tag) are the model's **description + tag**, surfaced in
    *both* the macOS app and the CLI picker — the two must stay in sync (step 6).

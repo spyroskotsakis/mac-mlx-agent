@@ -275,14 +275,14 @@ generation but aren't the pick for agentic work. Pick one that fits your RAM;
 **Capability tags.** Each model is labeled with a short primary tag so you can
 tell at a glance what it can and can't do:
 
-| Tag | What it means | Drives an agent? |
-|---|---|---|
-| **Agent** | validated tool calling through `mlx_lm.server` (Qwen3 family only) | ✅ OpenCode / Xcode / Claude Code |
-| **Code** | strong at code, but agent tool calling isn't validated | ❌ chat / refactor only |
-| **Chat** | general assistant / generation | ❌ |
-| **Reasoning** | extended reasoning / thinking | ❌ |
-| **Pentesting** | security / offensive chat (authorized use only) | ❌ chat only |
-| **Uncensored** | reduced-refusal, experimental | ❌ chat only — no shell/network/secrets |
+| Tag | What it means |
+|---|---|
+| **Agent** | agentic / tool-calling oriented |
+| **Code** | strong code generation |
+| **Chat** | general assistant / generation |
+| **Reasoning** | extended reasoning / thinking |
+| **Pentesting** | security / offensive |
+| **Uncensored** | reduced-refusal (safety training removed) |
 
 There is **no `Vision` tag** — no model here serves image input (see below).
 The same tags appear as `#hashtags` under the selected model in the menu-bar app,
@@ -292,42 +292,42 @@ and are mirrored in the table's **Agent** column.
 |-------|:------:|-------------------|-------------|----------|:-----:|-------|
 | `mlx-community/Qwen3.5-35B-A3B-4bit` | 35B (3B active) | 18 GB | 262,144 | ✅ | ✅ | **Default.** MoE coder (3B active → fast); tool calls parse reliably. |
 | `mlx-community/Qwen3.6-35B-A3B-4bit` | 35B (3B active) | 18 GB | 262,144 | ✅ | ✅ | MoE coder (3B active), newer sibling of the default. |
-| `ornith-ai/Ornith-1.5-35B-A3B-MLX-4bit` | 35B (3B active) | 19.51 GB | 262,144 | — | — | Ornith self-improving coding MoE (Qwen3.5-based); chat/generation only — ships no chat template. |
+| `ornith-ai/Ornith-1.5-35B-A3B-MLX-4bit` | 35B (3B active) | 19.51 GB | 262,144 | — | — | Ornith self-improving coding MoE (Qwen3.5-based); ships no chat template. |
 | `mlx-community/Qwen3.8-27B-4bit` | 27B | 14 GB | 262,144 | ✅ | ✅ | 27B mid-size option. |
 | `mlx-community/Qwen3-14B-4bit` | 14B | 7 GB | 40,960 | ✅ | ✅ | Smaller; natural pick for "concurrent requests" mode. |
 | `mlx-community/Qwen3.5-9B-4bit` | 9B | 6 GB | 262,144 | ✅ | ✅ | Compact daily driver. |
-| `mlx-community/Qwen2.5-Coder-7B-Instruct-4bit` | 7B | 4.28 GB | 32,768 | — | — | Code specialist; chat/generation only. |
+| `mlx-community/Qwen2.5-Coder-7B-Instruct-4bit` | 7B | 4.28 GB | 32,768 | — | — | Code specialist. |
 | `mlx-community/Qwen3.5-4B-4bit` | 4B | 3.03 GB | 262,144 | ✅ | ✅ | Tiny + long context. |
 | `mlx-community/Qwen3.5-2B-4bit` | 2B | 1.72 GB | 262,144 | ✅ | ✅ | Smallest Qwen. |
-| `RolanDorisTech/Qwen3.8-4B-Distill-MLX-4bit` | 4B | 2.49 GB | 262,144 | ✅ | — | Community Qwen3.8-4B distill (oQe 4-bit); chat/generation only. |
-| `RolanDorisTech/Qwen3.8-2B-Distill-MLX-4bit` | 2B | 1.11 GB | 262,144 | ✅ | — | Community Qwen3.8-2B distill (oQe 4-bit); chat/generation only. |
-| `mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit` | 24B | 15.10 GB | 393,216 | — | — | Mistral coding specialist; chat/generation only. |
-| `mlx-community/gemma-4-12B-it-qat-4bit` | 12B | 10.99 GB | 262,144 | — | — | Google, multilingual; chat/generation only. |
-| `mlx-community/Ministral-3-8B-Instruct-2512-4bit` | 8B | 5.60 GB | 262,144 | — | — | Edge/on-device, multilingual; chat/generation only. |
-| `mlx-community/gemma-4-e4b-it-4bit` | 4.5B effective | 5.15 GB | 131,072 | — | — | Efficient; chat/generation only. |
-| `mlx-community/gemma-4-e2b-it-4bit` | 2.3B effective | 3.55 GB | 131,072 | — | — | Small; chat/generation only. |
-| `mlx-community/Ministral-3-3B-Instruct-2512-4bit` | 3B | 2.75 GB | 262,144 | — | — | Tiny, multilingual; chat/generation only. |
-| `mlx-community/Llama-3.2-3B-Instruct-4bit` | 3B | 1.81 GB | 131,072 | — | — | On-device, multilingual; chat/generation only. |
-| `mlx-community/Qwen3-Coder-Next-4bit` | 80B (3B active) | 44.84 GB | 262,144 | — | — | Next-gen Qwen coder MoE (10 active); chat/generation only. |
-| `mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit` | 30B (3B active) | 17.18 GB | 262,144 | — | — | Coder MoE; drops the `<tool_call>` wrapper → chat/generation only. |
-| `mlx-community/DeepSeek-R1-Distill-Qwen-32B-4bit` | 32B | 18.43 GB | 131,072 | — | — | DeepSeek-R1 reasoning distilled into Qwen 32B; chat/generation only. |
-| `mlx-community/gpt-oss-120b-MXFP4-Q8` | 117B (5.1B active) | 63.39 GB | 131,072 | — | — | OpenAI's 120B MoE; thinking model, chat/generation only (needs a maxed-out Mac). |
-| `mlx-community/gpt-oss-20b-MXFP4-Q8` | 21B (3.6B active) | 12.08 GB | 131,072 | — | — | OpenAI's 20B MoE; thinking model, chat/generation only. |
-| `mlx-community/gemma-4-26B-A4B-it-qat-4bit` | 26B (4B active) | 15.61 GB | 262,144 | — | — | Google 26B-A4B MoE, **QAT** (quantization-aware) 4-bit — the higher-quality build; chat/generation only. |
-| `mlx-community/gemma-4-26b-a4b-it-4bit` | 26B (4B active) | 15.34 GB | 262,144 | — | — | Google 26B-A4B MoE, **standard (non-QAT)** 4-bit — same assistant, slightly smaller with a small quality tradeoff; chat/generation only. |
-| `mlx-community/GLM-4.7-Flash-4bit` | 30B (3B active) | 16.85 GB | 202,752 | — | — | Zhipu GLM-4.7-Flash MoE; chat/generation only. |
-| `mlx-community/LFM2-24B-A2B-4bit` | 24B (2B active) | 12.49 GB | 128,000 | — | — | Liquid AI 24B-A2B MoE; chat/generation only. |
-| `mlx-community/LFM2.5-1.2B-Instruct-4bit` | 1.2B | 0.66 GB | 128,000 | — | — | Liquid AI tiny 1.2B; chat/generation only. |
-| `tthoman79/WhiteRabbitNeo-V3-7B-mlx-8bit` | 7B | 7.62 GB | 32,768 | — | — | **Pentesting** — code review, vuln discussion, DevSecOps (Qwen2.5-Coder fine-tune); 8-bit, chat only. |
-| `tthoman79/Foundation-Sec-8B-Reasoning-mlx-8bit` | 8B | 8.03 GB | 131,072 | — | — | **Pentesting** — findings analysis, vuln prioritization, threat modeling; 8-bit, chat only. |
-| `mlx-community/glm-4.7-flash-abliterated-8bit` | 30B (3B active) | 29.94 GB | 202,752 | — | — | **Uncensored** — huihui-ai abliterated; 8-bit, chat only, experimental. |
-| `mlx-community/GLM-4.7-Flash-Derestricted-8bit-gs32` | 30B (3B active) | 29.94 GB | 202,752 | — | — | **Uncensored** — koute derestricted; 8-bit, chat only, experimental. |
-| `Foresee/Qwen3.8-9B-heretic-uncensored-5bit-MLX` | 9B | 6.9 GB | 262,144 | ✅ | — | **Uncensored** — Qwen3.8-9B Heretic Uncensored; 5-bit, chat only, experimental. |
-| `avan-ag/Qwen3.5-4B-Uncensored-MLX-4bit` | 4B | 2.37 GB | 262,144 | ✅ | — | **Uncensored** — Qwen3.5-4B (Heretic-based); 4-bit, chat only, experimental. |
-| `froggeric/Qwen3.6-35B-A3B-Uncensored-Heretic-MLX-4bit` | 35B (3B active) | 20.40 GB | 262,144 | ✅ | — | **Uncensored** — Qwen3.6-35B-A3B Heretic Uncensored; 4-bit, chat only, experimental. |
-| `FrostWolfAI/Frost-Cyber-Mini-Uncensored-v1.1-MLX-8bit` | 4B | 4.37 GB | 131,072 | ✅ | — | **Uncensored** — abliterated cybersecurity agentic tool-use (Spark2.5); 8-bit, chat only, needs thinking. |
-| `mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit` | 27B | 19.8 GB | 262,144 | ✅ | — | **Uncensored (OptiQ)** — reduced-refusal Qwen3.8 in mixed 4/8-bit; requires `mlx-optiq`, experimental, chat only. |
-| `mlx-community/Qwen3.8-27B-OBLITERATED-OptiQ-4bit` | 27B | 20.7 GB | 262,144 | ✅ | — | **Uncensored (OptiQ)** — reduced-refusal Qwen3.8 in mixed 4/8-bit; requires `mlx-optiq`, experimental, chat only. |
+| `RolanDorisTech/Qwen3.8-4B-Distill-MLX-4bit` | 4B | 2.49 GB | 262,144 | ✅ | — | Community Qwen3.8-4B distill (oQe 4-bit). |
+| `RolanDorisTech/Qwen3.8-2B-Distill-MLX-4bit` | 2B | 1.11 GB | 262,144 | ✅ | — | Community Qwen3.8-2B distill (oQe 4-bit). |
+| `mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit` | 24B | 15.10 GB | 393,216 | — | — | Mistral coding specialist. |
+| `mlx-community/gemma-4-12B-it-qat-4bit` | 12B | 10.99 GB | 262,144 | — | — | Google, multilingual. |
+| `mlx-community/Ministral-3-8B-Instruct-2512-4bit` | 8B | 5.60 GB | 262,144 | — | — | Edge/on-device, multilingual. |
+| `mlx-community/gemma-4-e4b-it-4bit` | 4.5B effective | 5.15 GB | 131,072 | — | — | Efficient. |
+| `mlx-community/gemma-4-e2b-it-4bit` | 2.3B effective | 3.55 GB | 131,072 | — | — | Small. |
+| `mlx-community/Ministral-3-3B-Instruct-2512-4bit` | 3B | 2.75 GB | 262,144 | — | — | Tiny, multilingual. |
+| `mlx-community/Llama-3.2-3B-Instruct-4bit` | 3B | 1.81 GB | 131,072 | — | — | On-device, multilingual. |
+| `mlx-community/Qwen3-Coder-Next-4bit` | 80B (3B active) | 44.84 GB | 262,144 | — | — | Next-gen Qwen coder MoE (10 active). |
+| `mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit` | 30B (3B active) | 17.18 GB | 262,144 | — | — | Coder MoE; drops the `<tool_call>` wrapper. |
+| `mlx-community/DeepSeek-R1-Distill-Qwen-32B-4bit` | 32B | 18.43 GB | 131,072 | — | — | DeepSeek-R1 reasoning distilled into Qwen 32B. |
+| `mlx-community/gpt-oss-120b-MXFP4-Q8` | 117B (5.1B active) | 63.39 GB | 131,072 | — | — | OpenAI's 120B MoE; thinking model (needs a maxed-out Mac). |
+| `mlx-community/gpt-oss-20b-MXFP4-Q8` | 21B (3.6B active) | 12.08 GB | 131,072 | — | — | OpenAI's 20B MoE; thinking model. |
+| `mlx-community/gemma-4-26B-A4B-it-qat-4bit` | 26B (4B active) | 15.61 GB | 262,144 | — | — | Google 26B-A4B MoE, **QAT** (quantization-aware) 4-bit — the higher-quality build. |
+| `mlx-community/gemma-4-26b-a4b-it-4bit` | 26B (4B active) | 15.34 GB | 262,144 | — | — | Google 26B-A4B MoE, **standard (non-QAT)** 4-bit — same assistant, slightly smaller with a small quality tradeoff. |
+| `mlx-community/GLM-4.7-Flash-4bit` | 30B (3B active) | 16.85 GB | 202,752 | — | — | Zhipu GLM-4.7-Flash MoE. |
+| `mlx-community/LFM2-24B-A2B-4bit` | 24B (2B active) | 12.49 GB | 128,000 | — | — | Liquid AI 24B-A2B MoE. |
+| `mlx-community/LFM2.5-1.2B-Instruct-4bit` | 1.2B | 0.66 GB | 128,000 | — | — | Liquid AI tiny 1.2B. |
+| `tthoman79/WhiteRabbitNeo-V3-7B-mlx-8bit` | 7B | 7.62 GB | 32,768 | — | — | **Pentesting** — code review, vuln discussion, DevSecOps (Qwen2.5-Coder fine-tune); 8-bit. |
+| `tthoman79/Foundation-Sec-8B-Reasoning-mlx-8bit` | 8B | 8.03 GB | 131,072 | — | — | **Pentesting** — findings analysis, vuln prioritization, threat modeling; 8-bit. |
+| `mlx-community/glm-4.7-flash-abliterated-8bit` | 30B (3B active) | 29.94 GB | 202,752 | — | — | **Uncensored** — huihui-ai abliterated; 8-bit, experimental. |
+| `mlx-community/GLM-4.7-Flash-Derestricted-8bit-gs32` | 30B (3B active) | 29.94 GB | 202,752 | — | — | **Uncensored** — koute derestricted; 8-bit, experimental. |
+| `Foresee/Qwen3.8-9B-heretic-uncensored-5bit-MLX` | 9B | 6.9 GB | 262,144 | ✅ | — | **Uncensored** — Qwen3.8-9B Heretic Uncensored; 5-bit, experimental. |
+| `avan-ag/Qwen3.5-4B-Uncensored-MLX-4bit` | 4B | 2.37 GB | 262,144 | ✅ | — | **Uncensored** — Qwen3.5-4B (Heretic-based); 4-bit, experimental. |
+| `froggeric/Qwen3.6-35B-A3B-Uncensored-Heretic-MLX-4bit` | 35B (3B active) | 20.40 GB | 262,144 | ✅ | — | **Uncensored** — Qwen3.6-35B-A3B Heretic Uncensored; 4-bit, experimental. |
+| `FrostWolfAI/Frost-Cyber-Mini-Uncensored-v1.1-MLX-8bit` | 4B | 4.37 GB | 131,072 | ✅ | — | **Uncensored** — abliterated cybersecurity agentic tool-use (Spark2.5); 8-bit, needs thinking. |
+| `mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit` | 27B | 19.8 GB | 262,144 | ✅ | — | **Uncensored (OptiQ)** — reduced-refusal Qwen3.8 in mixed 4/8-bit; requires `mlx-optiq`, experimental. |
+| `mlx-community/Qwen3.8-27B-OBLITERATED-OptiQ-4bit` | 27B | 20.7 GB | 262,144 | ✅ | — | **Uncensored (OptiQ)** — reduced-refusal Qwen3.8 in mixed 4/8-bit; requires `mlx-optiq`, experimental. |
 
 > **QAT vs standard 4-bit:** two variants of the same model are listed — a
 > `…-qat-4bit` build (**quantization-aware trained**: the 4-bit rounding was part
@@ -338,14 +338,12 @@ and are mirrored in the table's **Agent** column.
 
 > **Security / pentesting models** (WhiteRabbitNeo, Foundation-Sec) are 8-bit
 > quantizations for cybersecurity lab work — code review, vulnerability analysis,
-> threat modeling, and DevSecOps. They're chat/generation models, not agents, and
-> are for **authorized** testing on systems you own or are cleared to assess.
+> threat modeling, and DevSecOps. Use them for **authorized** testing on systems
+> you own or are cleared to assess.
 
 > **Reduced-refusal (abliterated/derestricted), Uncensored (4-bit/5-bit), and
-> Uncensored/Obliterated (OptiQ) models** are experimental chat-only models with
-> safety/refusal training removed.
-> They are **not** wired to tool calling, so selecting one does not grant it shell,
-> network, or secrets access. The OptiQ variants also require the `mlx-optiq`
+> Uncensored/Obliterated (OptiQ) models** are experimental models with
+> safety/refusal training removed. The OptiQ variants require the `mlx-optiq`
 > runtime (see Step 1). Treat their output with caution and evaluate only on
 > authorized or sandboxed targets.
 
@@ -360,30 +358,20 @@ and are mirrored in the table's **Agent** column.
 > of `curl`/OpenAI SDK calls and keep the OpenCode config text-only. If `mlx-lm`
 > later adds image processors for `qwen3_5` / `gemma4` / `mistral3`, revisit.
 
-> **Use only the Qwen3-family models for agent/tool-calling work.** The rest of
-> the list (Llama, Gemma, Ministral, Devstral, GPT-OSS, GLM, LFM, DeepSeek-R1,
-> and the Qwen coder variants) are chat and generation models — as coding agents
-> they emit raw tool-call JSON that mlx_lm.server can't parse, so
-> OpenCode/Xcode/Claude Code just see the raw text (e.g. `{ "name": …, "parameters": {} }`)
-> instead of an answer. (`Qwen3-Coder-30B-A3B` drops the `<tool_call>` wrapper,
-> `Qwen3-Coder-Next` is unvalidated, and `Qwen2.5-Coder-14B` wraps its call in
+> **Some models emit tool calls in a format `mlx_lm.server`'s parser can't handle.**
+> The Qwen coder variants and some non-Qwen models may return raw tool-call JSON as
+> plain text (e.g. `{ "name": …, "parameters": {} }`) instead of an answer, so they
+> may not *reliably* round-trip agent loops. That's a model/parser limitation, not
+> a restriction the app imposes. (`Qwen3-Coder-30B-A3B` drops the `<tool_call>`
+> wrapper, `Qwen3-Coder-Next` is unvalidated, and `Qwen2.5-Coder` wraps its call in
 > `<tools>` instead — same symptom.)
 >
-> The **Uncensored/Obliterated OptiQ** models are Qwen3.8-family but their tool
-> calling is **declared, not validated** against this stack yet — treat them as
-> chat-only for now.
->
-> The **Qwen3.8-4B/2B Distill** models (oQe mixed 4/5/6-bit) are community
-> distills; they load on recent `mlx-lm`, but tool calling is **not yet
-> validated** against this stack — treat them as chat/generation for now.
->
-> **GPT-OSS is a thinking model, not an agent.** It always answers inside
+> **GPT-OSS is a thinking model.** It always answers inside
 > deliberative-alignment tags (`<|channel|>analysis<|message|> … <|end|>` then
 > `<|channel|>final<|message|> … <|return|>`). The app (and `start_server.sh`)
 > split that into a `reasoning` field plus a clean `content` answer via a small
 > patch to mlx-lm's thinking detection — see [“GPT-OSS / mlx-lm patch”](#gpt-oss--mlx-lm-patch).
-> It still has no tool calling, so it's chat/generation only, not for
-> OpenCode/Claude Code agent work.
+> It has no tool calling (a model limitation).
 
 Download the model you picked (or run `./setup.sh`, which does this for you —
 the server also auto-downloads on first launch). The repo ids are in the table
@@ -884,8 +872,8 @@ if "<|channel|>" in vocab and "<|message|>" in vocab:
     )
 ```
 
-GPT-OSS still has no tool calling, so even with clean replies it remains a
-chat/generation model — it can't drive OpenCode/Claude Code agent loops.
+GPT-OSS still has no tool calling, so even with clean replies it can't drive
+agent loops that need tools — a model limitation, not a restriction.
 
 ---
 

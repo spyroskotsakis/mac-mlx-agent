@@ -6,6 +6,24 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.25.0] — 2026-11-23
+
+### Changed
+
+- **Full tool/agent capability for every model — no safety restrictions.** Removed
+  the per-model `agentNote` "chat-only / no shell/network/secrets" gate and the
+  "agent-capable = Qwen3 only" rule. Every model is now served with tool calling
+  enabled (`"tools": true` in the OpenCode config, tools passed through for Claude
+  Code), and the user is responsible for how each model is used. The primary tag
+  now describes the model's strength, not a restriction.
+
+### Removed
+
+- **Dead code and blocker language.** Dropped the `agentNote` field and the
+  `toolCallingWarning` UI, and removed "chat-only / chat/generation only / no
+  tools" wording from model summaries, the `README.md` / `MLXServer/README.md`
+  docs, `CLAUDE.md`, `AGENTS.md`, and `setup.sh` descriptions.
+
 ## [1.24.1] — 2026-11-23
 
 ### Fixed

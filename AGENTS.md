@@ -28,5 +28,4 @@ that reads `AGENTS.md` instead of `CLAUDE.md`.
 - **No Claude Code / AI-assistant attribution anywhere** — not in files, docs,
   release notes, or git commit messages.
 
-See [`CLAUDE.md`](CLAUDE.md) for the complete map: the agent-capable set (the Qwen3
-family only), the tag vocabulary, the ports, and the release checklist.
+See [`CLAUDE.md`](CLAUDE.md) for the complete map: the tag vocabulary, the ports, and the release checklist.

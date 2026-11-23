@@ -1236,13 +1236,6 @@ struct ContentView: View {
                 }
             }
 
-            if let warning = server.toolCallingWarning {
-                Label(warning, systemImage: "exclamationmark.triangle.fill")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
             Link(destination: server.selectedModel.hfURL) {
                 Label("View on Hugging Face", systemImage: "arrow.up.right.square")
                     .font(.caption)
