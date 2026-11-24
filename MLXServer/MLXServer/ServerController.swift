@@ -300,6 +300,12 @@ final class ServerController: ObservableObject {
                     params: "1.2B",
                     summary: "Liquid AI's tiny 1.2B — near-instant; agent integration isn't validated.",
                     highlights: ["Chat", "Tiny", "128K ctx"]),
+        ModelOption(repoID: "mlx-community/Apertus-8B-Instruct-2509-bf16",
+                    displayName: "Apertus 8B Instruct (BF16)",
+                    profile: ModelProfile(maxContext: 65_536, thinkingSupported: true, weightGB: 16.11),
+                    params: "8B",
+                    summary: "Swiss AI Apertus 8B Instruct — general assistant with tool calling and thinking, in BF16.",
+                    highlights: ["Chat", "BF16", "64K ctx"]),
         // --- Security / pentesting (8-bit) ---
         ModelOption(repoID: "tthoman79/WhiteRabbitNeo-V3-7B-mlx-8bit",
                     displayName: "WhiteRabbitNeo V3 7B (8-bit)",

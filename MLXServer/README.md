@@ -9,7 +9,7 @@ lives in the menu bar, next to the clock.
 
 - **Start / Stop** the MLX-LM server (OpenAI-compatible,
   `http://127.0.0.1:8080/v1`).
-- **Pick the model** — 51 models (the Qwen3/3.5/3.6/3.8 family, Qwen2.5-Coder,
+- **Pick the model** — 52 models (the Qwen3/3.5/3.6/3.8 family, Qwen2.5-Coder,
   Devstral, Gemma 4, Ministral 3, Llama 3.2, GPT-OSS, GLM-4.7, LFM2, DeepSeek-R1,
   the cybersecurity set — WhiteRabbitNeo, Foundation-Sec, CyberStrike-OffSec,
   LOREA Cyber, LOREA Cyber Coder, Qwensploit, Apriel, Cyber-Tiel Coder, Uraion

@@ -15,7 +15,7 @@ and it serves a local OpenAI-compatible API for Xcode, OpenCode, and Claude Code
 It installs `mlx-lm` (and `mlx-optiq`, for OptiQ models), downloads the model, and
 writes the OpenCode + Claude Code configs for you.
 
-Prefer the terminal? The **same 51-model stack** runs from the **CLI** —
+Prefer the terminal? The **same 52-model stack** runs from the **CLI** —
 [`setup.sh`](#quick-start-one-command-non-gui) installs the prerequisites and
 downloads a model, then [`start_server.sh`](#step-3-start-the-server) starts the
 server with the same memory-safety and sampling flags the app uses.
@@ -231,7 +231,7 @@ writes the OpenCode + Claude Code configs that point at it.
 ./setup.sh --model mlx-community/Qwen3-14B-4bit     # a specific model
 ```
 
-The menu offers the same 51 models as the app (see the table in Step 2).
+The menu offers the same 52 models as the app (see the table in Step 2).
 Everything below is the manual, step-by-step version of what `setup.sh` does.
 
 ---
@@ -318,6 +318,7 @@ and are mirrored in the table's **Agent** column.
 | `mlx-community/GLM-4.7-Flash-4bit` | 30B (3B active) | 16.85 GB | 202,752 | — | — | Zhipu GLM-4.7-Flash MoE. |
 | `mlx-community/LFM2-24B-A2B-4bit` | 24B (2B active) | 12.49 GB | 128,000 | — | — | Liquid AI 24B-A2B MoE. |
 | `mlx-community/LFM2.5-1.2B-Instruct-4bit` | 1.2B | 0.66 GB | 128,000 | — | — | Liquid AI tiny 1.2B. |
+| `mlx-community/Apertus-8B-Instruct-2509-bf16` | 8B | 16.11 GB | 65,536 | ✅ | — | Swiss AI Apertus 8B Instruct — general assistant with tool calling and thinking; BF16. |
 | `tthoman79/WhiteRabbitNeo-V3-7B-mlx-8bit` | 7B | 7.62 GB | 32,768 | — | — | **Pentesting** — code review, vuln discussion, DevSecOps (Qwen2.5-Coder fine-tune); 8-bit. |
 | `tthoman79/Foundation-Sec-8B-Reasoning-mlx-8bit` | 8B | 8.03 GB | 131,072 | — | — | **Pentesting** — findings analysis, vuln prioritization, threat modeling; 8-bit. |
 | `ahmedandaloes/CyberStrike-OffSec-35B-MLX-6bit` | 35B (3B active) | 28.17 GB | 262,144 | — | — | **Pentesting** — offensive-security Qwen3.6-35B-A3B MoE (red-team, pen-testing, CTF); 6-bit. |

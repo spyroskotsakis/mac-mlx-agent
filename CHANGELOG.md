@@ -6,6 +6,15 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.29.0] — 2026-11-24
+
+### Added
+
+- **Apertus 8B Instruct (52 total).** Added `mlx-community/Apertus-8B-Instruct-2509-bf16`
+  — Swiss AI's general assistant with tool calling and thinking, in BF16
+  (16.11 GB, 64K context). Mirrored across the app, `setup.sh`, `start_server.sh`,
+  and the README.
+
 ## [1.28.0] — 2026-11-24
 
 ### Added

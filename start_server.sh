@@ -102,6 +102,7 @@ THINKING_MODELS=(
   "UraionLabs/Uraion-Cyber-V1.0-MLX-oQ4e"
   "TheCluster/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive-MLX-bf16"
   "mlx-community/SmolLM3-3B-abliterated-bf16"
+  "mlx-community/Apertus-8B-Instruct-2509-bf16"
 )
 
 supports_thinking() {

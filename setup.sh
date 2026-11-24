@@ -55,6 +55,7 @@ MODELS_REPO=(
   "mlx-community/GLM-4.7-Flash-4bit"
   "mlx-community/LFM2-24B-A2B-4bit"
   "mlx-community/LFM2.5-1.2B-Instruct-4bit"
+  "mlx-community/Apertus-8B-Instruct-2509-bf16"
   "tthoman79/WhiteRabbitNeo-V3-7B-mlx-8bit"
   "tthoman79/Foundation-Sec-8B-Reasoning-mlx-8bit"
   "ahmedandaloes/CyberStrike-OffSec-35B-MLX-6bit"
@@ -108,6 +109,7 @@ MODELS_NAME=(
   "GLM-4.7-Flash (4-bit)"
   "LFM2 24B A2B (4-bit)"
   "LFM2.5 1.2B Instruct (4-bit)"
+  "Apertus 8B Instruct (BF16)"
   "WhiteRabbitNeo V3 7B (8-bit)"
   "Foundation-Sec 8B Reasoning (8-bit)"
   "CyberStrike-OffSec 35B (6-bit)"
@@ -134,9 +136,9 @@ MODELS_NAME=(
   "Qwen3.8-27B Uncensored OptiQ (4-bit)"
   "Qwen3.8-27B OBLITERATED OptiQ (4-bit)"
 )
-MODELS_CTX=(262144 262144 262144 262144 40960 262144 32768 262144 262144 393216 262144 262144 131072 131072 262144 131072 262144 262144 131072 131072 131072 262144 262144 202752 128000 128000 32768 131072 262144 1048576 1048576 262400 262144 262144 1048576 262144 202752 202752 262144 262144 262144 131072 131072 262144 262144 262144 65536 262144 262144 262144 262144)
-MODELS_WGT=(18 18 19.51 14 7 6 4.28 3.03 1.72 15.10 10.99 5.60 5.15 3.55 2.75 1.81 44.84 17.18 18.43 63.39 12.08 15.61 15.34 16.85 12.49 0.66 7.62 8.03 28.17 5.04 5.67 8.12 21.63 17.18 10.15 22.13 29.94 29.94 6.9 2.37 20.40 4.37 2.32 7.28 4.43 4.43 6.15 2.49 1.11 19.8 20.7)
-MODELS_THINK=(yes yes no yes yes yes no yes yes no no no no no no no no no no no no no no no no no no no no yes yes no yes no yes yes no no yes yes yes yes yes yes yes no yes yes yes yes yes)
+MODELS_CTX=(262144 262144 262144 262144 40960 262144 32768 262144 262144 393216 262144 262144 131072 131072 262144 131072 262144 262144 131072 131072 131072 262144 262144 202752 128000 128000 65536 32768 131072 262144 1048576 1048576 262400 262144 262144 1048576 262144 202752 202752 262144 262144 262144 131072 131072 262144 262144 262144 65536 262144 262144 262144 262144)
+MODELS_WGT=(18 18 19.51 14 7 6 4.28 3.03 1.72 15.10 10.99 5.60 5.15 3.55 2.75 1.81 44.84 17.18 18.43 63.39 12.08 15.61 15.34 16.85 12.49 0.66 16.11 7.62 8.03 28.17 5.04 5.67 8.12 21.63 17.18 10.15 22.13 29.94 29.94 6.9 2.37 20.40 4.37 2.32 7.28 4.43 4.43 6.15 2.49 1.11 19.8 20.7)
+MODELS_THINK=(yes yes no yes yes yes no yes yes no no no no no no no no no no no no no no no no no yes no no no yes yes no yes no yes yes no no yes yes yes yes yes yes yes no yes yes yes yes yes)
 MODELS_TAG=(
   "Agent"
   "Agent"
@@ -157,6 +159,7 @@ MODELS_TAG=(
   "Code"
   "Code"
   "Reasoning"
+  "Chat"
   "Chat"
   "Chat"
   "Chat"
@@ -217,6 +220,7 @@ MODELS_DESC=(
   "Zhipu's GLM-4.7-Flash MoE — fast general assistant with large context."
   "Liquid AI's 24B-A2B MoE — efficient; agent integration isn't validated."
   "Liquid AI's tiny 1.2B — near-instant; agent integration isn't validated."
+  "Swiss AI Apertus 8B Instruct — general assistant with tool calling and thinking, in BF16."
   "Security-focused Qwen2.5-Coder fine-tune for code review, vulnerability discussion, and DevSecOps."
   "Security reasoning model for findings analysis, vulnerability prioritization, and threat modeling."
   "Offensive-security Qwen3.6-35B-A3B MoE (red-team, pen-testing, CTF) in 6-bit."
