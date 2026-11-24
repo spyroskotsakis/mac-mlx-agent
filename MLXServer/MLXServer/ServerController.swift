@@ -1199,6 +1199,12 @@ final class ServerController: ObservableObject {
         modelMessage = ""
     }
 
+    /// Whether the given repo is already fully in the local HuggingFace cache.
+    /// Used by the model picker to badge already-downloaded models.
+    func isModelDownloaded(_ repoID: String) -> Bool {
+        Self.modelIsCached(repoID: repoID)
+    }
+
     /// On-disk bytes of the currently-selected model in the HF cache (0 if absent).
     /// Follows the shared-blob symlinks so the multi-GB weights are counted, not
     /// just the small files huggingface_hub keeps inline in the repo folder.

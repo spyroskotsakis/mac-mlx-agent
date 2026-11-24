@@ -1209,7 +1209,15 @@ struct ContentView: View {
             Text("Model").font(.subheadline).foregroundStyle(.secondary)
             Picker("Model", selection: $server.selectedModel) {
                 ForEach(ServerController.availableModels) { model in
-                    Text("\(model.displayName) — \(model.params)").tag(model)
+                    HStack(spacing: 4) {
+                        Text("\(model.displayName) — \(model.params)")
+                        if server.isModelDownloaded(model.repoID) {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .foregroundStyle(.green)
+                                .font(.caption)
+                        }
+                    }
+                    .tag(model)
                 }
             }
             .labelsHidden()

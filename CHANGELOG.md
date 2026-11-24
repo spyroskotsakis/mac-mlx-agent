@@ -6,6 +6,14 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.30.0] — 2026-11-24
+
+### Added
+
+- **Downloaded-model badge in the picker.** Models already in the local HuggingFace
+  cache now show a small green down-arrow badge next to their name in the model
+  dropdown, so you can tell at a glance which ones are downloaded.
+
 ## [1.29.0] — 2026-11-24
 
 ### Added
