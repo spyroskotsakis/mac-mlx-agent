@@ -15,7 +15,7 @@ and it serves a local OpenAI-compatible API for Xcode, OpenCode, and Claude Code
 It installs `mlx-lm` (and `mlx-optiq`, for OptiQ models), downloads the model, and
 writes the OpenCode + Claude Code configs for you.
 
-Prefer the terminal? The **same 48-model stack** runs from the **CLI** —
+Prefer the terminal? The **same 51-model stack** runs from the **CLI** —
 [`setup.sh`](#quick-start-one-command-non-gui) installs the prerequisites and
 downloads a model, then [`start_server.sh`](#step-3-start-the-server) starts the
 server with the same memory-safety and sampling flags the app uses.
@@ -231,7 +231,7 @@ writes the OpenCode + Claude Code configs that point at it.
 ./setup.sh --model mlx-community/Qwen3-14B-4bit     # a specific model
 ```
 
-The menu offers the same 48 models as the app (see the table in Step 2).
+The menu offers the same 51 models as the app (see the table in Step 2).
 Everything below is the manual, step-by-step version of what `setup.sh` does.
 
 ---
@@ -336,6 +336,9 @@ and are mirrored in the table's **Agent** column.
 | `FrostWolfAI/Frost-Cyber-Mini-Uncensored-v1.1-MLX-8bit` | 4B | 4.37 GB | 131,072 | ✅ | — | **Uncensored** — abliterated cybersecurity agentic tool-use (Spark2.5); 8-bit, needs thinking. |
 | `FrostWolfAI/Frost-Cyber-Mini-Uncensored-v1.1-MLX` | 4B | 2.32 GB | 131,072 | ✅ | — | **Uncensored** — abliterated cybersecurity agentic tool-use (Spark2.5); 4-bit, needs thinking. |
 | `cmdhawk/Cyber-Ornith-1.5-9B-OBLITERATED-MLX-6bit` | 9B | 7.28 GB | 262,144 | ✅ | — | **Uncensored** — obliterated Cyber-Ornith 9B; cybersecurity, terminal, Hermes-style tool calls. |
+| `TheCluster/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive-MLX-bf16` | 2B | 4.43 GB | 262,144 | ✅ | — | **Uncensored** — strongly uncensored Qwen3.5-2B (aggressive); BF16. |
+| `AITRADER/Jackrong-Qwen3.5-2B-Claude-Reasoning-abliterated-fp16-MLX` | 2B | 4.43 GB | 262,144 | — | — | **Uncensored** — reasoning-distilled, abliterated Qwen3.5-2B; FP16. |
+| `mlx-community/SmolLM3-3B-abliterated-bf16` | 3B | 6.15 GB | 65,536 | ✅ | — | **Uncensored** — general-purpose abliterated SmolLM3-3B; BF16. |
 | `mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit` | 27B | 19.8 GB | 262,144 | ✅ | — | **Uncensored (OptiQ)** — reduced-refusal Qwen3.8 in mixed 4/8-bit; requires `mlx-optiq`, experimental. |
 | `mlx-community/Qwen3.8-27B-OBLITERATED-OptiQ-4bit` | 27B | 20.7 GB | 262,144 | ✅ | — | **Uncensored (OptiQ)** — reduced-refusal Qwen3.8 in mixed 4/8-bit; requires `mlx-optiq`, experimental. |
 

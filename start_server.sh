@@ -100,6 +100,8 @@ THINKING_MODELS=(
   "cmdhawk/Cyber-Ornith-1.5-9B-OBLITERATED-MLX-6bit"
   "sahilchachra/Qwensploit-V2-9B-MXFP8"
   "UraionLabs/Uraion-Cyber-V1.0-MLX-oQ4e"
+  "TheCluster/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive-MLX-bf16"
+  "mlx-community/SmolLM3-3B-abliterated-bf16"
 )
 
 supports_thinking() {

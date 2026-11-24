@@ -73,6 +73,9 @@ MODELS_REPO=(
   "FrostWolfAI/Frost-Cyber-Mini-Uncensored-v1.1-MLX-8bit"
   "FrostWolfAI/Frost-Cyber-Mini-Uncensored-v1.1-MLX"
   "cmdhawk/Cyber-Ornith-1.5-9B-OBLITERATED-MLX-6bit"
+  "TheCluster/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive-MLX-bf16"
+  "AITRADER/Jackrong-Qwen3.5-2B-Claude-Reasoning-abliterated-fp16-MLX"
+  "mlx-community/SmolLM3-3B-abliterated-bf16"
   "RolanDorisTech/Qwen3.8-4B-Distill-MLX-4bit"
   "RolanDorisTech/Qwen3.8-2B-Distill-MLX-4bit"
   "mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit"
@@ -123,14 +126,17 @@ MODELS_NAME=(
   "Frost-Cyber-Mini Uncensored (8-bit)"
   "Frost-Cyber-Mini Uncensored (4-bit)"
   "Cyber-Ornith 9B Obliterated (6-bit)"
+  "Qwen3.5-2B Uncensored Aggressive (BF16)"
+  "Qwen3.5-2B Claude Reasoning Abliterated (FP16)"
+  "SmolLM3-3B Abliterated (BF16)"
   "Qwen3.8-4B Distill (4-bit)"
   "Qwen3.8-2B Distill (4-bit)"
   "Qwen3.8-27B Uncensored OptiQ (4-bit)"
   "Qwen3.8-27B OBLITERATED OptiQ (4-bit)"
 )
-MODELS_CTX=(262144 262144 262144 262144 40960 262144 32768 262144 262144 393216 262144 262144 131072 131072 262144 131072 262144 262144 131072 131072 131072 262144 262144 202752 128000 128000 32768 131072 262144 1048576 1048576 262400 262144 262144 1048576 262144 202752 202752 262144 262144 262144 131072 131072 262144 262144 262144 262144 262144)
-MODELS_WGT=(18 18 19.51 14 7 6 4.28 3.03 1.72 15.10 10.99 5.60 5.15 3.55 2.75 1.81 44.84 17.18 18.43 63.39 12.08 15.61 15.34 16.85 12.49 0.66 7.62 8.03 28.17 5.04 5.67 8.12 21.63 17.18 10.15 22.13 29.94 29.94 6.9 2.37 20.40 4.37 2.32 7.28 2.49 1.11 19.8 20.7)
-MODELS_THINK=(yes yes no yes yes yes no yes yes no no no no no no no no no no no no no no no no no no no no yes yes no yes no yes yes no no yes yes yes yes yes yes yes yes yes yes)
+MODELS_CTX=(262144 262144 262144 262144 40960 262144 32768 262144 262144 393216 262144 262144 131072 131072 262144 131072 262144 262144 131072 131072 131072 262144 262144 202752 128000 128000 32768 131072 262144 1048576 1048576 262400 262144 262144 1048576 262144 202752 202752 262144 262144 262144 131072 131072 262144 262144 262144 65536 262144 262144 262144 262144)
+MODELS_WGT=(18 18 19.51 14 7 6 4.28 3.03 1.72 15.10 10.99 5.60 5.15 3.55 2.75 1.81 44.84 17.18 18.43 63.39 12.08 15.61 15.34 16.85 12.49 0.66 7.62 8.03 28.17 5.04 5.67 8.12 21.63 17.18 10.15 22.13 29.94 29.94 6.9 2.37 20.40 4.37 2.32 7.28 4.43 4.43 6.15 2.49 1.11 19.8 20.7)
+MODELS_THINK=(yes yes no yes yes yes no yes yes no no no no no no no no no no no no no no no no no no no no yes yes no yes no yes yes no no yes yes yes yes yes yes yes no yes yes yes yes yes)
 MODELS_TAG=(
   "Agent"
   "Agent"
@@ -168,6 +174,9 @@ MODELS_TAG=(
   "Pentesting"
   "Pentesting"
   "Pentesting"
+  "Uncensored"
+  "Uncensored"
+  "Uncensored"
   "Uncensored"
   "Uncensored"
   "Uncensored"
@@ -226,6 +235,9 @@ MODELS_DESC=(
   "Abliterated cybersecurity agentic tool-use Spark2.5 fine-tune — enable thinking."
   "Abliterated cybersecurity agentic tool-use Spark2.5 fine-tune — enable thinking."
   "Obliterated Cyber-Ornith 9B — cybersecurity, terminal interaction, Hermes-style tool calls."
+  "Strongly uncensored Qwen3.5-2B (aggressive) in BF16."
+  "Reasoning-distilled, abliterated Qwen3.5-2B in FP16."
+  "General-purpose abliterated SmolLM3-3B in BF16."
   "Community Qwen3.8-4B distill (oQe 4-bit) — compact reasoning/chat; agent tool calling not validated."
   "Community Qwen3.8-2B distill (oQe 4-bit) — tiny reasoning/chat; agent tool calling not validated."
   "Reduced-refusal Qwen3.8-27B (Uncensored) in OptiQ mixed 4/8-bit — experimental, served via the mlx-optiq runtime."

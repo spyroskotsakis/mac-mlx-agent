@@ -6,6 +6,17 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.28.0] — 2026-11-24
+
+### Added
+
+- **Three new abliterated models (51 total).** Added
+  `TheCluster/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive-MLX-bf16` (strongly
+  uncensored Qwen3.5-2B, BF16), `AITRADER/Jackrong-Qwen3.5-2B-Claude-Reasoning-abliterated-fp16-MLX`
+  (reasoning-distilled Qwen3.5-2B, FP16), and `mlx-community/SmolLM3-3B-abliterated-bf16`
+  (general-purpose SmolLM3-3B, BF16). All MLX-format, non-gated, supported model
+  types, mirrored across the app, `setup.sh`, `start_server.sh`, and the README.
+
 ## [1.27.0] — 2026-11-24
 
 ### Added
