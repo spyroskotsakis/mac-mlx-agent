@@ -229,9 +229,17 @@ writes the OpenCode + Claude Code configs that point at it.
 ./setup.sh --check                                  # only report status, install nothing
 ./setup.sh --yes                                    # non-interactive: install everything + the default model
 ./setup.sh --model mlx-community/Qwen3-14B-4bit     # a specific model
+./setup.sh --context 32768                          # cap the context window (default 32768)
+./setup.sh --project-config --model <id>            # write ./opencode.jsonc for this project
 ```
 
 The menu offers the same 52 models as the app (see the table in Step 2).
+`--project-config` writes a project-level `opencode.jsonc` into the directory you
+run it from (no install, no download), so each agent project can control and see
+its own context / output / sampling — the values the app writes to the global
+`~/.config/opencode/opencode.jsonc` otherwise. Server-side values (KV bits, prompt
+cache, top-k, thinking) are listed in the file's header for visibility but stay
+set by the app / `start_server.sh`.
 Everything below is the manual, step-by-step version of what `setup.sh` does.
 
 ---

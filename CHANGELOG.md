@@ -16,6 +16,11 @@ app attached.
   accepts `--context N` (plus a `CONTEXT` env var). This is the client-side lever
   that keeps the KV cache — and thus unified-memory use — inside the Mac's RAM,
   since `mlx_lm.server` has no server-side context cap.
+- **Per-project OpenCode config.** `setup.sh --project-config --model <id>`
+  writes a project-level `opencode.jsonc` into the directory it's run from (no
+  install, no download), so each agent project controls and shows its own
+  context, output, temperature, and top-p. Server-side values (KV bits, prompt
+  cache, top-k, thinking) are listed in the file's header for visibility.
 
 ## [1.31.0] — 2026-11-24
 
