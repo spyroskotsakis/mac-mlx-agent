@@ -6,6 +6,17 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [Unreleased]
+
+### Added
+
+- **Adjustable context window.** The menu-bar app's **Model settings** now expose
+  a **Context window** setting (default 32768, clamped to each model's
+  `maxContext`) that bounds how much context the agent may send, and `setup.sh`
+  accepts `--context N` (plus a `CONTEXT` env var). This is the client-side lever
+  that keeps the KV cache — and thus unified-memory use — inside the Mac's RAM,
+  since `mlx_lm.server` has no server-side context cap.
+
 ## [1.31.0] — 2026-11-24
 
 ### Added

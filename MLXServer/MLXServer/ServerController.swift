@@ -82,6 +82,14 @@ enum ModelDefaults {
     /// 6 GB cache and defeats caching — trim MCP servers/skills (or raise this) to
     /// make caching effective. OpenCode's far smaller prompt caches comfortably.
     static let promptCacheBytesGB = 6
+    /// Default context window (tokens) the agent may send the model. 32768 keeps
+    /// the KV cache small enough to coexist with a large model on 36 GB of unified
+    /// memory. `mlx_lm.server` has no server-side context cap, so this client-side
+    /// cap is the only lever that bounds the KV cache; raise it only on a Mac with
+    /// RAM to spare.
+    static let contextLength = 32768
+    /// Smallest context window the UI will set.
+    static let minContextLength = 4096
 }
 
 /// One missing prerequisite in the startup guide, with a one-line fix hint.
@@ -527,6 +535,8 @@ final class ServerController: ObservableObject {
             enableThinking = supportsThinking ? Self.loadThinking(for: selectedModel.repoID) : false
             // A large model must never stay in concurrent-requests mode.
             clampConcurrentRequestsForSelectedModel()
+            // A model with a smaller native window must clamp the context cap too.
+            clampContextForSelectedModel()
             if hadThinkingOn && !supportsThinking {
                 notifyThinkingUnsupported()
             }
@@ -589,6 +599,14 @@ final class ServerController: ObservableObject {
         didSet { UserDefaults.standard.set(promptCacheBytesGB, forKey: Keys.promptCacheBytes) }
     }
 
+    /// Context window (tokens) the agent may send the model. Written into the
+    /// client configs as OpenCode's `limit.context` and Claude Code's
+    /// `CLAUDE_CODE_MAX_CONTEXT_TOKENS`. Clamped to the selected model's native
+    /// max context; see `ModelDefaults.contextLength` for the safe default.
+    @Published var contextLength: Int {
+        didSet { UserDefaults.standard.set(contextLength, forKey: Keys.contextLength) }
+    }
+
     private var process: Process?
     private var bridgeProcess: Process?
     private var pollTask: Task<Void, Never>?
@@ -620,6 +638,7 @@ final class ServerController: ObservableObject {
         static let topK = "mlxServerTopK"
         static let maxTokens = "mlxServerMaxTokens"
         static let promptCacheBytes = "mlxServerPromptCacheBytes"
+        static let contextLength = "mlxServerContextLength"
     }
 
     init() {
@@ -644,6 +663,7 @@ final class ServerController: ObservableObject {
         self.topK = UserDefaults.standard.object(forKey: Keys.topK) as? Int ?? ModelDefaults.topK
         self.maxTokens = UserDefaults.standard.object(forKey: Keys.maxTokens) as? Int ?? ModelDefaults.maxTokens
         self.promptCacheBytesGB = UserDefaults.standard.object(forKey: Keys.promptCacheBytes) as? Int ?? ModelDefaults.promptCacheBytesGB
+        self.contextLength = UserDefaults.standard.object(forKey: Keys.contextLength) as? Int ?? ModelDefaults.contextLength
         self.openCodePath = Self.resolveOpenCode()
         self.openCodeMajor = self.openCodePath.flatMap { Self.openCodeVersion(at: $0)?.major }
         self.claudeCodePath = Self.resolveClaudeCode()
@@ -662,6 +682,7 @@ final class ServerController: ObservableObject {
         // A persisted unsafe combination (large model + concurrent requests) must
         // not survive a relaunch: clamp it before the app can start the server.
         clampConcurrentRequestsForSelectedModel()
+        clampContextForSelectedModel()
     }
 
     // MARK: - UI helpers
@@ -711,6 +732,19 @@ final class ServerController: ObservableObject {
         }
     }
 
+    /// The context window actually written to the client configs — the user's
+    /// choice, never larger than the selected model's native max.
+    var effectiveContextLength: Int {
+        min(contextLength, selectedModel.profile.maxContext)
+    }
+
+    /// Forces the stored context window down to the selected model's native max
+    /// when the user switches to a model with a smaller window, so the UI's
+    /// range always contains the stored value.
+    private func clampContextForSelectedModel() {
+        contextLength = min(contextLength, selectedModel.profile.maxContext)
+    }
+
     /// True when the selected model's weight footprint is a large share of this
     /// Mac's RAM — the same `weightGB > RAM/4` line the concurrent-requests guard
     /// uses. On such a machine, high output caps and thinking mode are what tip it
@@ -725,6 +759,15 @@ final class ServerController: ObservableObject {
     var maxTokensWarning: String? {
         guard maxTokens > ModelDefaults.maxTokens, selectedModelIsMemoryTight else { return nil }
         return "Max tokens \(maxTokens) is above the safe \(ModelDefaults.maxTokens) for \(selectedModel.displayName) on this \(Int(Self.physicalRAMGB)) GB Mac — long replies fill the KV cache and can exhaust memory. Keep it at \(ModelDefaults.maxTokens), or free RAM / switch to a smaller model."
+    }
+
+    /// Warning for the Context window field when it's raised past the safe default
+    /// on a memory-tight machine — the KV cache grows with every token of context,
+    /// and on a tight machine a large context is what tips it into a whole-machine
+    /// Metal OOM.
+    var contextWarning: String? {
+        guard contextLength > ModelDefaults.contextLength, selectedModelIsMemoryTight else { return nil }
+        return "Context \(contextLength) is above the safe \(ModelDefaults.contextLength) for \(selectedModel.displayName) on this \(Int(Self.physicalRAMGB)) GB Mac — every token grows the KV cache and can exhaust memory. Keep it at \(ModelDefaults.contextLength), or free RAM / switch to a smaller model."
     }
 
     /// Warning for the thinking toggle. With mlx-lm ≥ 0.32 the reasoning arrives in
@@ -1350,6 +1393,7 @@ final class ServerController: ObservableObject {
         topP = ModelDefaults.topP
         topK = ModelDefaults.topK
         maxTokens = ModelDefaults.maxTokens
+        contextLength = ModelDefaults.contextLength
         promptCacheBytesGB = ModelDefaults.promptCacheBytesGB
         allowConcurrentRequests = false
     }
@@ -2070,9 +2114,9 @@ final class ServerController: ObservableObject {
         export CLAUDE_CODE_SUBAGENT_MODEL="default_model"
         export CLAUDE_CODE_DISABLE_EXPERIMENTAL_BETAS=1
         # "default_model" isn't a Claude model ID, so Claude Code can't resolve its
-        # context window: it warns and assumes 200k. Tell it the selected model's real
-        # window so auto-compact fires at the right size and the warning goes away.
-        export CLAUDE_CODE_MAX_CONTEXT_TOKENS=\(selectedModel.profile.maxContext)
+        # context window: it warns and assumes 200k. Tell it the chosen context
+        # window (the Context setting) so auto-compact fires at the right size.
+        export CLAUDE_CODE_MAX_CONTEXT_TOKENS=\(effectiveContextLength)
         # Claude Code sends max_tokens: 32000 on every request, overriding the
         # server's --max-tokens default. Cap it here (client-side) to the app's
         # Max tokens so a long reply can't balloon the history and OOM Metal.
@@ -2412,7 +2456,7 @@ final class ServerController: ObservableObject {
             "models": [
                 "default_model": [
                     "name": selectedModel.displayName,
-                    "limit": ["context": selectedModel.profile.maxContext, "output": maxTokens],
+                    "limit": ["context": effectiveContextLength, "output": maxTokens],
                     // mlx_lm.server loads no vision processor for any of these
                     // models (only `muse_spark` is wired up in this mlx-lm), so an
                     // image/screenshot attachment makes it reply 404 ("Only 'text'
@@ -2432,7 +2476,7 @@ final class ServerController: ObservableObject {
         var model: [String: Any] = [
             "modelID": "default_model",
             "name": selectedModel.displayName,
-            "limit": ["context": selectedModel.profile.maxContext, "output": maxTokens],
+            "limit": ["context": effectiveContextLength, "output": maxTokens],
             // Same text-only constraint as v1, expressed via v2 `capabilities`:
             // without a vision processor the server 404s on image attachments.
             "capabilities": [

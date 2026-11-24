@@ -11,6 +11,7 @@
 #   ./setup.sh --check                                      # only report status, install nothing
 #   ./setup.sh --yes                                        # non-interactive: install tools + the default model
 #   ./setup.sh --model mlx-community/Qwen3-14B-4bit         # install tools + a specific model
+#   ./setup.sh --context 32768                              # cap the context window (default 32768)
 #   ./setup.sh --no-model                                   # install tools only, skip the model
 #
 # Ports (must match the app and start_server.sh):
@@ -25,6 +26,7 @@ cd "$SCRIPT_DIR"
 MLX_PORT="${MLX_PORT:-8080}"
 BRIDGE_PORT="${BRIDGE_PORT:-4001}"
 MAX_OUTPUT_TOKENS="${MAX_OUTPUT_TOKENS:-8192}"
+CONTEXT="${CONTEXT:-32768}"
 PYTHON="${PYTHON:-python3}"
 
 # --- model table (mirrors ServerController.availableModels) --------------------
@@ -260,6 +262,7 @@ while [[ $# -gt 0 ]]; do
     -y|--yes)     ASSUME_YES=1 ;;
     -n|--no-model) SKIP_MODEL=1 ;;
     -m|--model)   MODEL_ARG="${2:-}"; shift ;;
+    --context)    CONTEXT="${2:-32768}"; shift ;;
     -h|--help)    sed -n '2,17p' "$0"; exit 0 ;;
     *)            echo "Unknown option: $1" >&2; exit 2 ;;
   esac
@@ -568,7 +571,11 @@ download_and_configure() {
   local idx="$SELECTED_INDEX"
   local repo="${MODELS_REPO[$idx]}"
   local name="${MODELS_NAME[$idx]}"
-  local ctx="${MODELS_CTX[$idx]}"
+  local native_ctx="${MODELS_CTX[$idx]}"
+  local ctx="$native_ctx"
+  # User-adjustable context window (--context / $CONTEXT), clamped to the model's
+  # native max so the written config never exceeds what the model supports.
+  if (( CONTEXT < native_ctx )); then ctx="$CONTEXT"; fi
 
   say ""
   say "Downloading $name …"

@@ -21,9 +21,10 @@ PORT="${PORT:-8080}"
 # The server ships the same models as the menu-bar app (MLXServer/) and the
 # `./setup.sh` picker — 36 total. Pass any of their ids to `./start_server.sh <id>`.
 # The server reads each model's own max context from its config, so no context
-# flag is needed here. Only the client needs the matching per-model value
-# (OpenCode's `limit.context`) — setup.sh / the app writes that for you; set it by
-# hand only if you configure OpenCode without them. Thinking mode applies only to
+# flag is needed here. Only the client needs a matching value (OpenCode's
+# `limit.context`) — setup.sh (--context, default 32768) / the app's Context
+# window setting write that for you; set it by hand only if you configure
+# OpenCode without them. Thinking mode applies only to
 # the Qwen3 family (see THINKING_MODELS below).
 
 echo "Starting MLX-LM server for: $MODEL"
