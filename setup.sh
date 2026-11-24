@@ -362,14 +362,36 @@ install_opencode() {
 }
 
 # --- model selection + download + config --------------------------------------
+# Whether the given repo is already fully in the local HuggingFace cache
+# (matches the app's modelIsCached: a snapshot dir with config.json + weights).
+model_is_cached() {
+  local repo="$1" hub_cache snapshots d f
+  if [[ -n "$HF_HOME" ]]; then
+    hub_cache="${HF_HOME/#\~/$HOME}/hub"
+  else
+    hub_cache="$HOME/.cache/huggingface/hub"
+  fi
+  snapshots="$hub_cache/models--${repo//\//--}/snapshots"
+  [[ -d "$snapshots" ]] || return 1
+  for d in "$snapshots"/*/; do
+    [[ -f "$d/config.json" ]] || continue
+    for f in "$d"*.safetensors "$d"*.gguf "$d"*.npz "$d"*.bin; do
+      [[ -f "$f" ]] && return 0
+    done
+  done
+  return 1
+}
+
 list_models() {
   say "Available models:"
-  local i think
+  local i think downloaded
   for i in "${!MODELS_REPO[@]}"; do
     think="no thinking"
     [[ "${MODELS_THINK[$i]}" == yes ]] && think="thinking"
-    printf '  %2d) %-38s ~%5s GB weights, %s context, %s\n' \
-      "$((i + 1))" "${MODELS_NAME[$i]}" "${MODELS_WGT[$i]}" "${MODELS_CTX[$i]}" "$think"
+    downloaded=""
+    model_is_cached "${MODELS_REPO[$i]}" && downloaded="  ⬇ downloaded"
+    printf '  %2d) %-38s ~%5s GB weights, %s context, %s%s\n' \
+      "$((i + 1))" "${MODELS_NAME[$i]}" "${MODELS_WGT[$i]}" "${MODELS_CTX[$i]}" "$think" "$downloaded"
     printf '      [%-10s] %s\n' "${MODELS_TAG[$i]}" "${MODELS_DESC[$i]}"
   done
 }
