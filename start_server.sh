@@ -98,6 +98,8 @@ THINKING_MODELS=(
   "peculiar-ragdoll/Cyber-Tiel-Coder-35B-A3B-MLX-oQ4e"
   "FrostWolfAI/Frost-Cyber-Mini-Uncensored-v1.1-MLX"
   "cmdhawk/Cyber-Ornith-1.5-9B-OBLITERATED-MLX-6bit"
+  "sahilchachra/Qwensploit-V2-9B-MXFP8"
+  "UraionLabs/Uraion-Cyber-V1.0-MLX-oQ4e"
 )
 
 supports_thinking() {

@@ -62,6 +62,9 @@ MODELS_REPO=(
   "sahilchachra/Qwensploit-V2-9B-MXFP4"
   "mlx-community/Apriel-1.5-15b-Thinker-CYBERSEC-MERGED-4bit"
   "peculiar-ragdoll/Cyber-Tiel-Coder-35B-A3B-MLX-oQ4e"
+  "Soaperloafidksum/LOREA-cyber-coder-30B-A3B-v5.1"
+  "sahilchachra/Qwensploit-V2-9B-MXFP8"
+  "UraionLabs/Uraion-Cyber-V1.0-MLX-oQ4e"
   "mlx-community/glm-4.7-flash-abliterated-8bit"
   "mlx-community/GLM-4.7-Flash-Derestricted-8bit-gs32"
   "Foresee/Qwen3.8-9B-heretic-uncensored-5bit-MLX"
@@ -109,6 +112,9 @@ MODELS_NAME=(
   "Qwensploit V2 9B (MXFP4)"
   "Apriel 1.5 15B Cybersec (4-bit)"
   "Cyber-Tiel Coder 35B-A3B (4-bit)"
+  "LOREA Cyber Coder 30B-A3B (4-bit)"
+  "Qwensploit V2 9B (MXFP8)"
+  "Uraion Cyber V1.0 (4-bit)"
   "GLM-4.7-Flash Abliterated (8-bit)"
   "GLM-4.7-Flash Derestricted (8-bit)"
   "Qwen3.8-9B Heretic Uncensored (5-bit)"
@@ -122,9 +128,9 @@ MODELS_NAME=(
   "Qwen3.8-27B Uncensored OptiQ (4-bit)"
   "Qwen3.8-27B OBLITERATED OptiQ (4-bit)"
 )
-MODELS_CTX=(262144 262144 262144 262144 40960 262144 32768 262144 262144 393216 262144 262144 131072 131072 262144 131072 262144 262144 131072 131072 131072 262144 262144 202752 128000 128000 32768 131072 262144 1048576 1048576 262400 262144 202752 202752 262144 262144 262144 131072 131072 262144 262144 262144 262144 262144)
-MODELS_WGT=(18 18 19.51 14 7 6 4.28 3.03 1.72 15.10 10.99 5.60 5.15 3.55 2.75 1.81 44.84 17.18 18.43 63.39 12.08 15.61 15.34 16.85 12.49 0.66 7.62 8.03 28.17 5.04 5.67 8.12 21.63 29.94 29.94 6.9 2.37 20.40 4.37 2.32 7.28 2.49 1.11 19.8 20.7)
-MODELS_THINK=(yes yes no yes yes yes no yes yes no no no no no no no no no no no no no no no no no no no no yes yes no yes no no yes yes yes yes yes yes yes yes yes yes)
+MODELS_CTX=(262144 262144 262144 262144 40960 262144 32768 262144 262144 393216 262144 262144 131072 131072 262144 131072 262144 262144 131072 131072 131072 262144 262144 202752 128000 128000 32768 131072 262144 1048576 1048576 262400 262144 262144 1048576 262144 202752 202752 262144 262144 262144 131072 131072 262144 262144 262144 262144 262144)
+MODELS_WGT=(18 18 19.51 14 7 6 4.28 3.03 1.72 15.10 10.99 5.60 5.15 3.55 2.75 1.81 44.84 17.18 18.43 63.39 12.08 15.61 15.34 16.85 12.49 0.66 7.62 8.03 28.17 5.04 5.67 8.12 21.63 17.18 10.15 22.13 29.94 29.94 6.9 2.37 20.40 4.37 2.32 7.28 2.49 1.11 19.8 20.7)
+MODELS_THINK=(yes yes no yes yes yes no yes yes no no no no no no no no no no no no no no no no no no no no yes yes no yes no yes yes no no yes yes yes yes yes yes yes yes yes yes)
 MODELS_TAG=(
   "Agent"
   "Agent"
@@ -152,6 +158,9 @@ MODELS_TAG=(
   "Chat"
   "Chat"
   "Chat"
+  "Pentesting"
+  "Pentesting"
+  "Pentesting"
   "Pentesting"
   "Pentesting"
   "Pentesting"
@@ -206,6 +215,9 @@ MODELS_DESC=(
   "Red-team Qwensploit V2 9B (Qwen3.5) in MXFP4 — cybersecurity and red-team work."
   "Cybersecurity Apriel-1.5-15B (LlaVA) in 4-bit — vision latent, text-only."
   "Coding + cybersecurity Qwen3.6-35B-A3B MoE (agentic tool-use) in oQe 4-bit."
+  "Qwen3-MoE security + reverse-engineering coder fine-tune in 4-bit — agent tool use."
+  "Red-team Qwensploit V2 9B (Qwen3.5) in MXFP8 — cybersecurity and red-team work."
+  "Defensive-security Qwen3.5-35B-A3B MoE (agent work) in oQe 4-bit."
   "Reduced-refusal GLM-4.7-Flash (huihui-ai abliterated) — experimental."
   "Reduced-refusal GLM-4.7-Flash (koute derestricted) — experimental."
   "Reduced-refusal Qwen3.8-9B (Heretic Uncensored) in 5-bit — experimental."

@@ -15,7 +15,7 @@ and it serves a local OpenAI-compatible API for Xcode, OpenCode, and Claude Code
 It installs `mlx-lm` (and `mlx-optiq`, for OptiQ models), downloads the model, and
 writes the OpenCode + Claude Code configs for you.
 
-Prefer the terminal? The **same 45-model stack** runs from the **CLI** —
+Prefer the terminal? The **same 48-model stack** runs from the **CLI** —
 [`setup.sh`](#quick-start-one-command-non-gui) installs the prerequisites and
 downloads a model, then [`start_server.sh`](#step-3-start-the-server) starts the
 server with the same memory-safety and sampling flags the app uses.
@@ -231,7 +231,7 @@ writes the OpenCode + Claude Code configs that point at it.
 ./setup.sh --model mlx-community/Qwen3-14B-4bit     # a specific model
 ```
 
-The menu offers the same 45 models as the app (see the table in Step 2).
+The menu offers the same 48 models as the app (see the table in Step 2).
 Everything below is the manual, step-by-step version of what `setup.sh` does.
 
 ---
@@ -325,6 +325,9 @@ and are mirrored in the table's **Agent** column.
 | `sahilchachra/Qwensploit-V2-9B-MXFP4` | 9B | 5.67 GB | 1,048,576 | ✅ | — | **Pentesting** — red-team Qwensploit V2 9B (Qwen3.5); MXFP4. |
 | `mlx-community/Apriel-1.5-15b-Thinker-CYBERSEC-MERGED-4bit` | 15B | 8.12 GB | 262,400 | — | — | **Pentesting** — cybersecurity Apriel-1.5-15B (LlaVA); 4-bit, vision latent. |
 | `peculiar-ragdoll/Cyber-Tiel-Coder-35B-A3B-MLX-oQ4e` | 35B (3B active) | 21.63 GB | 262,144 | ✅ | — | **Pentesting** — coding + cybersecurity Qwen3.6-35B-A3B MoE (agentic tool-use); oQe 4-bit. |
+| `Soaperloafidksum/LOREA-cyber-coder-30B-A3B-v5.1` | 30B (3B active) | 17.18 GB | 262,144 | — | — | **Pentesting** — security + reverse-engineering Qwen3-MoE coder; 4-bit, agent tool use. |
+| `sahilchachra/Qwensploit-V2-9B-MXFP8` | 9B | 10.15 GB | 1,048,576 | ✅ | — | **Pentesting** — red-team Qwensploit V2 9B; MXFP8. |
+| `UraionLabs/Uraion-Cyber-V1.0-MLX-oQ4e` | 35B (3B active) | 22.13 GB | 262,144 | ✅ | — | **Pentesting** — defensive-security Qwen3.5-35B-A3B MoE; oQe 4-bit. |
 | `mlx-community/glm-4.7-flash-abliterated-8bit` | 30B (3B active) | 29.94 GB | 202,752 | — | — | **Uncensored** — huihui-ai abliterated; 8-bit, experimental. |
 | `mlx-community/GLM-4.7-Flash-Derestricted-8bit-gs32` | 30B (3B active) | 29.94 GB | 202,752 | — | — | **Uncensored** — koute derestricted; 8-bit, experimental. |
 | `Foresee/Qwen3.8-9B-heretic-uncensored-5bit-MLX` | 9B | 6.9 GB | 262,144 | ✅ | — | **Uncensored** — Qwen3.8-9B Heretic Uncensored; 5-bit, experimental. |
