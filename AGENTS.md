@@ -25,6 +25,14 @@ that reads `AGENTS.md` instead of `CLAUDE.md`.
 - **Memory-safety guard stays intact.** A model with `weightGB > physicalRAMGB / 4`
   must not allow concurrent requests; the app hard-blocks this.
 
+- **No duplicated backend code.** The MLX and oMLX paths share one
+  implementation of common lifecycle logic — process-tree stop/exit
+  confirmation, health polling, client-config writing, the memory guard, port
+  checks — parameterized per backend, never copy-pasted into a second
+  controller. A refactor to enable sharing is allowed only after a written
+  analysis (duplication inventory, blast radius, behavior-preservation plan);
+  never refactor without a demonstrated need.
+
 - **No Claude Code / AI-assistant attribution anywhere** — not in files, docs,
   release notes, or git commit messages.
 

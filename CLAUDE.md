@@ -162,6 +162,14 @@ mlx-lm later gains image processors for `qwen3_5` / `gemma4` / `mistral3`, revis
   while mlx-lm's transformers needs `>=0.23.1`.
 - **Ports.** MLX server = `8080`; LiteLLM bridge = `4001` (NOT 4000 — that's
   commonly taken by another LiteLLM instance).
+- **No duplicated backend code.** The MLX (default) and oMLX (opt-in) backend
+  paths share one implementation of common lifecycle logic — process-tree
+  stop/exit confirmation, health polling, client-config writing, the memory
+  guard, port checks — parameterized per backend, never copy-pasted into a
+  second controller. A refactor to enable sharing is allowed, but only after a
+  written analysis (what is duplicated, why the current shape blocks sharing,
+  the blast radius, what must stay byte-identical); do not refactor for its
+  own sake.
 - **Thinking mode stays off by default** (and that's fine). mlx-lm ≥ 0.32 keeps
   the answer clean when thinking is on — it emits the reasoning in a separate
   `reasoning` field, not inline — so OpenCode (reads `reasoning`/`reasoning_content`
