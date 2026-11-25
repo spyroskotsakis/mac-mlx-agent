@@ -11,6 +11,8 @@
 #   ./setup.sh --check                                      # only report status, install nothing
 #   ./setup.sh --yes                                        # non-interactive: install tools + the default model
 #   ./setup.sh --model mlx-community/Qwen3-14B-4bit         # install tools + a specific model
+#   ./setup.sh --context 32768                              # cap the context window (default 32768)
+#   ./setup.sh --project-config --model <id>                # write ./opencode.jsonc for this project
 #   ./setup.sh --no-model                                   # install tools only, skip the model
 #
 # Ports (must match the app and start_server.sh):
@@ -19,12 +21,26 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# The directory the user invoked us from, before we cd into SCRIPT_DIR — used by
+# --project-config to write ./opencode.jsonc into the project they're standing in.
+INVOKED_DIR="$(pwd)"
 cd "$SCRIPT_DIR"
 
 # Overridable settings (same defaults as the app / start_server.sh).
 MLX_PORT="${MLX_PORT:-8080}"
 BRIDGE_PORT="${BRIDGE_PORT:-4001}"
 MAX_OUTPUT_TOKENS="${MAX_OUTPUT_TOKENS:-8192}"
+CONTEXT="${CONTEXT:-32768}"
+# Sampling + server-side defaults (mirror start_server.sh). These are shown in the
+# project config's header so every value is visible in one place, but only
+# CONTEXT / MAX_OUTPUT_TOKENS / TEMP / TOP_P are OpenCode client settings — the
+# rest are mlx_lm.server launch flags and can't be overridden per project.
+TEMP="${TEMP:-0.2}"
+TOP_P="${TOP_P:-0.8}"
+TOP_K="${TOP_K:-20}"
+KV_BITS="${KV_BITS:-4}"
+PROMPT_CACHE_BYTES_GB="${PROMPT_CACHE_BYTES_GB:-6}"
+ENABLE_THINKING="${ENABLE_THINKING:-0}"
 PYTHON="${PYTHON:-python3}"
 
 # --- model table (mirrors ServerController.availableModels) --------------------
@@ -253,6 +269,7 @@ DEFAULT_INDEX=0
 CHECK_ONLY=0
 ASSUME_YES=0
 SKIP_MODEL=0
+WRITE_PROJECT_CONFIG=0
 MODEL_ARG=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -260,7 +277,9 @@ while [[ $# -gt 0 ]]; do
     -y|--yes)     ASSUME_YES=1 ;;
     -n|--no-model) SKIP_MODEL=1 ;;
     -m|--model)   MODEL_ARG="${2:-}"; shift ;;
-    -h|--help)    sed -n '2,17p' "$0"; exit 0 ;;
+    --context)    CONTEXT="${2:-32768}"; shift ;;
+    --project-config) WRITE_PROJECT_CONFIG=1 ;;
+    -h|--help)    sed -n '2,18p' "$0"; exit 0 ;;
     *)            echo "Unknown option: $1" >&2; exit 2 ;;
   esac
   shift
@@ -564,11 +583,95 @@ EOF
   ok "Wrote Claude Code env profile → $cc_file"
 }
 
+# Writes a project-level `opencode.jsonc` into the current directory (the agent
+# project). OpenCode merges it over the global `~/.config/opencode/opencode.jsonc`
+# (project wins where they overlap), so each project can show and control its own
+# context / output / sampling without touching the global file. Run from the
+# project root:  ./setup.sh --project-config --model <id>
+write_project_config() {
+  local idx="${1:-$SELECTED_INDEX}"
+  local repo="${MODELS_REPO[$idx]}"
+  local name="${MODELS_NAME[$idx]}"
+  local native_ctx="${MODELS_CTX[$idx]}"
+  local ctx="$native_ctx"
+  if (( CONTEXT < native_ctx )); then ctx="$CONTEXT"; fi
+  local think="off"
+  [[ "${MODELS_THINK[$idx]}" == yes && "$ENABLE_THINKING" == 1 ]] && think="on"
+
+  local target="$INVOKED_DIR/opencode.jsonc"
+  if [[ -f "$target" ]]; then
+    local bak="$target.bak-$(date +%Y%m%d-%H%M%S)"
+    mv "$target" "$bak"
+    say "Backed up existing project config → $bak"
+  fi
+
+  cat > "$target" <<EOF
+// MLX local model — project config. OpenCode merges this over
+// ~/.config/opencode/opencode.jsonc (project wins where they overlap).
+//
+// Active values:
+//   model:        $name
+//   repo:         $repo
+//   context:      $ctx tokens   (native max $native_ctx)
+//   max output:   $MAX_OUTPUT_TOKENS tokens
+//   temperature:  $TEMP          [sent per-request by OpenCode]
+//   top-p:        $TOP_P         [sent per-request by OpenCode]
+//   top-k:        $TOP_K         [server-side]
+//   KV bits:      $KV_BITS       [server-side]
+//   prompt cache: ${PROMPT_CACHE_BYTES_GB} GB  [server-side]
+//   thinking:     $think         [server-side]
+//   server:       http://127.0.0.1:${MLX_PORT}/v1
+//
+// Values marked [server-side] are mlx_lm.server launch flags (set in the
+// menu-bar app or via start_server.sh env vars), not OpenCode settings, so they
+// can't be overridden here. Everything else is controlled per project below.
+{
+  "\$schema": "https://opencode.ai/config.json",
+  "model": "mlx/default_model",
+  "providers": {
+    "mlx": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "name": "MLX (local)",
+      "settings": {
+        "baseURL": "http://127.0.0.1:${MLX_PORT}/v1",
+        "chunkTimeout": false,
+        "headerTimeout": false
+      },
+      "models": {
+        "default_model": {
+          "modelID": "default_model",
+          "name": "${name}",
+          "limit": {
+            "context": ${ctx},
+            "output": ${MAX_OUTPUT_TOKENS}
+          },
+          "capabilities": {
+            "tools": true,
+            "input": ["text"],
+            "output": ["text"]
+          }
+        }
+      }
+    }
+  },
+  "agent": {
+    "build":   { "temperature": ${TEMP}, "top_p": ${TOP_P} },
+    "general": { "temperature": ${TEMP}, "top_p": ${TOP_P} }
+  }
+}
+EOF
+  ok "Wrote project config → $target (context $ctx, output $MAX_OUTPUT_TOKENS, temp $TEMP, top-p $TOP_P)"
+}
+
 download_and_configure() {
   local idx="$SELECTED_INDEX"
   local repo="${MODELS_REPO[$idx]}"
   local name="${MODELS_NAME[$idx]}"
-  local ctx="${MODELS_CTX[$idx]}"
+  local native_ctx="${MODELS_CTX[$idx]}"
+  local ctx="$native_ctx"
+  # User-adjustable context window (--context / $CONTEXT), clamped to the model's
+  # native max so the written config never exceeds what the model supports.
+  if (( CONTEXT < native_ctx )); then ctx="$CONTEXT"; fi
 
   say ""
   say "Downloading $name …"
@@ -617,6 +720,15 @@ check_status
 
 if [[ "$CHECK_ONLY" -eq 1 ]]; then
   say "Check only — nothing installed. Run ./setup.sh to install the missing pieces."
+  exit 0
+fi
+
+# --project-config: write ./opencode.jsonc for the selected model and stop —
+# no tool install, no model download.
+if [[ "$WRITE_PROJECT_CONFIG" -eq 1 ]]; then
+  pick_model
+  write_project_config "$SELECTED_INDEX"
+  print_next_steps "${MODELS_REPO[$SELECTED_INDEX]}"
   exit 0
 fi
 

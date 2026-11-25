@@ -229,9 +229,17 @@ writes the OpenCode + Claude Code configs that point at it.
 ./setup.sh --check                                  # only report status, install nothing
 ./setup.sh --yes                                    # non-interactive: install everything + the default model
 ./setup.sh --model mlx-community/Qwen3-14B-4bit     # a specific model
+./setup.sh --context 32768                          # cap the context window (default 32768)
+./setup.sh --project-config --model <id>            # write ./opencode.jsonc for this project
 ```
 
 The menu offers the same 52 models as the app (see the table in Step 2).
+`--project-config` writes a project-level `opencode.jsonc` into the directory you
+run it from (no install, no download), so each agent project can control and see
+its own context / output / sampling — the values the app writes to the global
+`~/.config/opencode/opencode.jsonc` otherwise. Server-side values (KV bits, prompt
+cache, top-k, thinking) are listed in the file's header for visibility but stay
+set by the app / `start_server.sh`.
 Everything below is the manual, step-by-step version of what `setup.sh` does.
 
 ---
@@ -495,7 +503,7 @@ So **Steps 1–3 above are optional** — they're kept to explain what the app d
 under the hood and for people who prefer the terminal. The app defaults to the
 same flags as `start_server.sh` — `--kv-bits 4 --max-tokens 8192 --temp 0.2
 --top-p 0.8 --top-k 20` — all editable in its **Model settings** section, plus a
-per-model **Thinking mode** toggle and a per-model **Max context** display.
+per-model **Thinking mode** toggle and an adjustable **Context window**.
 
 - Click the **MLX Server** icon in the menu bar to open the control panel.
 - **Start / Stop** the server, pick the model, and watch the live log.
@@ -562,8 +570,8 @@ it in Xcode.
    loaded* as `default_model` on `http://127.0.0.1:8080/v1`.
 2. **Point OpenCode at it** — the app's Install / `setup.sh` already write
    `~/.config/opencode/opencode.jsonc` using `mlx/default_model` (see "Use it in
-   OpenCode" below). If you switch models, re-run that setup so the context
-   length matches the new model, or edit the file by hand.
+   OpenCode" below). If you switch models, the app re-syncs the context window
+   for you; the terminal path re-runs `setup.sh` (or `--context N`) to match.
 3. **Add the agent in Xcode** — open the **Add an ACP Agent** dialog and fill in:
    - **Executable**: `/path/to/opencode` (your OpenCode
      binary — find it with `which opencode`)
@@ -610,7 +618,7 @@ at the local server with a config file — `~/.config/opencode/opencode.jsonc`
       "models": {
         "default_model": {
           "name": "Qwen3.5-35B-A3B (local)",
-          "limit": { "context": 262144, "output": 8192 }
+          "limit": { "context": 32768, "output": 8192 }
         }
       }
     }
@@ -634,10 +642,12 @@ through your local model.
 > requests to match the server. Without it, the agent can wedge the single
 > generation thread and the server stops responding until restarted.
 >
-> **`limit.context` should match the model.** Set it to the model's maximum
-> context length (see the model table in Step 2) so OpenCode knows how much it
-> can send. The menu-bar app and `setup.sh` write this for you from each model's
-> profile; this sample shows the Qwen3.5 value (262144).
+> **`limit.context` is the context window.** It's a client-side cap (the server
+> has no context limit), and every token grows the KV cache — a value too large
+> for your RAM can exhaust memory. The menu-bar app and `setup.sh` write a safe
+> **32768** by default; adjust it in the app's **Context window** setting or with
+> `setup.sh --context N`. Set it by hand only if you configure OpenCode without
+> them, and keep it at 32768 unless your Mac has RAM to spare.
 
 ---
 

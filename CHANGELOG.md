@@ -6,6 +6,37 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.32.0] — 2026-11-25
+
+### Fixed
+
+- **Whole-machine GPU OOM panic on memory-tight models.** The 35B-class models
+  advertised a 262K context window that, once filled by a long agent session,
+  exhausted unified memory and panicked the GPU driver (`completeMemory() prepare
+  count underflow` in `AGXG16X`/`IOGPUFamily`), taking the whole Mac down. The
+  context the agent may send is now a client-side, RAM-aware setting with a safe
+  default, so the KV cache stays inside RAM.
+
+### Added
+
+- **Adjustable context window.** The menu-bar app's **Model settings** now expose
+  a **Context window** setting whose default is auto-sized to the Mac's RAM —
+  32768 for a memory-tight model (weights > RAM/4, e.g. a 35B on 36 GB), up to
+  64K/128K otherwise — clamped to each model's `maxContext`, with a warning when
+  raised past the safe floor. `setup.sh` accepts `--context N` (plus a `CONTEXT`
+  env var). This is the client-side lever that keeps the KV cache — and thus
+  unified-memory use — inside the Mac's RAM, since `mlx_lm.server` has no
+  server-side context cap.
+- **Per-project OpenCode config.** `setup.sh --project-config --model <id>`
+  writes a project-level `opencode.jsonc` into the directory it's run from (no
+  install, no download), so each agent project controls and shows its own
+  context, output, temperature, and top-p. Server-side values (KV bits, prompt
+  cache, top-k, thinking) are listed in the file's header for visibility.
+- **Configs self-sync on launch.** The app now re-writes the OpenCode + Claude
+  Code configs on launch when they're already set up, so an upgrade applies the
+  new RAM-aware context (and any model/output changes) automatically — no
+  re-running "Set up OpenCode" needed.
+
 ## [1.31.0] — 2026-11-24
 
 ### Added

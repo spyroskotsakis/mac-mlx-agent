@@ -10,6 +10,8 @@ struct ContentView: View {
     @State private var samplingInfo: SamplingInfo?
     @State private var maxTokensText = ""
     @FocusState private var maxTokensFocused: Bool
+    @State private var contextText = ""
+    @FocusState private var contextFocused: Bool
 
     /// A one-click install/config action awaiting confirmation. Auto-install and
     /// auto-config buttons modify the Python environment or overwrite a config
@@ -106,7 +108,13 @@ struct ContentView: View {
             // here alongside the OpenCode ones.
             server.checkClaudeCode()
             server.checkLitellm()
+            // Re-sync the written client configs to the current settings on every
+            // launch, so an app upgrade (e.g. the new RAM-aware context default)
+            // applies to existing configs without the user re-running setup.
+            server.autoSyncOpenCodeConfig()
+            server.autoSyncClaudeCodeConfig()
             maxTokensText = String(server.maxTokens)
+            contextText = String(server.contextLength)
         }
         .onChange(of: server.selectedModel) { _, _ in
             server.checkModelCached()
@@ -124,6 +132,11 @@ struct ContentView: View {
         }
         .onChange(of: server.maxTokens) { _, newValue in
             maxTokensText = String(newValue)
+            server.autoSyncOpenCodeConfig()
+            server.autoSyncClaudeCodeConfig()
+        }
+        .onChange(of: server.contextLength) { _, newValue in
+            contextText = String(newValue)
             server.autoSyncOpenCodeConfig()
             server.autoSyncClaudeCodeConfig()
         }
@@ -316,6 +329,15 @@ struct ContentView: View {
         let value = min(max(256, parsed ?? server.maxTokens), ModelDefaults.maxOutputTokens)
         server.maxTokens = value
         maxTokensText = String(value)
+    }
+
+    /// Parses the Context window text field and clamps it to the valid range.
+    private func commitContext() {
+        let parsed = Int(contextText.trimmingCharacters(in: .whitespacesAndNewlines))
+        let cap = server.selectedModel.profile.maxContext
+        let value = min(max(ModelDefaults.minContextLength, parsed ?? server.contextLength), cap)
+        server.contextLength = value
+        contextText = String(value)
     }
 
     /// Which sampling setting the user tapped "(i)" on — drives the popover.
@@ -1270,12 +1292,38 @@ struct ContentView: View {
     private var modelSettingsSection: some View {
         DisclosureGroup("Model settings") {
             VStack(alignment: .leading, spacing: 10) {
-                HStack {
-                    Text("Max context").font(.callout)
-                    Spacer()
-                    Text(verbatim: "\(server.selectedModel.profile.maxContext) tokens")
-                        .font(.callout.monospaced())
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("Context window").font(.callout)
+                        Spacer()
+                        TextField("Context", text: $contextText)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 90)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($contextFocused)
+                            .onSubmit { commitContext() }
+                            .onChange(of: contextFocused) { _, focused in
+                                if !focused { commitContext() }
+                            }
+                            .disabled(!server.canSwitchModel)
+                    }
+                    Stepper(value: $server.contextLength,
+                            in: ModelDefaults.minContextLength...server.selectedModel.profile.maxContext,
+                            step: 4096) {
+                        Text(verbatim: "\(server.contextLength) of \(server.selectedModel.profile.maxContext) tokens")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .disabled(!server.canSwitchModel)
+                    Text("How much context the agent may send the model (a client-side cap — mlx_lm.server has no server-side limit). Every token grows the KV cache; the default is auto-sized to this Mac's RAM (32768 for a large model on 36 GB). Raise it only if the Mac has RAM to spare.")
+                        .font(.caption2)
                         .foregroundStyle(.secondary)
+
+                    if let warning = server.contextWarning {
+                        Label(warning, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
                 }
 
                 Toggle(isOn: $server.enableThinking) {
