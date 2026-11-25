@@ -30,28 +30,6 @@ struct MemorySnapshot: Equatable {
     }
 }
 
-/// Minimal `rusage_info_v3` up to `ri_phys_footprint`; the field offsets match
-/// libproc's `struct rusage_info_v3`, and only the physical-footprint field is read.
-private struct rusage_info_v3 {
-    var ri_uuid: (UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
-                  UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8)
-    var ri_user_time: UInt64
-    var ri_system_time: UInt64
-    var ri_pkg_idle_wkups: UInt64
-    var ri_interrupt_wkups: UInt64
-    var ri_pageins: UInt64
-    var ri_wired_size: UInt64
-    var ri_resident_size: UInt64
-    var ri_phys_footprint: UInt64
-
-    init() {
-        ri_uuid = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-        ri_user_time = 0; ri_system_time = 0; ri_pkg_idle_wkups = 0
-        ri_interrupt_wkups = 0; ri_pageins = 0; ri_wired_size = 0
-        ri_resident_size = 0; ri_phys_footprint = 0
-    }
-}
-
 private let RUSAGE_INFO_V3: Int32 = 3
 
 @_silgen_name("proc_pid_rusage")
@@ -990,13 +968,18 @@ final class ServerController: ObservableObject {
     }
 
     /// Physical footprint of a process in bytes, via `proc_pid_rusage`.
+    /// `ri_phys_footprint` sits at byte offset 72 of `rusage_info_v3` (16-byte
+    /// uuid + seven uint64 fields). The buffer is the full ~256-byte struct size
+    /// so `proc_pid_rusage` can't overrun it.
     private static func physFootprint(of pid: pid_t) -> UInt64? {
         guard pid > 0 else { return nil }
-        var info = rusage_info_v3()
-        let ok = withUnsafeMutablePointer(to: &info) {
-            proc_pid_rusage(pid, RUSAGE_INFO_V3, UnsafeMutableRawPointer($0)) == 0
+        var buffer = [UInt8](repeating: 0, count: 256)
+        let ok = buffer.withUnsafeMutableBytes { bytes in
+            guard let base = bytes.baseAddress else { return false }
+            return proc_pid_rusage(pid, RUSAGE_INFO_V3, base) == 0
         }
-        return ok ? info.ri_phys_footprint : nil
+        guard ok else { return nil }
+        return buffer.withUnsafeBytes { $0.load(fromByteOffset: 72, as: UInt64.self) }
     }
 
     /// Starts the ~3-second sampler (idempotent). Stops automatically with the app.
