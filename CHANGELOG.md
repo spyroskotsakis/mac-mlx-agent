@@ -6,7 +6,7 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
-## [Unreleased]
+## [1.32.3] — 2026-11-25
 
 ### Added
 
