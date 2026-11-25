@@ -1589,11 +1589,11 @@ final class ServerController: ObservableObject {
         }
         if claudeCodePath == nil {
             steps.append(.init(title: "Claude Code",
-                               hint: "Install it — npm install -g @anthropic-ai/claude-code (see “How to install Claude Code”).",
+                               hint: "Install it — curl -fsSL https://claude.ai/install.sh | bash (see “How to install Claude Code”).",
                                optional: true))
         } else if claudeCodeVersion == nil {
             steps.append(.init(title: "Claude Code (broken)",
-                               hint: "Reinstall — npm install -g @anthropic-ai/claude-code.",
+                               hint: "Reinstall — curl -fsSL https://claude.ai/install.sh | bash.",
                                optional: true))
         }
         if !claudeCodeProfileWritten {

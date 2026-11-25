@@ -930,9 +930,6 @@ struct ContentView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("1. Install the CLI:")
                             .font(.caption)
-                        codeBlock(title: "bash", code: "npm install -g @anthropic-ai/claude-code")
-                        Text("Or the official installer:")
-                            .font(.caption)
                         codeBlock(title: "bash", code: "curl -fsSL https://claude.ai/install.sh | bash")
                         Text("2. Reopen this panel (or click Check status) so it re-detects Claude Code.")
                             .font(.caption)
@@ -942,12 +939,12 @@ struct ContentView: View {
                 }
                 .font(.caption2)
             } else if server.claudeCodeVersion == nil {
-                // Installed but the binary doesn't run — a broken npm install.
+                // Installed but the binary doesn't run — a broken install.
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Claude Code is installed but not runnable — usually a broken npm install (a shim without its native binary).")
+                    Text("Claude Code is installed but not runnable — usually a broken install (a shim without its native binary).")
                         .font(.caption2)
                         .foregroundStyle(.orange)
-                    codeBlock(title: "bash", code: "npm install -g @anthropic-ai/claude-code")
+                    codeBlock(title: "bash", code: "curl -fsSL https://claude.ai/install.sh | bash")
                     Text("Then reopen this panel (or click Check status) to re-verify.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
