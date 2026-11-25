@@ -6,7 +6,16 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
-## [Unreleased]
+## [1.32.0] — 2026-11-25
+
+### Fixed
+
+- **Whole-machine GPU OOM panic on memory-tight models.** The 35B-class models
+  advertised a 262K context window that, once filled by a long agent session,
+  exhausted unified memory and panicked the GPU driver (`completeMemory() prepare
+  count underflow` in `AGXG16X`/`IOGPUFamily`), taking the whole Mac down. The
+  context the agent may send is now a client-side, RAM-aware setting with a safe
+  default, so the KV cache stays inside RAM.
 
 ### Added
 
