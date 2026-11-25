@@ -663,7 +663,7 @@ final class ServerController: ObservableObject {
         self.topK = UserDefaults.standard.object(forKey: Keys.topK) as? Int ?? ModelDefaults.topK
         self.maxTokens = UserDefaults.standard.object(forKey: Keys.maxTokens) as? Int ?? ModelDefaults.maxTokens
         self.promptCacheBytesGB = UserDefaults.standard.object(forKey: Keys.promptCacheBytes) as? Int ?? ModelDefaults.promptCacheBytesGB
-        self.contextLength = UserDefaults.standard.object(forKey: Keys.contextLength) as? Int ?? ModelDefaults.contextLength
+        self.contextLength = UserDefaults.standard.object(forKey: Keys.contextLength) as? Int ?? Self.safeDefaultContextLength(for: initialModel)
         self.openCodePath = Self.resolveOpenCode()
         self.openCodeMajor = self.openCodePath.flatMap { Self.openCodeVersion(at: $0)?.major }
         self.claudeCodePath = Self.resolveClaudeCode()
@@ -738,11 +738,30 @@ final class ServerController: ObservableObject {
         min(contextLength, selectedModel.profile.maxContext)
     }
 
-    /// Forces the stored context window down to the selected model's native max
-    /// when the user switches to a model with a smaller window, so the UI's
-    /// range always contains the stored value.
+    /// RAM-aware default context window for `model`. Static so `init` can call it
+    /// before `self` is fully initialized. A memory-tight model (weights > RAM/4)
+    /// keeps the conservative 32768 so its KV cache fits alongside the prompt
+    /// cache and other apps; otherwise the model's native window is used, capped
+    /// at 64K on ≤64 GB Macs / 128K above so an ultra-long-context model still
+    /// gets a sane default.
+    static func safeDefaultContextLength(for model: ModelOption) -> Int {
+        if model.profile.weightGB > physicalRAMGB / 4 { return ModelDefaults.contextLength }
+        let ceiling: Int = physicalRAMGB < 64 ? 65_536 : 131_072
+        return min(model.profile.maxContext, ceiling)
+    }
+
+    /// Convenience: the RAM-aware default for the currently-selected model.
+    var safeDefaultContextLength: Int {
+        Self.safeDefaultContextLength(for: selectedModel)
+    }
+
+    /// Forces the stored context window down when the selected model can't safely
+    /// use it: to 32768 for a memory-tight model, or to its native max otherwise.
+    /// Runs on model switch and at launch, so a stale too-large value (e.g. 262K
+    /// from an older default) never survives into a large model on a small Mac.
     private func clampContextForSelectedModel() {
-        contextLength = min(contextLength, selectedModel.profile.maxContext)
+        let cap = selectedModelIsMemoryTight ? ModelDefaults.contextLength : selectedModel.profile.maxContext
+        contextLength = min(contextLength, cap)
     }
 
     /// True when the selected model's weight footprint is a large share of this
@@ -1393,7 +1412,7 @@ final class ServerController: ObservableObject {
         topP = ModelDefaults.topP
         topK = ModelDefaults.topK
         maxTokens = ModelDefaults.maxTokens
-        contextLength = ModelDefaults.contextLength
+        contextLength = safeDefaultContextLength
         promptCacheBytesGB = ModelDefaults.promptCacheBytesGB
         allowConcurrentRequests = false
     }

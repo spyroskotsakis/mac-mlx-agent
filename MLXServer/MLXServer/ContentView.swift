@@ -1310,7 +1310,7 @@ struct ContentView: View {
                             .foregroundStyle(.secondary)
                     }
                     .disabled(!server.canSwitchModel)
-                    Text("How much context the agent may send the model (a client-side cap — mlx_lm.server has no server-side limit). Every token grows the KV cache; 32768 is a safe default that keeps large models inside 36 GB. Raise it only if the Mac has RAM to spare.")
+                    Text("How much context the agent may send the model (a client-side cap — mlx_lm.server has no server-side limit). Every token grows the KV cache; the default is auto-sized to this Mac's RAM (32768 for a large model on 36 GB). Raise it only if the Mac has RAM to spare.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
 

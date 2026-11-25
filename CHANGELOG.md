@@ -11,11 +11,13 @@ app attached.
 ### Added
 
 - **Adjustable context window.** The menu-bar app's **Model settings** now expose
-  a **Context window** setting (default 32768, clamped to each model's
-  `maxContext`) that bounds how much context the agent may send, and `setup.sh`
-  accepts `--context N` (plus a `CONTEXT` env var). This is the client-side lever
-  that keeps the KV cache — and thus unified-memory use — inside the Mac's RAM,
-  since `mlx_lm.server` has no server-side context cap.
+  a **Context window** setting whose default is auto-sized to the Mac's RAM —
+  32768 for a memory-tight model (weights > RAM/4, e.g. a 35B on 36 GB), up to
+  64K/128K otherwise — clamped to each model's `maxContext`, with a warning when
+  raised past the safe floor. `setup.sh` accepts `--context N` (plus a `CONTEXT`
+  env var). This is the client-side lever that keeps the KV cache — and thus
+  unified-memory use — inside the Mac's RAM, since `mlx_lm.server` has no
+  server-side context cap.
 - **Per-project OpenCode config.** `setup.sh --project-config --model <id>`
   writes a project-level `opencode.jsonc` into the directory it's run from (no
   install, no download), so each agent project controls and shows its own
