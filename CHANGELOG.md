@@ -23,6 +23,10 @@ app attached.
   install, no download), so each agent project controls and shows its own
   context, output, temperature, and top-p. Server-side values (KV bits, prompt
   cache, top-k, thinking) are listed in the file's header for visibility.
+- **Configs self-sync on launch.** The app now re-writes the OpenCode + Claude
+  Code configs on launch when they're already set up, so an upgrade applies the
+  new RAM-aware context (and any model/output changes) automatically — no
+  re-running "Set up OpenCode" needed.
 
 ## [1.31.0] — 2026-11-24
 

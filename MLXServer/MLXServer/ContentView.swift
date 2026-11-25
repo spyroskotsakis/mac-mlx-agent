@@ -108,6 +108,11 @@ struct ContentView: View {
             // here alongside the OpenCode ones.
             server.checkClaudeCode()
             server.checkLitellm()
+            // Re-sync the written client configs to the current settings on every
+            // launch, so an app upgrade (e.g. the new RAM-aware context default)
+            // applies to existing configs without the user re-running setup.
+            server.autoSyncOpenCodeConfig()
+            server.autoSyncClaudeCodeConfig()
             maxTokensText = String(server.maxTokens)
             contextText = String(server.contextLength)
         }
