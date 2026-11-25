@@ -307,6 +307,11 @@ fi
 # at 0 bytes. The classic LFS path downloads and resumes cleanly instead.
 export HF_HUB_DISABLE_XET=1
 
+# MLX probes for MPI at import (distributed multi-node inference) and warns when
+# it finds MPICH (Anaconda sometimes ships it) instead of Open MPI. This is a
+# single-machine server, so disable the probe — no warning, no MPI.
+export MLX_MPI_LIBNAME="/nonexistent/libmpi.dylib"
+
 if uses_optiq; then
   # Launch through the same Python interpreter that backs `mlx_lm.server` (read
   # from its shebang), with the registration import first — the model cards'

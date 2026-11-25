@@ -1026,6 +1026,14 @@ final class ServerController: ObservableObject {
             proc.arguments = serverArgs
         }
 
+        // MLX probes for MPI at import (distributed multi-node inference) and warns
+        // when it finds MPICH (which Anaconda sometimes ships) instead of Open MPI.
+        // This is a single-machine server, so disable the probe by pointing it at a
+        // library that doesn't exist — no warning, no MPI.
+        var serverEnv = ProcessInfo.processInfo.environment
+        serverEnv["MLX_MPI_LIBNAME"] = "/nonexistent/libmpi.dylib"
+        proc.environment = serverEnv
+
         let outPipe = Pipe()
         let errPipe = Pipe()
         proc.standardOutput = outPipe

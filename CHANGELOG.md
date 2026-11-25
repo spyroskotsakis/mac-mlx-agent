@@ -6,6 +6,16 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [Unreleased]
+
+### Fixed
+
+- **MPICH warning / server abort.** On Macs where Anaconda ships MPICH, MLX's
+  startup MPI probe printed a scary "[mpi] … not Open MPI" warning and could
+  abort `mlx_lm.server` (SIGABRT, status 6). The server now disables the probe by
+  setting `MLX_MPI_LIBNAME` to a non-existent library — the app is single-machine
+  and never uses MPI.
+
 ## [1.32.1] — 2026-11-25
 
 ### Fixed
