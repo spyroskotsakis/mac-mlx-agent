@@ -4,6 +4,59 @@ import AppKit
 import UserNotifications
 import Darwin
 
+// MARK: - Memory snapshot
+
+/// A live snapshot of memory use at three levels: the whole Mac, the model's
+/// server process, and the model's weights. Rendered in the Memory card.
+struct MemorySnapshot: Equatable {
+    enum Pressure: Equatable { case normal, warning, critical }
+
+    let totalGB: Double
+    let availableGB: Double
+    let serverFootprintGB: Double?
+    let modelWeightGB: Double
+    let pressure: Pressure
+
+    var usedGB: Double { totalGB - availableGB }
+    /// Server memory beyond the weights — KV cache + prompt cache + activations.
+    var serverRuntimeGB: Double? {
+        guard let server = serverFootprintGB else { return nil }
+        return max(0, server - modelWeightGB)
+    }
+    /// Everything else on the Mac (macOS + other apps).
+    var otherGB: Double? {
+        guard let server = serverFootprintGB else { return nil }
+        return max(0, usedGB - server)
+    }
+}
+
+/// Minimal `rusage_info_v3` up to `ri_phys_footprint`; the field offsets match
+/// libproc's `struct rusage_info_v3`, and only the physical-footprint field is read.
+private struct rusage_info_v3 {
+    var ri_uuid: (UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8,
+                  UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8, UInt8)
+    var ri_user_time: UInt64
+    var ri_system_time: UInt64
+    var ri_pkg_idle_wkups: UInt64
+    var ri_interrupt_wkups: UInt64
+    var ri_pageins: UInt64
+    var ri_wired_size: UInt64
+    var ri_resident_size: UInt64
+    var ri_phys_footprint: UInt64
+
+    init() {
+        ri_uuid = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        ri_user_time = 0; ri_system_time = 0; ri_pkg_idle_wkups = 0
+        ri_interrupt_wkups = 0; ri_pageins = 0; ri_wired_size = 0
+        ri_resident_size = 0; ri_phys_footprint = 0
+    }
+}
+
+private let RUSAGE_INFO_V3: Int32 = 3
+
+@_silgen_name("proc_pid_rusage")
+private func proc_pid_rusage(_ pid: pid_t, _ flavor: Int32, _ buffer: UnsafeMutableRawPointer) -> Int32
+
 /// One selectable model. `repoID` is the HuggingFace `mlx-community/…` id passed
 /// to `mlx_lm.server --model`; `displayName` is what the picker shows.
 /// Per-model capabilities. `maxContext` is the model's maximum context length
@@ -470,6 +523,8 @@ final class ServerController: ObservableObject {
 
     @Published private(set) var state: ServerState = .stopped
     @Published private(set) var log: String = ""
+    /// Latest memory snapshot, refreshed by the memory sampler (~3 s).
+    @Published private(set) var memorySnapshot: MemorySnapshot?
     @Published private(set) var resolvedExecutable: String?
 
     @Published private(set) var modelCached: Bool?
@@ -518,6 +573,7 @@ final class ServerController: ObservableObject {
     @Published private(set) var isCheckingForUpdates = false
 
     private var updateCheckTimer: Timer?
+    private var memoryTimer: Timer?
 
     /// This build's marketing version (CFBundleShortVersionString), e.g. "1.6.0".
     static var currentAppVersion: String {
@@ -864,6 +920,7 @@ final class ServerController: ObservableObject {
         }
         checkMLXLM()
         checkOptiQ()
+        startMemorySampling()
     }
 
     /// Kills every `mlx_lm.server` process and the app's own LiteLLM bridge,
@@ -889,6 +946,73 @@ final class ServerController: ObservableObject {
         if !remaining.isEmpty {
             Self.signal(remaining, SIGKILL)
         }
+    }
+
+    // MARK: - Memory sampling
+
+    /// Refreshes `memorySnapshot` from the OS and the server process. Cheap (a
+    /// couple of syscalls), so it's safe to run on a timer.
+    func refreshMemorySnapshot() {
+        let total = Self.physicalRAMGB
+        let available = Double(Self.availableMemoryBytes()) / 1_073_741_824
+        let serverFootprint: Double? = process.flatMap { p in
+            Self.physFootprint(of: p.processIdentifier).map { Double($0) / 1_073_741_824 }
+        }
+        let ratio = total > 0 ? available / total : 1
+        let pressure: MemorySnapshot.Pressure =
+            ratio < 0.10 ? .critical : (ratio < 0.25 ? .warning : .normal)
+        memorySnapshot = MemorySnapshot(
+            totalGB: total,
+            availableGB: available,
+            serverFootprintGB: serverFootprint,
+            modelWeightGB: selectedModel.profile.weightGB,
+            pressure: pressure
+        )
+    }
+
+    /// Reclaimable unified memory (free + inactive + purgeable pages) in bytes —
+    /// the same notion of "available" that Activity Monitor / `memory_pressure` use.
+    private static func availableMemoryBytes() -> UInt64 {
+        var pageSize: vm_size_t = 0
+        host_page_size(mach_host_self(), &pageSize)
+
+        var stats = vm_statistics64()
+        var count = mach_msg_type_number_t(MemoryLayout<vm_statistics64>.size / MemoryLayout<integer_t>.size)
+        let kr = withUnsafeMutablePointer(to: &stats) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count)
+            }
+        }
+        guard kr == KERN_SUCCESS else { return 0 }
+
+        let pages = UInt64(stats.free_count) + UInt64(stats.inactive_count) + UInt64(stats.purgeable_count)
+        return pages * UInt64(pageSize)
+    }
+
+    /// Physical footprint of a process in bytes, via `proc_pid_rusage`.
+    private static func physFootprint(of pid: pid_t) -> UInt64? {
+        guard pid > 0 else { return nil }
+        var info = rusage_info_v3()
+        let ok = withUnsafeMutablePointer(to: &info) {
+            proc_pid_rusage(pid, RUSAGE_INFO_V3, UnsafeMutableRawPointer($0)) == 0
+        }
+        return ok ? info.ri_phys_footprint : nil
+    }
+
+    /// Starts the ~3-second sampler (idempotent). Stops automatically with the app.
+    func startMemorySampling() {
+        guard memoryTimer == nil else { return }
+        refreshMemorySnapshot()
+        let timer = Timer(timeInterval: 3, repeats: true) { [weak self] _ in
+            self?.refreshMemorySnapshot()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        memoryTimer = timer
+    }
+
+    func stopMemorySampling() {
+        memoryTimer?.invalidate()
+        memoryTimer = nil
     }
 
     // MARK: - Update checking

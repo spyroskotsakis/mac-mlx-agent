@@ -6,6 +6,15 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [Unreleased]
+
+### Added
+
+- **Live Memory overview.** The app's Server tab now shows a **Memory** card — a
+  stacked bar (model weights / server runtime / other / free) plus used/free/total
+  and the server process's live footprint — with a color-coded pressure level.
+  A new `./memory_status.sh` prints the same overview from the terminal.
+
 ## [1.32.2] — 2026-11-25
 
 ### Fixed

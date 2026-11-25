@@ -503,7 +503,9 @@ So **Steps 1–3 above are optional** — they're kept to explain what the app d
 under the hood and for people who prefer the terminal. The app defaults to the
 same flags as `start_server.sh` — `--kv-bits 4 --max-tokens 8192 --temp 0.2
 --top-p 0.8 --top-k 20` — all editable in its **Model settings** section, plus a
-per-model **Thinking mode** toggle and an adjustable **Context window**.
+per-model **Thinking mode** toggle, an adjustable **Context window**, and a live
+**Memory** card showing machine / server / model memory with a pressure level
+(`./memory_status.sh` prints the same overview from the terminal).
 
 - Click the **MLX Server** icon in the menu bar to open the control panel.
 - **Start / Stop** the server, pick the model, and watch the live log.

@@ -199,6 +199,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 14) {
             header
             statusCard
+            memorySection
             if !server.isReady {
                 missingPrerequisitesBanner
             }
@@ -445,6 +446,82 @@ struct ContentView: View {
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary))
+    }
+
+    private var memorySection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("Memory", systemImage: "memorychip")
+                    .font(.headline)
+                Spacer()
+                if let snap = server.memorySnapshot {
+                    Text(pressureLabel(snap.pressure))
+                        .font(.caption.bold())
+                        .foregroundStyle(pressureColor(snap.pressure))
+                }
+            }
+
+            if let snap = server.memorySnapshot {
+                memoryBar(snap)
+
+                Text(verbatim: String(format: "Used %.1f GB · Free %.1f GB · Total %.0f GB",
+                                      snap.usedGB, snap.availableGB, snap.totalGB))
+                    .font(.caption.monospaced())
+
+                HStack(spacing: 0) {
+                    Text(verbatim: String(format: "Model %.1f GB", snap.modelWeightGB))
+                    Text(verbatim: snap.serverFootprintGB.map { String(format: " · Server %.1f GB", $0) } ?? " · Server —")
+                }
+                .font(.caption.monospaced())
+                .foregroundStyle(.secondary)
+            } else {
+                Text("Sampling…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .windowBackgroundColor)))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary))
+    }
+
+    private func memoryBar(_ snap: MemorySnapshot) -> some View {
+        GeometryReader { geo in
+            let total = max(snap.totalGB, 0.001)
+            let w = geo.size.width
+            let server = snap.serverFootprintGB ?? 0
+            let model = snap.serverFootprintGB != nil ? min(snap.modelWeightGB, server) : 0
+            let runtime = snap.serverFootprintGB != nil ? max(0, server - snap.modelWeightGB) : 0
+            let other = max(0, snap.usedGB - server)
+            HStack(spacing: 1) {
+                barSegment(w * model / total, .blue)
+                barSegment(w * runtime / total, .purple)
+                barSegment(w * other / total, .gray)
+                barSegment(w * snap.availableGB / total, .green)
+            }
+        }
+        .frame(height: 12)
+        .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+
+    private func barSegment(_ width: CGFloat, _ color: Color) -> some View {
+        Rectangle().fill(color).frame(width: max(0, width))
+    }
+
+    private func pressureLabel(_ p: MemorySnapshot.Pressure) -> String {
+        switch p {
+        case .normal: return "Pressure: Normal"
+        case .warning: return "Pressure: Warning"
+        case .critical: return "Pressure: Critical"
+        }
+    }
+
+    private func pressureColor(_ p: MemorySnapshot.Pressure) -> Color {
+        switch p {
+        case .normal: return .green
+        case .warning: return .orange
+        case .critical: return .red
+        }
     }
 
     private var outOfMemoryWarning: some View {
