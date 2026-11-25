@@ -6,6 +6,15 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.32.1] — 2026-11-25
+
+### Fixed
+
+- **Claude Code install command.** The app's "How to install Claude Code"
+  fold-out and the prerequisite hints now use the official installer
+  (`curl -fsSL https://claude.ai/install.sh | bash`) instead of the deprecated
+  `npm install -g @anthropic-ai/claude-code`.
+
 ## [1.32.0] — 2026-11-25
 
 ### Fixed
