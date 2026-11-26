@@ -171,6 +171,24 @@ can use it.
 
 ---
 
+## Backends
+
+The app runs **one inference backend at a time**:
+
+- **MLX (default)** — `mlx_lm.server` on port `8080`. No extra setup; this is what every
+  fresh install and upgrade uses.
+- **oMLX** — an opt-in second runtime on port `8000` (with its own API key). Install it
+  with `./setup.sh --backend omlx`, then select it in the app's **Backend** picker, or run
+  `./start_server.sh --backend omlx`.
+- **oMLX (M5 optimized)** — an oMLX launch profile for the Apple M5 Neural Accelerators
+  (macOS 26.2+). Only shown on M5 Macs.
+
+Switching backends rewrites the OpenCode and Claude Code (LiteLLM) configs to the active
+backend's port automatically. MLX stays the default; missing or invalid preferences always
+fall back to MLX silently.
+
+---
+
 ## Prerequisites
 
 Everything the stack needs, grouped by what's **manual** (you install once) vs
