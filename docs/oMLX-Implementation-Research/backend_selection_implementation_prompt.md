@@ -26,6 +26,9 @@ back with the same control.
   `Authorization: Bearer` key, default port **8000**, `OMLX_*`/`PYTHON*` env
   stripping, per-start API key. This is the design reference for the oMLX path —
   port its logic into Swift for the app; keep it as the CLI reference.
+- This brief's **§8 (M5 research findings)** and **§9 (references)** — the
+  verified oMLX M5 story (NAX kernels, ANE split tuner, GPU power cap, macOS
+  gate) and every source URL. Treat §8/§9 as the ground truth for the M5 work.
 
 ## 2. Code map (exact hooks — touch only these)
 
@@ -95,9 +98,14 @@ is started with may follow the active backend.
 ## 4. Design contract (exact semantics)
 
 ### 4.1 Backend type & default resolution
-- App: `enum Backend: String, CaseIterable { case mlx, omlx }`.
-  Resolution: `Backend(rawValue: stored) ?? .mlx`.
-- CLI: the string `mlx` or `omlx`; anything else → `mlx`.
+- App: `enum Backend: String, CaseIterable { case mlx, omlx, omlxM5 }`.
+  Resolution: `Backend(rawValue: stored) ?? .mlx`, plus two downgrade guards:
+  - `omlxM5` stored on a non-M5 Mac → resolve to `.omlx` (silent downgrade,
+    never an error).
+  - `omlxM5` on macOS < 26.2 → resolve to `.omlx` (the M5 Neural-Accelerator
+    path needs macOS 26.2+; see §8).
+- CLI: the string `mlx`, `omlx`, or `omlx-m5`; anything else → `mlx`; the
+  same two downgrade guards apply before dispatch.
 
 ### 4.2 Persistence
 - App: UserDefaults key `mlxServerBackend` (new entry in `Keys`), written by a
@@ -107,12 +115,17 @@ is started with may follow the active backend.
 
 ### 4.3 Controls
 - App: `Picker("Backend", selection: $server.backend)` at the top of the model
-  section — `"MLX (default)"` and `"oMLX"`. Disabled while
-  `!canSwitchBackend` (running/transitioning) and, when the oMLX runtime is
-  unavailable, disabled with a hint instead of silently failing.
-- CLI: `./setup.sh --backend omlx` (opt-in runtime install + persist) and
-  `./start_server.sh --backend omlx` (persist after a successful start).
-  No flag → today's behavior exactly, MLX.
+  section — `"MLX (default)"`, `"oMLX"`, and `"oMLX (M5 optimized)"`.
+  - The M5 entry is rendered **only when M5 is detected** (see §4.8); on
+    other Macs the picker shows MLX + oMLX only.
+  - Disabled while `!canSwitchBackend` (running/transitioning). When the
+    oMLX runtime is unavailable, the oMLX entries are disabled with a
+    one-line hint instead of silently failing; when M5 is detected but macOS
+    < 26.2 or the custom kernels are missing, the M5 entry is disabled with
+    the reason.
+- CLI: `./setup.sh --backend omlx|omlx-m5` (opt-in runtime install + persist)
+  and `./start_server.sh --backend omlx|omlx-m5` (persist after a successful
+  start). No flag → today's behavior exactly, MLX.
 
 ### 4.4 Switch protocol — `switchBackend(to:)` (app)
 1. Guard: not transitioning; oMLX runtime present when target == omlx.
@@ -146,7 +159,8 @@ is started with may follow the active backend.
   runtime when present. **Reuse the existing helpers instead of duplicating
   them** — the process-tree/exit-confirmation loop, the health-poll task, the
   port-conflict sweep, and the config writers are shared between backends
-  (hard constraint 2).
+  (hard constraint 2). The M5 variant is a **launch profile** on this same
+  controller (env + post-start settings), never a second controller.
 - Env isolation: strip inherited `OMLX_*` / `PYTHON*` vars; set
   `OMLX_BASE_PATH` to the oMLX state dir
   (`~/Library/Application Support/MLXServer/omlx/`).
@@ -160,16 +174,60 @@ is started with may follow the active backend.
   exactly like `mlx-optiq (OptiQ runtime)`.
 
 ### 4.7 CLI specifics
-- `setup.sh`: `--backend omlx` → `install_omlx()` creating a repo-local
-  `.venv-omlx` (mirror `install_litellm()`), then write the state file;
-  `check_status()` gains the oMLX runtime line; `configure_agents()` writes
-  the OpenCode port for the active backend.
+- `setup.sh`: `--backend omlx|omlx-m5` → `install_omlx()` creating a
+  repo-local `.venv-omlx` (mirror `install_litellm()`; for M5 mode prefer the
+  custom-kernel build — full Xcode — or the official DMG, which ships the
+  kernels precompiled), then write the state file; `check_status()` gains the
+  oMLX runtime + custom-kernel lines; `configure_agents()` writes the
+  OpenCode port for the active backend.
 - `start_server.sh`: read the state file; `mlx` → existing `mlx_lm.server`
-  exec path untouched; `omlx` → exec the oMLX venv python with
-  `-m omlx.cli serve` + env isolation, curl-poll the catalog once, and only
-  then persist the `--backend` choice.
+  exec path untouched; `omlx` / `omlx-m5` → exec the oMLX venv python with
+  `-m omlx.cli serve` + env isolation (see §4.8 for the M5 env profile),
+  curl-poll the catalog once, and only then persist the `--backend` choice.
+  Before dispatching `omlx-m5`: verify the chip (`sysctl -n
+  machdep.cpu.brand_string` must match `Apple M5`…) and macOS ≥ 26.2 — on
+  mismatch, print a warning and run plain `omlx`, never writing `omlx-m5`
+  into the state file.
 - `claude-local.sh`: unchanged (the bridge follows the active backend via the
   config written at start).
+
+### 4.8 M5-optimized oMLX (the `omlx-m5` profile)
+Same `OMLXBackendController`, one extra launch profile — never a copy.
+
+**Chip detection (verified):**
+- Swift: `sysctlbyname("machdep.cpu.brand_string")` → `"Apple M5 …"` /
+  `"Apple M5 Pro/Max/Ultra …"`; match the prefix `Apple M5` with a word
+  boundary. Once the server is up, `GET /admin/api/device-info` (chip, GPU
+  cores, memory) is the authoritative check.
+- bash: `sysctl -n machdep.cpu.brand_string | grep -Eq '^Apple M5([[:space:]]|$)'`.
+- macOS gate: NA acceleration in MLX needs macOS ≥ 26.2 (Apple, §9). Swift:
+  `ProcessInfo.processInfo.operatingSystemVersion`; bash:
+  `sw_vers -productVersion`.
+
+**The profile differs from plain `omlx` in three ways:**
+1. **NAX kernels on.** Plain `omlx` runs the GPU-only baseline and sets the
+   NAX kill switch (`OMLX_QWEN35_QMM_NAX=0`) for a deterministic cross-chip
+   baseline; the M5 profile leaves it unset. If the custom kernels or the NAX
+   metallib are unavailable, oMLX falls back to the Metal path automatically
+   (upstream behavior) — surface that as a warning, not an error. Kernel
+   availability check (from the oMLX README):
+   `python -c "from omlx.custom_kernels import native_kernel_status; print(native_kernel_status())"`.
+2. **ANE/GPU prefill split (experimental, opt-in).** Off by default. When the
+   user enables it, apply per model via the admin API
+   (`PUT /admin/api/models/{model_id}/settings`; run the tuner through
+   `/admin/api/bench/ane-tune/…` or the built-in tuner). It needs the native
+   custom kernels and uses private Apple runtime interfaces — label it
+   experimental in the UI, never enable it implicitly.
+3. **GPU power cap (optional, M5).** Surface oMLX's GPU power-limit setting —
+   it writes the AGX GPU power target (`SetMaxGPUAbsolutePower` +
+   `AbsoluteTarget` mW; `-1000` removes; `0` parks the GPU at its frequency
+   floor and must be refused). Root required, undocumented driver interface,
+   tested on macOS 26.5 only (m5gpu, §9). The UI must warn about all three.
+
+**Degradation ladder:** oMLX runtime unavailable → both oMLX entries
+disabled, MLX untouched (constraint 5). Kernels/NAX missing on M5 → M5 entry
+runs with a warning (Metal fallback is automatic). Non-M5 or macOS < 26.2 →
+M5 entry hidden; a persisted `omlx-m5` resolves to `omlx`.
 
 ## 5. Execution protocol (Claude Code technique)
 
@@ -184,10 +242,12 @@ is started with may follow the active backend.
    blocks sharing, the blast radius, and the behavior-preservation plan.
    Refactors happen only with that written justification — never for style.
 4. **Implement in phases; build after each phase; commit per phase.**
-   - **A — Foundation (app):** `Backend` enum, `Keys.backend`, init
-     resolution, `canSwitchBackend`, picker UI, runtime probe.
+   - **A — Foundation (app):** `Backend` enum (incl. `omlxM5`), `Keys.backend`,
+     init resolution + M5 downgrade guards, `canSwitchBackend`, picker UI,
+     runtime probe, chip detection (`machdep.cpu.brand_string`) + macOS gate.
    - **B — Lifecycle (app):** `OMLXBackendController`, `switchBackend(to:)`
-     with confirmed-exit + rollback, health polling, quit-path stop.
+     with confirmed-exit + rollback, health polling, quit-path stop, the
+     `omlx-m5` launch profile (§4.8).
    - **C — Clients (app):** OpenCode + bridge configs follow the active
      backend (incl. apiKey), portMismatch checks.
    - **D — CLI:** `setup.sh` / `start_server.sh` backend flag + state file +
@@ -202,7 +262,7 @@ is started with may follow the active backend.
 6. **No fabricated output.** Every verification result below must come from
    real command output, pasted into the report.
 
-## 6. Definition of Done — the 5 scenarios (all must pass)
+## 6. Definition of Done — the 7 scenarios (all must pass)
 
 1. **Fresh install starts with MLX selected.** App: no `mlxServerBackend` in
    defaults → picker shows MLX. CLI: no state file → `./start_server.sh`
@@ -230,6 +290,13 @@ is started with may follow the active backend.
    scenarios 1 and 5 end-to-end with no assumptions. Parallelize scenarios
    1–5 across headless `claude -p` subagents, each returning its own real
    command output; the orchestrator merges the results.
+7. **M5 gating (on an M5 Mac and on a non-M5 Mac).** M5: the picker shows all
+   three entries; selecting "oMLX (M5 optimized)" starts oMLX with NAX on
+   (launch env carries no `OMLX_QWEN35_QMM_NAX=0`) and the selection survives
+   relaunch; plain "oMLX" launches with the kill switch set. Non-M5 (or M5 on
+   macOS < 26.2): the M5 entry is absent/hidden, and a state file or
+   UserDefaults value of `omlx-m5` resolves to `omlx` — verify against the
+   real `sysctl -n machdep.cpu.brand_string` output on each machine.
 
 ## 7. Commit & release hygiene
 
@@ -240,5 +307,79 @@ is started with may follow the active backend.
   following the repo's existing release pattern.
 - `README.md`: add a "Backends" subsection; do **not** touch the model table,
   the one-line installer, or the Gatekeeper instructions.
-- Final state: `git status` clean, build passing, all 6 verification items
+- Final state: `git status` clean, build passing, all 7 verification items
   recorded with real output.
+
+## 8. M5 research findings (verified, Nov 2026)
+
+**What M5 changes.** The M5 GPU adds per-core **Neural Accelerators (NA)** —
+dedicated matrix-multiplication units exposed to MLX through Metal 4 TensorOps
+/ Metal Performance Primitives. Apple measured 3.3–4.1× faster TTFT vs M4 and
+19–27% faster decode (memory bandwidth 120 → 153 GB/s). MLX takes the NA path
+only on **macOS ≥ 26.2** (source: Apple ML research, §9). oMLX supports
+M1–M5; the non-M5 path is unaffected by all of this.
+
+**What oMLX does for M5 specifically:**
+- **NAX kernels** (since 0.6.2): dedicated NAX QMM suffix kernels for
+  Qwen3.5/3.6/3.8 quantized layers on M5-family; automatic Metal fallback when
+  unavailable; kill switch `OMLX_QWEN35_QMM_NAX=0`. 0.7.0 added more M5 paths:
+  QSA attention on M5 tensor units, segmented NAX tile scheduling for MoE,
+  4096/8192-token prefill chunks on M5 GPUs, exact fused decode + MTP-verify
+  kernels on M5 GPUs, JIT NAX attention kernels.
+- **ANE/GPU split tuner** (since 0.6.2): benchmarks GPU-only vs MLP/GDN splits
+  directly on the local Mac; the earlier blanket M5 ANE disable was removed.
+  ANE prefill stays experimental, opt-in per model, needs the native custom
+  kernels, and uses private Apple runtime interfaces. Community M5 testing:
+  ~5% gain, best tuner trial ~1,000 prefill tok/s; the tuner recommends
+  GPU-only when the ANE candidate is <1% faster.
+- **GPU power cap**: writes the AGX GPU power target (m5gpu method:
+  `SetMaxGPUAbsolutePower` + `AbsoluteTarget` mW via `IORegistryEntrySetCFProperties`
+  on the `AGXAccelerator` node; `-1000` removes; `0` parks the GPU at its
+  338 MHz floor and must be refused). Undocumented, root required, tested on
+  macOS 26.5 only. M5 Max reference curve: ~107 GFLOPS/W at 5 W → ~29 GFLOPS/W
+  uncapped (~96.6 W).
+- **Custom kernels are load-bearing for the fast paths.** NAX/ANE and the
+  GLM-5.2 / MiniMax M3 / Qwen3.5 fast paths need the native custom kernels
+  (full-Xcode build, `xcodebuild -downloadComponent MetalToolchain`, or the
+  official DMG which ships them precompiled). oMLX runs on M1–M5 via generic
+  paths when kernels are absent. Verify with `native_kernel_status()`.
+- **Version churn is real:** M5-specific regressions appear and get fixed fast
+  (e.g. #5685: 0.8.4 GLM-5.3-Flash ~2× slower MTP draft on M5 Ultra). Pin the
+  oMLX version the app installs (latest at research time: 0.8.4) and
+  smoke-test it on M5 before shipping; do not assume M5 speed claims.
+- **Server-side chip truth:** `GET /admin/api/device-info` (chip, GPU cores,
+  memory) — authoritative for the runtime probe and the active-profile label.
+
+**Community-verified M5 Max settings** (ricky8848/mac-m5-128g-omlx-settings,
+MIT): `~/.omlx/settings.json` with `sampling.max_context_window: 128000`,
+`memory.prefill_memory_guard` + tier + ceiling,
+`scheduler.max_concurrent_requests: 1`, SSD + hot KV cache caps; measured
+~12 tok/s at 30k-token prompts on M5 Max 128 GB. Also see discussion #3599
+(oQ4e + MTP + TurboQuant KV combo, 85–96% MTP accept, <3 s warm TTFT).
+
+## 9. References (hand these to the dev team)
+
+Upstream oMLX:
+- Repo: https://github.com/jundot/omlx
+- README (M1–M5 support, macOS 15+, Python 3.11–3.13, `omlx start` / `omlx serve`, custom-kernel + `native_kernel_status()` instructions, m5gpu acknowledgment): https://github.com/jundot/omlx#readme-ov-file
+- v0.6.2 release notes (NAX kernels, ANE/GPU split tuner, blanket M5 ANE disable removed, `OMLX_QWEN35_QMM_NAX=0`, Metal fallback, ~5% / ~1,000 tok/s M5 numbers, per-model opt-in): https://github.com/jundot/omlx/releases/tag/v0.6.2
+- v0.7.0 release notes (M5 tensor-unit QSA, NAX tile scheduling, M5 prefill chunks, exact fused decode/MTP-verify on M5, rebuilt memory-guard tiers): https://github.com/jundot/omlx/releases/tag/v0.7.0
+- Admin API (device-info, global-settings, per-model settings/acceleration, ane-tune benchmarks, headless mode): https://github.com/jundot/omlx/blob/main/docs/admin-api.md
+- Custom kernels doc: https://github.com/jundot/omlx/blob/main/docs/custom-kernels.md
+- M5 Ultra regression example (version-churn caution): https://github.com/jundot/omlx/issues/5685
+- Latest release (pin target): https://github.com/jundot/omlx/releases
+
+Apple / MLX:
+- Apple ML research — "Exploring LLMs with MLX and the Neural Accelerators in the M5 GPU" (NA concept, Metal 4 TensorOps, macOS 26.2 gate, M4-vs-M5 tables): https://machinelearning.apple.com/research/exploring-llms-mlx-m5
+- MLX: https://github.com/ml-explore/mlx · mlx-lm: https://github.com/ml-explore/mlx-lm
+
+M5 GPU power:
+- m5gpu (AGX power-target method, 0/-1000 semantics, sudoers pattern, M5 Max measurement table, cautions): https://github.com/beamivalice/m5gpu
+
+Community M5 configs:
+- M5 Max 128 GB oMLX settings + DSH (settings keys, guard tiers, measured throughput): https://github.com/ricky8848/mac-m5-128g-omlx-settings
+- Discussion #3599 (M5 Max oQ4e + MTP + TurboQuant KV summary): https://github.com/jundot/omlx/discussions/3599
+
+Local research artifacts (this repo):
+- `docs/oMLX-Implementation-Research/omlx_backend_integration_example.py` — controller reference
+- `docs/oMLX-Implementation-Research/backend_selection_implementation_prompt.md` — this brief
