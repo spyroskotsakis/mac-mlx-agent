@@ -6,6 +6,14 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.33.2] — 2026-11-26
+
+### Added
+
+- **Connect tab — third-party app essentials.** Added a copyable API key and the
+  current context window / max output, so any OpenAI-compatible third-party app
+  can be configured directly from the Connect tab.
+
 ## [1.33.1] — 2026-11-26
 
 ### Added
