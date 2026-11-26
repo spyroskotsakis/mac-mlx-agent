@@ -290,6 +290,14 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
+# Normalize the backend. Only mlx/omlx are persisted (the M5 profile is a
+# runtime-only launch mode); omlx-m5 downgrades to omlx, invalid → mlx.
+case "$BACKEND" in
+  mlx) ;;
+  omlx|omlx-m5) BACKEND="omlx" ;;
+  *) BACKEND="mlx" ;;
+esac
+
 # The port the active backend's server listens on (MLX 8080, oMLX 8000).
 SERVER_PORT="$([[ "$BACKEND" == "mlx" ]] && echo "$MLX_PORT" || echo "$OMLX_PORT")"
 
@@ -331,7 +339,7 @@ check_status() {
 
   if "$PYTHON" -c "import mlx_lm" >/dev/null 2>&1; then ok "mlx-lm"; MLXLM_OK=1; else bad "mlx-lm"; MLXLM_OK=0; fi
   if "$PYTHON" -c "import optiq" >/dev/null 2>&1; then ok "mlx-optiq (OptiQ runtime)"; OPTIQ_OK=1; else bad "mlx-optiq (OptiQ runtime)"; OPTIQ_OK=0; fi
-  if [[ -x "$SCRIPT_DIR/.venv-omlx/bin/python" ]]; then ok "oMLX (.venv-omlx)"; OMLX_OK=1; else warn "oMLX not installed (optional — for the oMLX backend)"; OMLX_OK=0; fi
+  if command -v omlx >/dev/null 2>&1 || [[ -x "$HOME/.omlx/bin/omlx" ]]; then ok "oMLX"; OMLX_OK=1; else warn "oMLX not installed (optional — for the oMLX backend)"; OMLX_OK=0; fi
   if find_hf; then ok "hf (huggingface_hub) → $HF_BIN"; HF_OK=1; else bad "hf (huggingface_hub)"; HF_OK=0; fi
   if "$PYTHON" -c "import uvicorn, fastapi" >/dev/null 2>&1; then ok "uvicorn + fastapi"; UVICORN_OK=1; else bad "uvicorn + fastapi"; UVICORN_OK=0; fi
   if have opencode || [[ -x "$HOME/.opencode/bin/opencode" ]]; then ok "OpenCode (recommended agent)"; OPENCODE_OK=1; else bad "OpenCode (recommended agent)"; OPENCODE_OK=0; fi
@@ -380,10 +388,14 @@ install_litellm() {
 
 install_omlx() {
   if [[ "${OMLX_OK:-0}" -eq 1 ]]; then ok "oMLX already installed."; return 0; fi
-  say "Creating isolated venv .venv-omlx and installing omlx…"
-  "$PYTHON" -m venv "$SCRIPT_DIR/.venv-omlx"
-  "$SCRIPT_DIR/.venv-omlx/bin/pip" install --upgrade omlx || {
-    say "oMLX install failed." >&2
+  if ! have brew; then
+    say "Homebrew is required to install oMLX — install it from https://brew.sh, or use the oMLX DMG from https://github.com/jundot/omlx/releases." >&2
+    return 1
+  fi
+  say "Installing oMLX via Homebrew…"
+  brew tap jundot/omlx https://github.com/jundot/omlx
+  brew install jundot/omlx/omlx || {
+    say "oMLX install failed. Install the DMG from https://github.com/jundot/omlx/releases instead." >&2
     return 1
   }
   OMLX_OK=1

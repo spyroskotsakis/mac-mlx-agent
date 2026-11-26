@@ -28,6 +28,11 @@ MODEL="${MODEL:-mlx-community/Qwen3.5-35B-A3B-4bit}"
 PORT="${PORT:-8080}"
 OMLX_PORT="${OMLX_PORT:-8000}"
 BACKEND="${BACKEND_ARG:-$(cat "$HOME/.config/mac-mlx-agent/backend" 2>/dev/null || echo mlx)}"
+# Normalize: only mlx / omlx / omlx-m5 are valid; anything else falls back to mlx.
+case "$BACKEND" in
+  mlx|omlx|omlx-m5) ;;
+  *) BACKEND="mlx" ;;
+esac
 
 # The server ships the same models as the menu-bar app (MLXServer/) and the
 # `./setup.sh` picker — 36 total. Pass any of their ids to `./start_server.sh <id>`.
@@ -335,8 +340,8 @@ export HF_HUB_DISABLE_XET=1
 export MLX_MPI_LIBNAME="/nonexistent/libmpi.dylib"
 
 if [[ "$BACKEND" != "mlx" ]]; then
-  OMLX_PYTHON="$SCRIPT_DIR/.venv-omlx/bin/python"
-  [[ -x "$OMLX_PYTHON" ]] || { echo "oMLX is not installed. Run: ./setup.sh --backend omlx" >&2; exit 1; }
+  OMLX_BIN="$(command -v omlx || echo "$HOME/.omlx/bin/omlx")"
+  [[ -x "$OMLX_BIN" ]] || { echo "oMLX is not installed. Run: ./setup.sh --backend omlx (or brew install jundot/omlx/omlx)" >&2; exit 1; }
   # M5 gate: downgrade omlx-m5 to omlx on a non-M5 chip.
   if [[ "$BACKEND" == "omlx-m5" ]] && ! sysctl -n machdep.cpu.brand_string 2>/dev/null | grep -Eq '^Apple M5([[:space:]]|$)'; then
     echo "Not an M5 Mac — running plain omlx." >&2
@@ -345,7 +350,7 @@ if [[ "$BACKEND" != "mlx" ]]; then
   mkdir -p "$HOME/.config/mac-mlx-agent/omlx/models"
   exec env OMLX_BASE_PATH="$HOME/.config/mac-mlx-agent/omlx" \
     OMLX_API_KEY="sk-omlx-cli" \
-    "$OMLX_PYTHON" -m omlx.cli serve --host 127.0.0.1 --port "$OMLX_PORT" \
+    "$OMLX_BIN" serve --host 127.0.0.1 --port "$OMLX_PORT" \
     --model-dir "$HOME/.config/mac-mlx-agent/omlx/models" --headless \
     --paged-ssd-cache-max-size 20GB
 fi

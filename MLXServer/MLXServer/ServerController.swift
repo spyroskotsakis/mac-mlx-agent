@@ -664,10 +664,9 @@ final class ServerController: ObservableObject {
         }
     }
 
-    /// Python interpreter in the oMLX environment (blank = auto-detect the
-    /// repo-local `~/.config/mlx-local/.venv-omlx`).
-    @Published var omlxPythonPath: String {
-        didSet { UserDefaults.standard.set(omlxPythonPath, forKey: Keys.omlxPythonPath) }
+    /// Path to the oMLX CLI (blank = auto-detect `~/.omlx/bin/omlx` or Homebrew).
+    @Published var omlxCLIPath: String {
+        didSet { UserDefaults.standard.set(omlxCLIPath, forKey: Keys.omlxCLIPath) }
     }
 
     /// Whether an oMLX runtime (launcher/venv) is available on this Mac.
@@ -759,7 +758,7 @@ final class ServerController: ObservableObject {
         static let bridgePort = "mlxServerBridgePort"
         static let executable = "mlxServerExecutable"
         static let backend = "mlxServerBackend"
-        static let omlxPythonPath = "mlxServerOmlxPythonPath"
+        static let omlxCLIPath = "mlxServerOmlxCLIPath"
         static let allowConcurrent = "mlxServerAllowConcurrent"
         static let enableThinking = "mlxServerEnableThinking"
         static let temperature = "mlxServerTemperature"
@@ -781,7 +780,7 @@ final class ServerController: ObservableObject {
 
         self.executablePath = UserDefaults.standard.string(forKey: Keys.executable) ?? ""
         self.backend = Self.resolveBackend(UserDefaults.standard.string(forKey: Keys.backend))
-        self.omlxPythonPath = UserDefaults.standard.string(forKey: Keys.omlxPythonPath) ?? ""
+        self.omlxCLIPath = UserDefaults.standard.string(forKey: Keys.omlxCLIPath) ?? ""
         self.allowConcurrentRequests = UserDefaults.standard.bool(forKey: Keys.allowConcurrent)
 
         let savedModel = UserDefaults.standard.string(forKey: Keys.model)
@@ -1360,13 +1359,13 @@ final class ServerController: ObservableObject {
             serverEnv["MLX_MPI_LIBNAME"] = "/nonexistent/libmpi.dylib"
         } else {
             // oMLX backend (omlx / omlxM5). Isolated env + own state dir + API key.
-            guard let python = resolveOMLXPython() else {
-                state = .failed("oMLX runtime isn't installed — install oMLX (or set its Python path in Advanced), then switch to oMLX.")
+            guard let omlxCLI = resolveOMLXCLI() else {
+                state = .failed("oMLX isn't installed — install it (brew install jundot/omlx/omlx, or set its CLI path in Advanced), then switch to oMLX.")
                 return
             }
-            proc.executableURL = URL(fileURLWithPath: python)
+            proc.executableURL = URL(fileURLWithPath: omlxCLI)
             proc.arguments = [
-                "-m", "omlx.cli", "serve",
+                "serve",
                 "--host", "127.0.0.1",
                 "--port", "\(activePort)",
                 "--model-dir", omlxModelDir,
@@ -1871,7 +1870,7 @@ final class ServerController: ObservableObject {
     /// user-configured path or the repo-local `.venv-omlx`). Sets
     /// `omlxRuntimeAvailable`; never blocks the MLX workflow.
     func checkOMLXRuntime() {
-        omlxRuntimeAvailable = resolveOMLXPython() != nil
+        omlxRuntimeAvailable = resolveOMLXCLI() != nil
     }
 
     /// The oMLX state directory (`OMLX_BASE_PATH`, API key, logs).
@@ -1880,16 +1879,17 @@ final class ServerController: ObservableObject {
         return appSupport.appendingPathComponent("MLXServer/omlx", isDirectory: true).path
     }
 
-    /// Resolves the Python interpreter with `omlx` installed (nil if none).
-    func resolveOMLXPython() -> String? {
+    /// Resolves the `omlx` CLI (nil if none — install via Homebrew/DMG).
+    func resolveOMLXCLI() -> String? {
         var candidates: [String] = []
-        if !omlxPythonPath.isEmpty {
-            candidates.append(omlxPythonPath)
+        if !omlxCLIPath.isEmpty {
+            candidates.append(omlxCLIPath)
         }
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         candidates += [
-            home + "/.config/mlx-local/.venv-omlx/bin/python",
-            home + "/.local/share/mlx-server/omlx/bin/python"
+            home + "/.omlx/bin/omlx",
+            "/opt/homebrew/bin/omlx",
+            "/usr/local/bin/omlx"
         ]
         for c in candidates where FileManager.default.isExecutableFile(atPath: c) {
             return c
@@ -2915,8 +2915,11 @@ final class ServerController: ObservableObject {
     }
 
     /// The model identifier clients send. MLX serves everything under the fixed
-    /// alias `default_model`; oMLX serves models by their own catalog id.
-    var modelKey: String { backend == .mlx ? "default_model" : selectedModel.repoID }
+    /// alias `default_model`; oMLX serves models by their catalog id, which
+    /// spells the HF repo id with `--` instead of `/`.
+    var modelKey: String {
+        backend == .mlx ? "default_model" : selectedModel.repoID.replacingOccurrences(of: "/", with: "--")
+    }
 
     /// Shared client `options`/`settings` for the active backend (port + apiKey
     /// when the backend requires one).
