@@ -241,7 +241,17 @@ struct ContentView: View {
 
             copyRow(title: "Base URL", value: server.baseURL)
             copyRow(title: "Model", value: server.modelAlias)
+            copyRow(title: "API key", value: "not-needed")
             copyRow(title: "Loaded model (HF id)", value: server.selectedModel.repoID)
+
+            HStack(spacing: 16) {
+                Text("Context window: \(server.effectiveContextLength) tokens")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                Text("Max output: \(server.maxTokens) tokens")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text("Endpoints").font(.subheadline).foregroundStyle(.secondary)
@@ -252,7 +262,7 @@ struct ContentView: View {
             codeBlock(title: "curl", code: server.curlExample)
             codeBlock(title: "Python — OpenAI SDK", code: server.pythonExample)
 
-            Text("api_key is not checked — pass any non-empty value (e.g. \"not-needed\").")
+            Text("The API key is not checked — any non-empty value works.")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
         }
