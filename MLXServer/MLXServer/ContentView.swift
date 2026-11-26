@@ -7,7 +7,7 @@ struct ContentView: View {
     @State private var showManualConfig = false
     @State private var showManualClaudeCode = false
     @State private var showManualLitellm = false
-    @State private var samplingInfo: SamplingInfo?
+    @State private var fieldInfo: FieldInfo?
     @State private var maxTokensText = ""
     @FocusState private var maxTokensFocused: Bool
     @State private var contextText = ""
@@ -341,27 +341,33 @@ struct ContentView: View {
         contextText = String(value)
     }
 
-    /// Which sampling setting the user tapped "(i)" on — drives the popover.
-    private enum SamplingInfo: String, Identifiable {
-        case temperature, topP, topK
+    /// Which setting the user tapped the "i" badge on — drives the inline popover.
+    private enum FieldInfo: String, Identifiable {
+        case context, temperature, topP, topK, kvBits
         var id: String { rawValue }
 
         var title: String {
             switch self {
+            case .context: return "Context window"
             case .temperature: return "Temperature"
             case .topP: return "Top-p"
             case .topK: return "Top-k"
+            case .kvBits: return "KV-cache bits"
             }
         }
 
         var detail: String {
             switch self {
+            case .context:
+                return "Every token of context grows the KV cache, so context is the single biggest memory lever.\n\n• Long task / big codebase → raise context, but watch the estimated footprint.\n• OOM / \"Insufficient Memory\" / crash → lower context first — halving it saves about the same memory as 4-bit→2-bit KV, with no quality loss.\n• Small model, huge native context → you can push it high, but the footprint warning tells you when you're near the limit.\n\nThe default is auto-sized to this Mac's RAM; raise it only if the Mac has RAM to spare."
             case .temperature:
                 return "Controls how random the output is. Lower (near 0) = focused and deterministic; higher (near 2) = creative and varied. Too high makes the model ramble or wander off-topic."
             case .topP:
                 return "Nucleus sampling: at each step the model only picks from the smallest set of most-likely tokens whose combined probability reaches p. Lower = safer and more predictable; higher = more diverse. Works together with Top-k."
             case .topK:
                 return "Caps each step to the K most-likely next tokens. Lower = more conservative and coherent; higher = more variety but riskier. 0 disables the filter."
+            case .kvBits:
+                return "Quantizes the key/value cache (the model's memory of what it's read) to save RAM.\n\nDecision guide:\n• Works fine → leave at 4-bit (the default).\n• Output repetitive / quality off → raise to 8-bit.\n• OOM / \"Insufficient Memory\" / long-task crash → drop to 2-bit and/or lower context.\n• Big model + max context (e.g. 262K) → 2-bit is how it fits.\n• Small model (≤9B), short context → 8-bit or Off for max quality.\n\nContext is usually the bigger lever than bits. Rotating-KV models (Gemma 4, Ministral 3, Llama 3.2, GPT-OSS, Frost-Cyber-Mini) can't use bits — always full precision."
             }
         }
     }
@@ -369,21 +375,21 @@ struct ContentView: View {
     /// A small blue "i" badge that toggles an inline explanation below the control.
     /// Built from text (not an SF Symbol) so it always renders, including in the
     /// menu-bar popover.
-    private func infoIcon(for field: SamplingInfo) -> some View {
+    private func infoIcon(for field: FieldInfo) -> some View {
         Button {
-            samplingInfo = (samplingInfo == field) ? nil : field
+            fieldInfo = (fieldInfo == field) ? nil : field
         } label: {
             Text("i")
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 16, height: 16)
-                .background(Circle().fill(samplingInfo == field ? Color.accentColor.opacity(0.5) : Color.accentColor))
+                .background(Circle().fill(fieldInfo == field ? Color.accentColor.opacity(0.5) : Color.accentColor))
         }
         .buttonStyle(.plain)
     }
 
     /// Inline explanation shown under a sampling control when its "(i)" is open.
-    private func infoDetail(_ field: SamplingInfo) -> some View {
+    private func infoDetail(_ field: FieldInfo) -> some View {
         Text(field.detail)
             .font(.caption2)
             .foregroundStyle(.secondary)
@@ -1369,6 +1375,7 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text("Context window").font(.callout)
+                        infoIcon(for: .context)
                         Spacer()
                         TextField("Context", text: $contextText)
                             .multilineTextAlignment(.trailing)
@@ -1397,6 +1404,10 @@ struct ContentView: View {
                         Label(warning, systemImage: "exclamationmark.triangle.fill")
                             .font(.caption)
                             .foregroundStyle(.orange)
+                    }
+
+                    if fieldInfo == .context {
+                        infoDetail(.context)
                     }
                 }
 
@@ -1430,7 +1441,7 @@ struct ContentView: View {
                     }
                     Slider(value: $server.temperature, in: 0...2, step: 0.05)
                         .disabled(!server.canSwitchModel)
-                    if samplingInfo == .temperature {
+                    if fieldInfo == .temperature {
                         infoDetail(.temperature)
                     }
                 }
@@ -1446,7 +1457,7 @@ struct ContentView: View {
                     }
                     Slider(value: $server.topP, in: 0...1, step: 0.05)
                         .disabled(!server.canSwitchModel)
-                    if samplingInfo == .topP {
+                    if fieldInfo == .topP {
                         infoDetail(.topP)
                     }
                 }
@@ -1459,7 +1470,7 @@ struct ContentView: View {
                         }
                     }
                     .disabled(!server.canSwitchModel)
-                    if samplingInfo == .topK {
+                    if fieldInfo == .topK {
                         infoDetail(.topK)
                     }
                 }
@@ -1493,6 +1504,7 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text("KV-cache bits").font(.callout)
+                        infoIcon(for: .kvBits)
                         Spacer()
                         Picker("KV-cache bits", selection: $server.kvBits) {
                             Text("4-bit (default)").tag(4)
@@ -1514,6 +1526,10 @@ struct ContentView: View {
                         Label(warning, systemImage: "exclamationmark.triangle.fill")
                             .font(.caption)
                             .foregroundStyle(.orange)
+                    }
+
+                    if fieldInfo == .kvBits {
+                        infoDetail(.kvBits)
                     }
                 }
 
