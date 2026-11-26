@@ -6,6 +6,46 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.33.0] — 2026-11-26
+
+### Added
+
+- **Per-model thinking mode (`ThinkingMode`).** The boolean `thinkingSupported`
+  flag is now a `ThinkingMode` enum — `.toggleable` (Qwen3/GLM/Ornith/Frost-style
+  `enable_thinking`), `.alwaysOn` (DeepSeek-R1, GPT-OSS), and `.none` — so each
+  model's thinking behavior is explicit and the UI explains all three.
+
+- **Configurable KV-cache bits.** Model settings now expose a KV-cache
+  quantization picker (2/4/6/8-bit, or off = full precision), defaulting to the
+  safe 4-bit (previously hard-coded). `start_server.sh` accepts `KV_BITS=0` for
+  full precision.
+
+- **Configurable prompt-cache sequence count.** The number of cached prompt/KV
+  sequences (`--prompt-cache-size`) is now adjustable (default 10), alongside the
+  byte cap.
+
+- **Memory estimator + "Estimated footprint".** Model settings show an estimated
+  total server footprint (weights + KV cache + prompt cache), and the
+  context / max-tokens / KV-bits warnings now key off that estimate instead of
+  weights alone — a small model at a huge native context no longer OOMs silently.
+
+### Fixed
+
+- **Thinking-mode misclassification.** Four models that accept `enable_thinking` —
+  `ornith-ai/Ornith-1.5-35B-A3B-MLX-4bit` and the three GLM-4.7-Flash variants —
+  were marked non-thinking; their templates default to thinking *on*, so they were
+  silently reasoning every turn. Now `.toggleable`.
+
+- **Thinking-mode output-token exhaustion.** A long reasoning pass shares the
+  `max_tokens` budget with the answer, so complex tasks (e.g. OpenCode compaction)
+  could leave the answer empty ("output token limit" error). The Thinking-mode
+  warning now explains this; raise Max tokens to fix.
+
+### Changed
+
+- `CLAUDE.md` documents two new hard invariants: client-config backward
+  compatibility, and orphaned-server recovery + single instance.
+
 ## [1.32.3] — 2026-11-25
 
 ### Added
