@@ -300,7 +300,7 @@ and are mirrored in the table's **Agent** column.
 |-------|:------:|-------------------|-------------|----------|:-----:|-------|
 | `mlx-community/Qwen3.5-35B-A3B-4bit` | 35B (3B active) | 18 GB | 262,144 | ✅ | ✅ | **Default.** MoE coder (3B active → fast); tool calls parse reliably. |
 | `mlx-community/Qwen3.6-35B-A3B-4bit` | 35B (3B active) | 18 GB | 262,144 | ✅ | ✅ | MoE coder (3B active), newer sibling of the default. |
-| `ornith-ai/Ornith-1.5-35B-A3B-MLX-4bit` | 35B (3B active) | 19.51 GB | 262,144 | — | — | Ornith self-improving coding MoE (Qwen3.5-based); ships no chat template. |
+| `ornith-ai/Ornith-1.5-35B-A3B-MLX-4bit` | 35B (3B active) | 19.51 GB | 262,144 | ✅ | — | Ornith self-improving coding MoE (Qwen3.5-based). |
 | `mlx-community/Qwen3.8-27B-4bit` | 27B | 14 GB | 262,144 | ✅ | ✅ | 27B mid-size option. |
 | `mlx-community/Qwen3-14B-4bit` | 14B | 7 GB | 40,960 | ✅ | ✅ | Smaller; natural pick for "concurrent requests" mode. |
 | `mlx-community/Qwen3.5-9B-4bit` | 9B | 6 GB | 262,144 | ✅ | ✅ | Compact daily driver. |
@@ -323,7 +323,7 @@ and are mirrored in the table's **Agent** column.
 | `mlx-community/gpt-oss-20b-MXFP4-Q8` | 21B (3.6B active) | 12.08 GB | 131,072 | — | — | OpenAI's 20B MoE; thinking model. |
 | `mlx-community/gemma-4-26B-A4B-it-qat-4bit` | 26B (4B active) | 15.61 GB | 262,144 | — | — | Google 26B-A4B MoE, **QAT** (quantization-aware) 4-bit — the higher-quality build. |
 | `mlx-community/gemma-4-26b-a4b-it-4bit` | 26B (4B active) | 15.34 GB | 262,144 | — | — | Google 26B-A4B MoE, **standard (non-QAT)** 4-bit — same assistant, slightly smaller with a small quality tradeoff. |
-| `mlx-community/GLM-4.7-Flash-4bit` | 30B (3B active) | 16.85 GB | 202,752 | — | — | Zhipu GLM-4.7-Flash MoE. |
+| `mlx-community/GLM-4.7-Flash-4bit` | 30B (3B active) | 16.85 GB | 202,752 | ✅ | — | Zhipu GLM-4.7-Flash MoE. |
 | `mlx-community/LFM2-24B-A2B-4bit` | 24B (2B active) | 12.49 GB | 128,000 | — | — | Liquid AI 24B-A2B MoE. |
 | `mlx-community/LFM2.5-1.2B-Instruct-4bit` | 1.2B | 0.66 GB | 128,000 | — | — | Liquid AI tiny 1.2B. |
 | `mlx-community/Apertus-8B-Instruct-2509-bf16` | 8B | 16.11 GB | 65,536 | ✅ | — | Swiss AI Apertus 8B Instruct — general assistant with tool calling and thinking; BF16. |
@@ -337,8 +337,8 @@ and are mirrored in the table's **Agent** column.
 | `Soaperloafidksum/LOREA-cyber-coder-30B-A3B-v5.1` | 30B (3B active) | 17.18 GB | 262,144 | — | — | **Pentesting** — security + reverse-engineering Qwen3-MoE coder; 4-bit, agent tool use. |
 | `sahilchachra/Qwensploit-V2-9B-MXFP8` | 9B | 10.15 GB | 1,048,576 | ✅ | — | **Pentesting** — red-team Qwensploit V2 9B; MXFP8. |
 | `UraionLabs/Uraion-Cyber-V1.0-MLX-oQ4e` | 35B (3B active) | 22.13 GB | 262,144 | ✅ | — | **Pentesting** — defensive-security Qwen3.5-35B-A3B MoE; oQe 4-bit. |
-| `mlx-community/glm-4.7-flash-abliterated-8bit` | 30B (3B active) | 29.94 GB | 202,752 | — | — | **Uncensored** — huihui-ai abliterated; 8-bit, experimental. |
-| `mlx-community/GLM-4.7-Flash-Derestricted-8bit-gs32` | 30B (3B active) | 29.94 GB | 202,752 | — | — | **Uncensored** — koute derestricted; 8-bit, experimental. |
+| `mlx-community/glm-4.7-flash-abliterated-8bit` | 30B (3B active) | 29.94 GB | 202,752 | ✅ | — | **Uncensored** — huihui-ai abliterated; 8-bit, experimental. |
+| `mlx-community/GLM-4.7-Flash-Derestricted-8bit-gs32` | 30B (3B active) | 29.94 GB | 202,752 | ✅ | — | **Uncensored** — koute derestricted; 8-bit, experimental. |
 | `Foresee/Qwen3.8-9B-heretic-uncensored-5bit-MLX` | 9B | 6.9 GB | 262,144 | ✅ | — | **Uncensored** — Qwen3.8-9B Heretic Uncensored; 5-bit, experimental. |
 | `avan-ag/Qwen3.5-4B-Uncensored-MLX-4bit` | 4B | 2.37 GB | 262,144 | ✅ | — | **Uncensored** — Qwen3.5-4B (Heretic-based); 4-bit, experimental. |
 | `froggeric/Qwen3.6-35B-A3B-Uncensored-Heretic-MLX-4bit` | 35B (3B active) | 20.40 GB | 262,144 | ✅ | — | **Uncensored** — Qwen3.6-35B-A3B Heretic Uncensored; 4-bit, experimental. |
@@ -431,15 +431,17 @@ mlx_lm.server --model "$MODEL" --port "$PORT" \
 
 The server loads the model and listens on `http://127.0.0.1:8080` (port `8080`
 by default). Useful flags: `--host`, `--port`, `--max-tokens`, `--temp`,
-`--kv-bits`, and `--chat-template-args` (thinking mode).
+`--kv-bits`, `--prompt-cache-bytes`, `--prompt-cache-size`, and
+`--chat-template-args` (thinking mode).
 
 > **35B-A3B MoE — KV-cache fix.** The MoE's ~19 GB weights fit in RAM on most
 > Apple Silicon Macs, but its full-precision (16-bit) KV cache overflows Metal
 > GPU memory during long agent prompts — the server dies with
 > `[METAL] … Insufficient Memory` → `generation thread died`. `start_server.sh`
 > sets `--kv-bits 4` (and `--max-tokens 8192`) to stay in budget. If output
-> quality suffers, try `KV_BITS=8 ./start_server.sh …`, but that doubles KV memory
-> and may re-trigger the OOM on long prompts.
+> quality suffers, try `KV_BITS=8 ./start_server.sh …` (roughly doubles KV
+> memory); to save RAM use `KV_BITS=2`; `KV_BITS=0` runs a full-precision (16-bit)
+> KV cache — only for small models on Macs with RAM to spare.
 
 **Smoke-test it** in another terminal:
 
@@ -811,8 +813,8 @@ the server log). Claude Code also sends `max_tokens=32000` on every request,
 overriding the server's `--max-tokens 8192`, so cap output client-side
 (`CLAUDE_CODE_MAX_OUTPUT_TOKENS`, written by the app). To make it usable: trim
 MCP servers/skills, keep Thinking mode off, keep Max tokens at 8192, or raise
-**Prompt cache** in Model settings. For most local work, **OpenCode is the better
-default.**
+**Prompt cache** in Model settings (KV-cache bits and the prompt-cache sequence
+count live there too). For most local work, **OpenCode is the better default.**
 
 ---
 

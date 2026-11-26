@@ -114,9 +114,20 @@ mlx-lm later gains image processors for `qwen3_5` / `gemma4` / `mistral3`, revis
      the top level *or* under `text_config` (multimodal models), and can be a
      misleading RoPE ceiling — e.g. Spark2.5's config says 1,048,576 while its card
      documents 131,072 native. Use the card's native context when they disagree.
-   - `thinkingSupported` = whether its chat template accepts `enable_thinking`.
-     The template often lives in a **separate `chat_template.jinja` file**, not
-     `config.json` / `tokenizer_config.json` — check all three.
+   - `thinking` = `ThinkingMode`, one of `.toggleable` / `.none` / `.alwaysOn`,
+     set by checking the model's chat template (often a **separate
+     `chat_template.jinja` file**, not `config.json` / `tokenizer_config.json`):
+       * `.toggleable` — the template accepts an `enable_thinking` argument and
+         mlx-lm extracts the reasoning cleanly via `<think>`/`</think>` (Qwen3
+         family, GLM-4.7, Ornith, …). Only these go in `THINKING_MODELS`
+         (`start_server.sh`) and `MODELS_THINK=yes` (`setup.sh`).
+       * `.alwaysOn` — the model always reasons with no off switch (DeepSeek-R1,
+         GPT-OSS); no `enable_thinking` arg is passed.
+       * `.none` — no thinking channel; no `enable_thinking` arg is passed.
+     Passing the flag to a `.none`/`.alwaysOn` model is harmless but meaningless;
+     *missing* a `.toggleable` is the real bug — its template defaults to
+     thinking *on* when the flag is absent, so the model silently reasons every
+     turn (wasted tokens) while the app claims "no thinking mode".
    - `weightGB` = **decimal GB = safetensors bytes ÷ 1e9**. Do **not** use the HF
      `safetensors.total` field (unreliable — it under-reports). Read real file sizes
      from `GET https://huggingface.co/api/models/{repo}/tree/main`.
@@ -170,6 +181,16 @@ mlx-lm later gains image processors for `qwen3_5` / `gemma4` / `mistral3`, revis
   written analysis (what is duplicated, why the current shape blocks sharing,
   the blast radius, what must stay byte-identical); do not refactor for its
   own sake.
+- **Orphaned-server recovery + single instance.** A crash / force-quit must never
+  leave a stale `mlx_lm.server` or LiteLLM bridge running. `main.swift` holds a
+  `flock` single-instance lock (kernel-released on exit, even a crash), so a
+  duplicate launch exits before it can sweep the running instance's server. On
+  relaunch and before `start()`, `killAllServers()` sweeps any `mlx_lm.server` /
+  `litellm-mlx.yaml` process — matched by **command line**, so it also catches the
+  OptiQ `python -c "import optiq; from mlx_lm.server import main; main()"` path —
+  and clean quit runs `stopSynchronouslyForQuit()`. Keep this sweep before start,
+  and never match by port alone: a stale server on a different port must still be
+  reclaimed.
 - **Thinking mode stays off by default** (and that's fine). mlx-lm ≥ 0.32 keeps
   the answer clean when thinking is on — it emits the reasoning in a separate
   `reasoning` field, not inline — so OpenCode (reads `reasoning`/`reasoning_content`
@@ -178,6 +199,23 @@ mlx-lm later gains image processors for `qwen3_5` / `gemma4` / `mistral3`, revis
   it off unless you want the longer reasoning pass.
 - **OpenCode `limit.output` must match the server's max tokens** (8192). OpenCode
   otherwise hard-codes 32000 and can wedge the single generation thread.
+- **Client-config backward compatibility (OpenCode / Claude Code / LiteLLM).** Every
+  setting the app writes into a client config file — `~/.config/opencode/opencode.jsonc`,
+  `~/.config/mlx-local/claude-code.env`, `~/.config/mlx-local/litellm-mlx.yaml` — must
+  keep working across app updates, not just on first install:
+  - **Re-synced on every launch** (and on model / context / max-tokens change) via
+    `autoSyncOpenCodeConfig` / `autoSyncClaudeCodeConfig`, so a changed default or a new
+    field in a later version applies to existing configs without re-running setup.
+  - **Merged, never clobbered**: the OpenCode write replaces only its own `mlx` provider
+    entry (`mergedOpenCodeConfig`) and keeps the user's other providers / MCP servers /
+    agent settings; the Claude/LiteLLM profiles are app-owned and regenerated whole.
+  - **Backwards-compatible across shape changes**: the app writes its *full current* entry
+    (and re-detects OpenCode v1 vs v2), so a config written by an older app version is
+    upgraded in place — never leave a stale field or the wrong provider shape behind.
+  - **Warn on mismatch + a manual or automatic fix**: a port change surfaces as a mismatch
+    (`.portMismatch` / `claudeCodeProfilePortMismatch` / `litellmConfigPortMismatch`) for
+    the user to fix with "Set up"/"Update", while model/context/output changes auto-sync
+    silently. Any new client-facing setting must plug into this same check + sync + warn flow.
 - **Sampling params matter.** `mlx_lm.server` ignores `generation_config.json` and
   defaults to greedy decoding with no repetition penalty → repetition loops. The
   scripts/app set `--temp 0.2 --top-p 0.8 --top-k 20`.

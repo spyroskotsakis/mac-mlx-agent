@@ -80,6 +80,13 @@ requests in parallel (`--prompt-concurrency` / `--decode-concurrency`). It's **o
 by default** because it needs more memory — enable it only when the model leaves
 room to spare. The setting is remembered and only takes effect on the next Start.
 
+**KV-cache bits** are configurable in **Model settings** (default **4-bit**):
+8-bit trades RAM for quality, 2-bit saves the most RAM, and **Off** runs full
+precision (16-bit) — only for small models on Macs with RAM to spare. Sliding-window
+(rotating) KV models always run full precision and ignore this setting, and it's
+also ignored while **Allow concurrent requests** is on. The **Prompt cache** byte
+cap and sequence count sit beside it in the same section.
+
 ## OpenCode setup (automatic or manual)
 
 The **Integrations** section first checks whether the `opencode` CLI is
@@ -258,9 +265,10 @@ Each model carries a **profile** with five fields:
   `max_position_embeddings`); this is the upper bound for the **Context window**
   setting. The actual `limit.context` written to OpenCode is the user's context
   window (default 32768), never exceeding `maxContext`.
-- `thinkingSupported` — whether the model's chat template accepts
-  `enable_thinking`; when false the **Thinking mode** toggle is disabled for that
-  model.
+- `thinking` — a `ThinkingMode` enum: `.toggleable` (template accepts
+  `enable_thinking` and mlx-lm extracts the reasoning cleanly — the **Thinking
+  mode** toggle is shown), `.alwaysOn` (always reasons, no toggle), or `.none`
+  (no thinking channel — the toggle is disabled).
 - `weightGB` — weight RAM in **decimal GB = safetensors bytes ÷ 1e9**, used by the
   memory-safety guard. Read real file sizes from
   `GET https://huggingface.co/api/models/{repo}/tree/main` — the HF

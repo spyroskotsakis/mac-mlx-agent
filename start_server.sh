@@ -35,10 +35,12 @@ echo "    -H 'Content-Type: application/json' \\"
 echo "    -d '{\"model\":\"default_model\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello!\"}]}'"
 echo
 
-# Quantize the KV cache to 4 bits. Needed for the 35B-A3B MoE (its
+# Quantize the KV cache to 4 bits by default. Needed for the 35B-A3B MoE (its
 # full-precision KV cache overflows Metal memory on Macs where the model and its
 # KV cache don't both fit — "Insufficient Memory" -> "generation thread died").
-# Override with KV_BITS=8 if quality suffers (and it still fits in RAM).
+# KV_BITS=8 trades RAM for quality; KV_BITS=2 saves the most RAM; KV_BITS=0 (or
+# empty) runs a full-precision (16-bit) KV cache — only for small models on Macs
+# with RAM to spare. Rotating-KV models (ROTATING_KV_MODELS) always skip it.
 KV_BITS="${KV_BITS:-4}"
 
 # Cap output at 8192 tokens. Agents spend tokens on reasoning before their tool
@@ -56,6 +58,10 @@ MAX_TOKENS="${MAX_TOKENS:-8192}"
 # your prompt is much larger than ~3 GB of 4-bit KV (e.g. Claude Code's ~85k
 # system prompt wants ~2× the default).
 PROMPT_CACHE_BYTES_GB="${PROMPT_CACHE_BYTES_GB:-6}"
+
+# Number of distinct prompt/KV sequences the cache retains (--prompt-cache-size).
+# 10 matches mlx-lm's own default; it's bounded by PROMPT_CACHE_BYTES_GB above.
+PROMPT_CACHE_SEQUENCES="${PROMPT_CACHE_SEQUENCES:-10}"
 
 # Sampling params. mlx_lm.server IGNORES the model's generation_config.json and
 # defaults to GREEDY decoding (temp 0.0, top_p 1.0, top_k 0) with NO repetition
@@ -102,8 +108,12 @@ THINKING_MODELS=(
   "sahilchachra/Qwensploit-V2-9B-MXFP8"
   "UraionLabs/Uraion-Cyber-V1.0-MLX-oQ4e"
   "TheCluster/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive-MLX-bf16"
-  "mlx-community/SmolLM3-3B-abliterated-bf16"
-  "mlx-community/Apertus-8B-Instruct-2509-bf16"
+  "mlx-community/SmolLM3-3B-abliterated-bf16",
+  "mlx-community/Apertus-8B-Instruct-2509-bf16",
+  "ornith-ai/Ornith-1.5-35B-A3B-MLX-4bit",
+  "mlx-community/GLM-4.7-Flash-4bit",
+  "mlx-community/glm-4.7-flash-abliterated-8bit",
+  "mlx-community/GLM-4.7-Flash-Derestricted-8bit-gs32"
 )
 
 supports_thinking() {
@@ -291,8 +301,9 @@ ARGS=(--model "$MODEL" --port "$PORT" --host "127.0.0.1" \
   --top-k "$TOP_K" \
   --prompt-concurrency 1 \
   --decode-concurrency 1 \
-  --prompt-cache-bytes "${PROMPT_CACHE_BYTES_GB}GB")
-if ! uses_rotating_kv; then
+  --prompt-cache-bytes "${PROMPT_CACHE_BYTES_GB}GB" \
+  --prompt-cache-size "$PROMPT_CACHE_SEQUENCES")
+if ! uses_rotating_kv && [[ -n "$KV_BITS" && "$KV_BITS" != "0" ]]; then
   ARGS+=(--kv-bits "$KV_BITS")
 fi
 if supports_thinking; then

@@ -38,11 +38,40 @@ private func proc_pid_rusage(_ pid: pid_t, _ flavor: Int32, _ buffer: UnsafeMuta
 /// One selectable model. `repoID` is the HuggingFace `mlx-community/…` id passed
 /// to `mlx_lm.server --model`; `displayName` is what the picker shows.
 /// Per-model capabilities. `maxContext` is the model's maximum context length
-/// (from its config's `max_position_embeddings`); `thinkingSupported` says
-/// whether its chat template accepts `enable_thinking`.
+/// (from its config's `max_position_embeddings`); `thinking` classifies how the
+/// model handles thinking mode (see `ThinkingMode`).
+
+/// How a model handles thinking mode. This is a first-class per-model capability
+/// rather than a raw boolean, because the behaviour genuinely differs: some
+/// models take an `enable_thinking` chat-template argument (Qwen3-style, emitting
+/// `<think>`/`</think>` markers that mlx-lm splits into a `reasoning` field),
+/// some always reason with no off switch, and some have no thinking channel at
+/// all.
+///
+/// Keep the classification in sync with the model's `chat_template.jinja` /
+/// `tokenizer_config.json`, and — on the bash side — with `THINKING_MODELS`
+/// (`start_server.sh`) and `MODELS_THINK` (`setup.sh`): only `.toggleable`
+/// models belong in those lists.
+enum ThinkingMode: Hashable {
+    /// Chat template accepts `enable_thinking` and mlx-lm extracts the reasoning
+    /// cleanly (Qwen3-family, GLM-4.7, Ornith, Frost-Cyber-Mini, …). The app
+    /// shows the toggle and passes `--chat-template-args '{"enable_thinking":…}'`.
+    case toggleable
+    /// No thinking channel — the template has no `enable_thinking` hook
+    /// (Mistral, non-thinking Gemma, Llama, Qwen2.5-Coder, …).
+    case none
+    /// Always reasons with no off switch (DeepSeek-R1, GPT-OSS). The toggle
+    /// doesn't apply; mlx-lm still keeps the reasoning in a separate field.
+    case alwaysOn
+
+    /// Whether the app passes the `enable_thinking` chat-template argument.
+    var passesThinkingFlag: Bool { self == .toggleable }
+}
+
 struct ModelProfile: Hashable {
     let maxContext: Int
-    let thinkingSupported: Bool
+    /// How the model handles thinking mode — see `ThinkingMode`.
+    let thinking: ThinkingMode
     /// Approximate RAM (GiB) the quantized weights occupy once loaded. Used by the
     /// memory-safety guard to decide whether concurrent requests (full-precision
     /// KV cache, no byte cap) can fit alongside the model on this machine.
@@ -62,12 +91,12 @@ struct ModelProfile: Hashable {
     let requiresOptiQ: Bool
 
     init(maxContext: Int,
-         thinkingSupported: Bool,
+         thinking: ThinkingMode,
          weightGB: Double,
          rotatingKVCache: Bool = false,
          requiresOptiQ: Bool = false) {
         self.maxContext = maxContext
-        self.thinkingSupported = thinkingSupported
+        self.thinking = thinking
         self.weightGB = weightGB
         self.rotatingKVCache = rotatingKVCache
         self.requiresOptiQ = requiresOptiQ
@@ -106,6 +135,13 @@ enum ModelDefaults {
     /// most this many tokens in a single response (same for every model, so it
     /// lives here rather than in each model's profile).
     static let maxOutputTokens = 32768
+    /// Default KV-cache quantization bits, passed as `--kv-bits`. 4 is the
+    /// memory-safe default that keeps the 35B model inside Metal memory alongside
+    /// its KV cache. Raise to 8 for higher quality (~2× the KV memory), lower to
+    /// 2 to save RAM, or set 0 to run a full-precision (16-bit) KV cache — the
+    /// most memory-hungry option, reserved for small models on Macs with RAM to
+    /// spare.
+    static let kvBits = 4
     /// Default prompt-cache cap in GB, passed as `--prompt-cache-bytes`. The cache
     /// must hold the system prompt's quantized KV cache TWICE (the stored entry
     /// plus the in-flight copy), so size this to ~2× your largest system prompt.
@@ -113,6 +149,11 @@ enum ModelDefaults {
     /// 6 GB cache and defeats caching — trim MCP servers/skills (or raise this) to
     /// make caching effective. OpenCode's far smaller prompt caches comfortably.
     static let promptCacheBytesGB = 6
+    /// Default number of distinct prompt/KV sequences the cache retains, passed as
+    /// `--prompt-cache-size`. 10 matches mlx-lm's own default and is plenty under
+    /// the byte cap above; raise it (with more bytes) to cache more conversation
+    /// prefixes at once.
+    static let promptCacheSequences = 10
     /// Default context window (tokens) the agent may send the model. 32768 keeps
     /// the KV cache small enough to coexist with a large model on 36 GB of unified
     /// memory. `mlx_lm.server` has no server-side context cap, so this client-side
@@ -173,303 +214,303 @@ final class ServerController: ObservableObject {
     static let availableModels: [ModelOption] = [
         ModelOption(repoID: "mlx-community/Qwen3.5-35B-A3B-4bit",
                     displayName: "Qwen3.5-35B-A3B (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 18),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .toggleable, weightGB: 18),
                     params: "35B (3B active)",
                     summary: "Flagship Qwen MoE (35B total, 3B active) — the strongest agentic coding and reasoning here.",
                     highlights: ["Agent", "MoE 3B active", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Qwen3.6-35B-A3B-4bit",
                     displayName: "Qwen3.6-35B-A3B (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 18),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .toggleable, weightGB: 18),
                     params: "35B (3B active)",
                     summary: "Newest Qwen MoE (35B total, 3B active) — refined reasoning and tool use for long agent sessions.",
                     highlights: ["Agent", "MoE 3B active", "262K ctx"]),
         ModelOption(repoID: "ornith-ai/Ornith-1.5-35B-A3B-MLX-4bit",
                     displayName: "Ornith-1.5-35B-A3B (MLX 4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, weightGB: 19.51),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .toggleable, weightGB: 19.51),
                     params: "35B (3B active)",
-                    summary: "Ornith's 35B-A3B self-improving coding MoE (Qwen3.5-based) — strong coding/agentic scores; ships no chat template.",
+                    summary: "Ornith's 35B-A3B self-improving coding MoE (Qwen3.5-based) — strong coding and agentic scores.",
                     highlights: ["Code", "MoE 3B active", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Qwen3.8-27B-4bit",
                     displayName: "Qwen3.8-27B (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 14),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .toggleable, weightGB: 14),
                     params: "27B",
                     summary: "Dense 27B — consistent coding and multi-turn agent work.",
                     highlights: ["Agent", "Dense 27B", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Qwen3-14B-4bit",
                     displayName: "Qwen3-14B (4-bit)",
-                    profile: ModelProfile(maxContext: 40_960, thinkingSupported: true, weightGB: 7),
+                    profile: ModelProfile(maxContext: 40_960, thinking: .toggleable, weightGB: 7),
                     params: "14B",
                     summary: "Balanced 14B — fast tool calling and solid reasoning; the memory-safe default for most Macs.",
                     highlights: ["Agent", "Fast", "40K ctx"]),
         ModelOption(repoID: "mlx-community/Qwen3.5-9B-4bit",
                     displayName: "Qwen3.5-9B (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 6),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .toggleable, weightGB: 6),
                     params: "9B",
                     summary: "Compact 9B with huge context — quick daily coding and chat that still fits smaller-RAM Macs.",
                     highlights: ["Agent", "Compact", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Qwen2.5-Coder-7B-Instruct-4bit",
                     displayName: "Qwen2.5-Coder-7B-Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 32_768, thinkingSupported: false, weightGB: 4.28),
+                    profile: ModelProfile(maxContext: 32_768, thinking: .none, weightGB: 4.28),
                     params: "7B",
                     summary: "Dedicated code model — strong at snippets, edits, and refactors; no thinking mode, no agent tool calling.",
                     highlights: ["Code", "Fast", "No thinking", "32K ctx"]),
         ModelOption(repoID: "mlx-community/Qwen3.5-4B-4bit",
                     displayName: "Qwen3.5-4B (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 3.03),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .toggleable, weightGB: 3.03),
                     params: "4B",
                     summary: "Tiny 4B — snappy replies and full 262K context for light tasks.",
                     highlights: ["Agent", "Tiny", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Qwen3.5-2B-4bit",
                     displayName: "Qwen3.5-2B (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 1.72),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .toggleable, weightGB: 1.72),
                     params: "2B",
                     summary: "Smallest Qwen — near-instant on any Mac; fine for quick Q&A.",
                     highlights: ["Agent", "Smallest", "262K ctx"]),
         ModelOption(repoID: "RolanDorisTech/Qwen3.8-4B-Distill-MLX-4bit",
                     displayName: "Qwen3.8-4B Distill (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 2.49),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .toggleable, weightGB: 2.49),
                     params: "4B",
                     summary: "Community Qwen3.8-4B distill (oQe 4-bit) — compact reasoning/chat; agent tool calling not validated.",
                     highlights: ["Chat", "Distill", "262K ctx"]),
         ModelOption(repoID: "RolanDorisTech/Qwen3.8-2B-Distill-MLX-4bit",
                     displayName: "Qwen3.8-2B Distill (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 1.11),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .toggleable, weightGB: 1.11),
                     params: "2B",
                     summary: "Community Qwen3.8-2B distill (oQe 4-bit) — tiny reasoning/chat; agent tool calling not validated.",
                     highlights: ["Chat", "Distill", "Tiny", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Devstral-Small-2-24B-Instruct-2512-4bit",
                     displayName: "Devstral Small 2 24B Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 393_216, thinkingSupported: false, weightGB: 15.10),
+                    profile: ModelProfile(maxContext: 393_216, thinking: .none, weightGB: 15.10),
                     params: "24B",
                     summary: "Mistral's 24B coding specialist — strong instruction following; agent tool calling not validated in this app.",
                     highlights: ["Code", "393K ctx"]),
         ModelOption(repoID: "mlx-community/gemma-4-12B-it-qat-4bit",
                     displayName: "Gemma 4 12B IT QAT (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, weightGB: 10.99, rotatingKVCache: true),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .none, weightGB: 10.99, rotatingKVCache: true),
                     params: "12B",
                     summary: "Google's 12B with quantized-aware training — capable multilingual general assistant with long context.",
                     highlights: ["Chat", "QAT", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Ministral-3-8B-Instruct-2512-4bit",
                     displayName: "Ministral 3 8B Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, weightGB: 5.60, rotatingKVCache: true),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .none, weightGB: 5.60, rotatingKVCache: true),
                     params: "8B",
                     summary: "Mistral 8B built for edge/on-device — efficient multilingual chat and light coding.",
                     highlights: ["Chat", "Efficient", "262K ctx"]),
         ModelOption(repoID: "mlx-community/gemma-4-e4b-it-4bit",
                     displayName: "Gemma 4 E4B Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, weightGB: 5.15, rotatingKVCache: true),
+                    profile: ModelProfile(maxContext: 131_072, thinking: .none, weightGB: 5.15, rotatingKVCache: true),
                     params: "4.5B effective",
                     summary: "Google's efficient 4B-class assistant — long context at low memory cost.",
                     highlights: ["Chat", "Efficient", "131K ctx"]),
         ModelOption(repoID: "mlx-community/gemma-4-e2b-it-4bit",
                     displayName: "Gemma 4 E2B Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, weightGB: 3.55, rotatingKVCache: true),
+                    profile: ModelProfile(maxContext: 131_072, thinking: .none, weightGB: 3.55, rotatingKVCache: true),
                     params: "2.3B effective",
                     summary: "Google's smallest Gemma 4 — fast general chat.",
                     highlights: ["Chat", "Small", "131K ctx"]),
         ModelOption(repoID: "mlx-community/Ministral-3-3B-Instruct-2512-4bit",
                     displayName: "Ministral 3 3B Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, weightGB: 2.75, rotatingKVCache: true),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .none, weightGB: 2.75, rotatingKVCache: true),
                     params: "3B",
                     summary: "Mistral 3B for edge devices — tiny multilingual assistant.",
                     highlights: ["Chat", "Tiny", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Llama-3.2-3B-Instruct-4bit",
                     displayName: "Llama 3.2 3B Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, weightGB: 1.81, rotatingKVCache: true),
+                    profile: ModelProfile(maxContext: 131_072, thinking: .none, weightGB: 1.81, rotatingKVCache: true),
                     params: "3B",
                     summary: "Meta's on-device 3B — small, fast, multilingual general assistant.",
                     highlights: ["Chat", "Multilingual", "131K ctx"]),
         ModelOption(repoID: "mlx-community/Qwen3-Coder-Next-4bit",
                     displayName: "Qwen3-Coder-Next (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, weightGB: 44.84),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .none, weightGB: 44.84),
                     params: "80B (3B active)",
                     summary: "Qwen's next-gen coding MoE (512 experts, 10 active) — very large; agent tool calling isn't validated in this app.",
                     highlights: ["Code", "MoE 10 active", "262K ctx"]),
         ModelOption(repoID: "mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit",
                     displayName: "Qwen3-Coder-30B-A3B-Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, weightGB: 17.18),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .none, weightGB: 17.18),
                     params: "30B (3B active)",
                     summary: "Qwen's 30B-A3B coder MoE — strong coding, but it drops the <tool_call> wrapper this app's parser needs.",
                     highlights: ["Code", "MoE 3B active", "262K ctx"]),
         ModelOption(repoID: "mlx-community/DeepSeek-R1-Distill-Qwen-32B-4bit",
                     displayName: "DeepSeek-R1-Distill-Qwen-32B (4-bit)",
-                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, weightGB: 18.43),
+                    profile: ModelProfile(maxContext: 131_072, thinking: .alwaysOn, weightGB: 18.43),
                     params: "32B",
                     summary: "DeepSeek-R1 reasoning distilled into Qwen 32B — strong reasoning; agent tool calling isn't validated in this app.",
                     highlights: ["Reasoning", "Dense 32B", "131K ctx"]),
         ModelOption(repoID: "mlx-community/gpt-oss-120b-MXFP4-Q8",
                     displayName: "GPT-OSS 120B (MXFP4-Q8)",
-                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, weightGB: 63.39, rotatingKVCache: true),
+                    profile: ModelProfile(maxContext: 131_072, thinking: .alwaysOn, weightGB: 63.39, rotatingKVCache: true),
                     params: "117B (5.1B active)",
                     summary: "OpenAI's largest open MoE (120B, 4 active) in mixed MXFP4/Q8 — a thinking model (analysis/final channels).",
                     highlights: ["Chat", "MoE 120B", "MXFP4/Q8", "131K ctx"]),
         ModelOption(repoID: "mlx-community/gpt-oss-20b-MXFP4-Q8",
                     displayName: "GPT-OSS 20B (MXFP4-Q8)",
-                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, weightGB: 12.08, rotatingKVCache: true),
+                    profile: ModelProfile(maxContext: 131_072, thinking: .alwaysOn, weightGB: 12.08, rotatingKVCache: true),
                     params: "21B (3.6B active)",
                     summary: "OpenAI's open 20B MoE (4 active) in mixed MXFP4/Q8 — a thinking model (analysis/final channels).",
                     highlights: ["Chat", "MoE 21B", "MXFP4/Q8", "131K ctx"]),
         ModelOption(repoID: "mlx-community/gemma-4-26B-A4B-it-qat-4bit",
                     displayName: "Gemma 4 26B A4B IT QAT (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, weightGB: 15.61, rotatingKVCache: true),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .none, weightGB: 15.61, rotatingKVCache: true),
                     params: "26B (4B active)",
                     summary: "Google's 26B-A4B MoE with quantization-aware training (QAT) — the higher-quality 4-bit build, strong multilingual assistant with long context.",
                     highlights: ["Chat", "QAT", "MoE 4B active", "262K ctx"]),
         ModelOption(repoID: "mlx-community/gemma-4-26b-a4b-it-4bit",
                     displayName: "Gemma 4 26B A4B IT (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, weightGB: 15.34, rotatingKVCache: true),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .none, weightGB: 15.34, rotatingKVCache: true),
                     params: "26B (4B active)",
                     summary: "Google's 26B-A4B MoE in standard 4-bit (post-training quant, no QAT) — the same multilingual assistant, slightly smaller than the QAT build with a small quality tradeoff.",
                     highlights: ["Chat", "PTQ", "MoE 4B active", "262K ctx"]),
         ModelOption(repoID: "mlx-community/GLM-4.7-Flash-4bit",
                     displayName: "GLM-4.7-Flash (4-bit)",
-                    profile: ModelProfile(maxContext: 202_752, thinkingSupported: false, weightGB: 16.85),
+                    profile: ModelProfile(maxContext: 202_752, thinking: .toggleable, weightGB: 16.85),
                     params: "30B (3B active)",
                     summary: "Zhipu's GLM-4.7-Flash MoE — fast general assistant with large context.",
                     highlights: ["Chat", "MoE", "202K ctx"]),
         ModelOption(repoID: "mlx-community/LFM2-24B-A2B-4bit",
                     displayName: "LFM2 24B A2B (4-bit)",
-                    profile: ModelProfile(maxContext: 128_000, thinkingSupported: false, weightGB: 12.49),
+                    profile: ModelProfile(maxContext: 128_000, thinking: .none, weightGB: 12.49),
                     params: "24B (2B active)",
                     summary: "Liquid AI's 24B-A2B MoE — efficient; agent integration isn't validated.",
                     highlights: ["Chat", "MoE 2B active", "128K ctx"]),
         ModelOption(repoID: "mlx-community/LFM2.5-1.2B-Instruct-4bit",
                     displayName: "LFM2.5 1.2B Instruct (4-bit)",
-                    profile: ModelProfile(maxContext: 128_000, thinkingSupported: false, weightGB: 0.66),
+                    profile: ModelProfile(maxContext: 128_000, thinking: .none, weightGB: 0.66),
                     params: "1.2B",
                     summary: "Liquid AI's tiny 1.2B — near-instant; agent integration isn't validated.",
                     highlights: ["Chat", "Tiny", "128K ctx"]),
         ModelOption(repoID: "mlx-community/Apertus-8B-Instruct-2509-bf16",
                     displayName: "Apertus 8B Instruct (BF16)",
-                    profile: ModelProfile(maxContext: 65_536, thinkingSupported: true, weightGB: 16.11),
+                    profile: ModelProfile(maxContext: 65_536, thinking: .toggleable, weightGB: 16.11),
                     params: "8B",
                     summary: "Swiss AI Apertus 8B Instruct — general assistant with tool calling and thinking, in BF16.",
                     highlights: ["Chat", "BF16", "64K ctx"]),
         // --- Security / pentesting (8-bit) ---
         ModelOption(repoID: "tthoman79/WhiteRabbitNeo-V3-7B-mlx-8bit",
                     displayName: "WhiteRabbitNeo V3 7B (8-bit)",
-                    profile: ModelProfile(maxContext: 32_768, thinkingSupported: false, weightGB: 7.62),
+                    profile: ModelProfile(maxContext: 32_768, thinking: .none, weightGB: 7.62),
                     params: "7B",
                     summary: "Security-focused Qwen2.5-Coder fine-tune for code review, vulnerability discussion, and DevSecOps.",
                     highlights: ["Pentesting", "DevSecOps", "32K ctx"]),
         ModelOption(repoID: "tthoman79/Foundation-Sec-8B-Reasoning-mlx-8bit",
                     displayName: "Foundation-Sec 8B Reasoning (8-bit)",
-                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: false, weightGB: 8.03),
+                    profile: ModelProfile(maxContext: 131_072, thinking: .none, weightGB: 8.03),
                     params: "8B",
                     summary: "Security reasoning model for findings analysis, vulnerability prioritization, and threat modeling.",
                     highlights: ["Pentesting", "Threat modeling", "128K ctx"]),
         ModelOption(repoID: "ahmedandaloes/CyberStrike-OffSec-35B-MLX-6bit",
                     displayName: "CyberStrike-OffSec 35B (6-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, weightGB: 28.17),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .none, weightGB: 28.17),
                     params: "35B (3B active)",
                     summary: "Offensive-security Qwen3.6-35B-A3B MoE (red-team, pen-testing, CTF) in 6-bit.",
                     highlights: ["Pentesting", "6-bit", "262K ctx"]),
         ModelOption(repoID: "MK4-Research/LOREA-cyber-v5.5",
                     displayName: "LOREA Cyber v5.5 (4-bit)",
-                    profile: ModelProfile(maxContext: 1_048_576, thinkingSupported: true, weightGB: 5.04),
+                    profile: ModelProfile(maxContext: 1_048_576, thinking: .toggleable, weightGB: 5.04),
                     params: "9B",
                     summary: "Guarded cybersecurity Qwen3.5 (Qwythos 9B) — security analysis, CTFs, reverse engineering.",
                     highlights: ["Pentesting", "4-bit", "1M ctx"]),
         ModelOption(repoID: "sahilchachra/Qwensploit-V2-9B-MXFP4",
                     displayName: "Qwensploit V2 9B (MXFP4)",
-                    profile: ModelProfile(maxContext: 1_048_576, thinkingSupported: true, weightGB: 5.67),
+                    profile: ModelProfile(maxContext: 1_048_576, thinking: .toggleable, weightGB: 5.67),
                     params: "9B",
                     summary: "Red-team Qwensploit V2 9B (Qwen3.5) in MXFP4 — cybersecurity and red-team work.",
                     highlights: ["Pentesting", "MXFP4", "1M ctx"]),
         ModelOption(repoID: "mlx-community/Apriel-1.5-15b-Thinker-CYBERSEC-MERGED-4bit",
                     displayName: "Apriel 1.5 15B Cybersec (4-bit)",
-                    profile: ModelProfile(maxContext: 262_400, thinkingSupported: false, weightGB: 8.12),
+                    profile: ModelProfile(maxContext: 262_400, thinking: .none, weightGB: 8.12),
                     params: "15B",
                     summary: "Cybersecurity Apriel-1.5-15B (LlaVA) in 4-bit — vision latent, text-only.",
                     highlights: ["Pentesting", "4-bit", "262K ctx"]),
         ModelOption(repoID: "peculiar-ragdoll/Cyber-Tiel-Coder-35B-A3B-MLX-oQ4e",
                     displayName: "Cyber-Tiel Coder 35B-A3B (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 21.63),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .toggleable, weightGB: 21.63),
                     params: "35B (3B active)",
                     summary: "Coding + cybersecurity Qwen3.6-35B-A3B MoE (agentic tool-use) in oQe 4-bit.",
                     highlights: ["Pentesting", "Cyber", "262K ctx"]),
         ModelOption(repoID: "Soaperloafidksum/LOREA-cyber-coder-30B-A3B-v5.1",
                     displayName: "LOREA Cyber Coder 30B-A3B (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, weightGB: 17.18),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .none, weightGB: 17.18),
                     params: "30B (3B active)",
                     summary: "Qwen3-MoE security + reverse-engineering coder fine-tune in 4-bit — agent tool use.",
                     highlights: ["Pentesting", "4-bit", "262K ctx"]),
         ModelOption(repoID: "sahilchachra/Qwensploit-V2-9B-MXFP8",
                     displayName: "Qwensploit V2 9B (MXFP8)",
-                    profile: ModelProfile(maxContext: 1_048_576, thinkingSupported: true, weightGB: 10.15),
+                    profile: ModelProfile(maxContext: 1_048_576, thinking: .toggleable, weightGB: 10.15),
                     params: "9B",
                     summary: "Red-team Qwensploit V2 9B (Qwen3.5) in MXFP8 — cybersecurity and red-team work.",
                     highlights: ["Pentesting", "MXFP8", "1M ctx"]),
         ModelOption(repoID: "UraionLabs/Uraion-Cyber-V1.0-MLX-oQ4e",
                     displayName: "Uraion Cyber V1.0 (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 22.13),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .toggleable, weightGB: 22.13),
                     params: "35B (3B active)",
                     summary: "Defensive-security Qwen3.5-35B-A3B MoE (agent work) in oQe 4-bit.",
                     highlights: ["Pentesting", "4-bit", "262K ctx"]),
         // --- Reduced-refusal / Uncensored — Experimental ---
         ModelOption(repoID: "mlx-community/glm-4.7-flash-abliterated-8bit",
                     displayName: "GLM-4.7-Flash Abliterated (8-bit)",
-                    profile: ModelProfile(maxContext: 202_752, thinkingSupported: false, weightGB: 29.94),
+                    profile: ModelProfile(maxContext: 202_752, thinking: .toggleable, weightGB: 29.94),
                     params: "30B (3B active)",
                     summary: "Reduced-refusal GLM-4.7-Flash (huihui-ai abliterated) — experimental.",
                     highlights: ["Uncensored", "Abliterated", "Experimental"]),
         ModelOption(repoID: "mlx-community/GLM-4.7-Flash-Derestricted-8bit-gs32",
                     displayName: "GLM-4.7-Flash Derestricted (8-bit)",
-                    profile: ModelProfile(maxContext: 202_752, thinkingSupported: false, weightGB: 29.94),
+                    profile: ModelProfile(maxContext: 202_752, thinking: .toggleable, weightGB: 29.94),
                     params: "30B (3B active)",
                     summary: "Reduced-refusal GLM-4.7-Flash (koute derestricted) — experimental.",
                     highlights: ["Uncensored", "Derestricted", "Experimental"]),
         ModelOption(repoID: "Foresee/Qwen3.8-9B-heretic-uncensored-5bit-MLX",
                     displayName: "Qwen3.8-9B Heretic Uncensored (5-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 6.9),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .toggleable, weightGB: 6.9),
                     params: "9B",
                     summary: "Reduced-refusal Qwen3.8-9B (Heretic Uncensored) in 5-bit — experimental.",
                     highlights: ["Uncensored", "5-bit", "262K ctx"]),
         ModelOption(repoID: "avan-ag/Qwen3.5-4B-Uncensored-MLX-4bit",
                     displayName: "Qwen3.5-4B Uncensored (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 2.37),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .toggleable, weightGB: 2.37),
                     params: "4B",
                     summary: "Reduced-refusal Qwen3.5-4B (Heretic-based Uncensored) — experimental.",
                     highlights: ["Uncensored", "Tiny", "262K ctx"]),
         ModelOption(repoID: "froggeric/Qwen3.6-35B-A3B-Uncensored-Heretic-MLX-4bit",
                     displayName: "Qwen3.6-35B-A3B Heretic Uncensored (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 20.40),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .toggleable, weightGB: 20.40),
                     params: "35B (3B active)",
                     summary: "Reduced-refusal Qwen3.6-35B-A3B (Heretic Uncensored) in 4-bit — experimental.",
                     highlights: ["Uncensored", "MoE 3B active", "262K ctx"]),
         ModelOption(repoID: "FrostWolfAI/Frost-Cyber-Mini-Uncensored-v1.1-MLX-8bit",
                     displayName: "Frost-Cyber-Mini Uncensored (8-bit)",
-                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: true, weightGB: 4.37, rotatingKVCache: true),
+                    profile: ModelProfile(maxContext: 131_072, thinking: .toggleable, weightGB: 4.37, rotatingKVCache: true),
                     params: "4B",
                     summary: "Abliterated cybersecurity agentic tool-use Spark2.5 fine-tune — enable thinking.",
                     highlights: ["Uncensored", "Cyber", "131K ctx"]),
         ModelOption(repoID: "FrostWolfAI/Frost-Cyber-Mini-Uncensored-v1.1-MLX",
                     displayName: "Frost-Cyber-Mini Uncensored (4-bit)",
-                    profile: ModelProfile(maxContext: 131_072, thinkingSupported: true, weightGB: 2.32, rotatingKVCache: true),
+                    profile: ModelProfile(maxContext: 131_072, thinking: .toggleable, weightGB: 2.32, rotatingKVCache: true),
                     params: "4B",
                     summary: "Abliterated cybersecurity agentic tool-use Spark2.5 fine-tune — enable thinking.",
                     highlights: ["Uncensored", "Cyber", "131K ctx"]),
         ModelOption(repoID: "cmdhawk/Cyber-Ornith-1.5-9B-OBLITERATED-MLX-6bit",
                     displayName: "Cyber-Ornith 9B Obliterated (6-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 7.28),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .toggleable, weightGB: 7.28),
                     params: "9B",
                     summary: "Obliterated Cyber-Ornith 9B — cybersecurity, terminal interaction, Hermes-style tool calls.",
                     highlights: ["Uncensored", "6-bit", "262K ctx"]),
         ModelOption(repoID: "TheCluster/Qwen3.5-2B-Uncensored-HauhauCS-Aggressive-MLX-bf16",
                     displayName: "Qwen3.5-2B Uncensored Aggressive (BF16)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 4.43),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .toggleable, weightGB: 4.43),
                     params: "2B",
                     summary: "Strongly uncensored Qwen3.5-2B (aggressive) in BF16.",
                     highlights: ["Uncensored", "BF16", "262K ctx"]),
         ModelOption(repoID: "AITRADER/Jackrong-Qwen3.5-2B-Claude-Reasoning-abliterated-fp16-MLX",
                     displayName: "Qwen3.5-2B Claude Reasoning Abliterated (FP16)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: false, weightGB: 4.43),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .none, weightGB: 4.43),
                     params: "2B",
                     summary: "Reasoning-distilled, abliterated Qwen3.5-2B in FP16.",
                     highlights: ["Uncensored", "Reasoning", "262K ctx"]),
         ModelOption(repoID: "mlx-community/SmolLM3-3B-abliterated-bf16",
                     displayName: "SmolLM3-3B Abliterated (BF16)",
-                    profile: ModelProfile(maxContext: 65_536, thinkingSupported: true, weightGB: 6.15),
+                    profile: ModelProfile(maxContext: 65_536, thinking: .toggleable, weightGB: 6.15),
                     params: "3B",
                     summary: "General-purpose abliterated SmolLM3-3B in BF16.",
                     highlights: ["Uncensored", "BF16", "64K ctx"]),
@@ -480,13 +521,13 @@ final class ServerController: ObservableObject {
         // `mlx_lm.server` console script.
         ModelOption(repoID: "mlx-community/Qwen3.8-27B-Uncensored-OptiQ-4bit",
                     displayName: "Qwen3.8-27B Uncensored OptiQ (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 19.8, requiresOptiQ: true),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .toggleable, weightGB: 19.8, requiresOptiQ: true),
                     params: "27B",
                     summary: "Reduced-refusal Qwen3.8-27B (Uncensored) in OptiQ mixed 4/8-bit — experimental, served via the mlx-optiq runtime.",
                     highlights: ["Uncensored", "OptiQ", "Experimental"]),
         ModelOption(repoID: "mlx-community/Qwen3.8-27B-OBLITERATED-OptiQ-4bit",
                     displayName: "Qwen3.8-27B OBLITERATED OptiQ (4-bit)",
-                    profile: ModelProfile(maxContext: 262_144, thinkingSupported: true, weightGB: 20.7, requiresOptiQ: true),
+                    profile: ModelProfile(maxContext: 262_144, thinking: .toggleable, weightGB: 20.7, requiresOptiQ: true),
                     params: "27B",
                     summary: "Reduced-refusal Qwen3.8-27B (OBLITERATED) in OptiQ mixed 4/8-bit — experimental, served via the mlx-optiq runtime.",
                     highlights: ["Uncensored", "OptiQ", "Experimental"])
@@ -565,13 +606,13 @@ final class ServerController: ObservableObject {
             // whose chat template has no `enable_thinking` is forced off, and the
             // user is alerted when a previous model had it on.
             let hadThinkingOn = enableThinking
-            let supportsThinking = selectedModel.profile.thinkingSupported
-            enableThinking = supportsThinking ? Self.loadThinking(for: selectedModel.repoID) : false
+            let toggleable = selectedModel.profile.thinking == .toggleable
+            enableThinking = toggleable ? Self.loadThinking(for: selectedModel.repoID) : false
             // A large model must never stay in concurrent-requests mode.
             clampConcurrentRequestsForSelectedModel()
             // A model with a smaller native window must clamp the context cap too.
             clampContextForSelectedModel()
-            if hadThinkingOn && !supportsThinking {
+            if hadThinkingOn && !toggleable {
                 notifyThinkingUnsupported()
             }
         }
@@ -633,6 +674,19 @@ final class ServerController: ObservableObject {
         didSet { UserDefaults.standard.set(promptCacheBytesGB, forKey: Keys.promptCacheBytes) }
     }
 
+    /// KV-cache quantization bits (0 = full precision, or 2/4/6/8), passed as
+    /// `--kv-bits`. 4 is the memory-safe default. Ignored for sliding-window
+    /// (rotating) KV models and while "Allow concurrent requests" is on.
+    @Published var kvBits: Int {
+        didSet { UserDefaults.standard.set(kvBits, forKey: Keys.kvBits) }
+    }
+
+    /// Number of distinct prompt/KV sequences the cache retains, passed as
+    /// `--prompt-cache-size`. See `ModelDefaults.promptCacheSequences`.
+    @Published var promptCacheSequences: Int {
+        didSet { UserDefaults.standard.set(promptCacheSequences, forKey: Keys.promptCacheSequences) }
+    }
+
     /// Context window (tokens) the agent may send the model. Written into the
     /// client configs as OpenCode's `limit.context` and Claude Code's
     /// `CLAUDE_CODE_MAX_CONTEXT_TOKENS`. Clamped to the selected model's native
@@ -672,6 +726,8 @@ final class ServerController: ObservableObject {
         static let topK = "mlxServerTopK"
         static let maxTokens = "mlxServerMaxTokens"
         static let promptCacheBytes = "mlxServerPromptCacheBytes"
+        static let kvBits = "mlxServerKVBits"
+        static let promptCacheSequences = "mlxServerPromptCacheSequences"
         static let contextLength = "mlxServerContextLength"
     }
 
@@ -690,13 +746,15 @@ final class ServerController: ObservableObject {
             ?? Self.availableModels.first!
         self.selectedModel = initialModel
 
-        self.enableThinking = initialModel.profile.thinkingSupported
+        self.enableThinking = initialModel.profile.thinking == .toggleable
             ? Self.loadThinking(for: initialModel.repoID) : false
         self.temperature = UserDefaults.standard.object(forKey: Keys.temperature) as? Double ?? ModelDefaults.temperature
         self.topP = UserDefaults.standard.object(forKey: Keys.topP) as? Double ?? ModelDefaults.topP
         self.topK = UserDefaults.standard.object(forKey: Keys.topK) as? Int ?? ModelDefaults.topK
         self.maxTokens = UserDefaults.standard.object(forKey: Keys.maxTokens) as? Int ?? ModelDefaults.maxTokens
         self.promptCacheBytesGB = UserDefaults.standard.object(forKey: Keys.promptCacheBytes) as? Int ?? ModelDefaults.promptCacheBytesGB
+        self.kvBits = UserDefaults.standard.object(forKey: Keys.kvBits) as? Int ?? ModelDefaults.kvBits
+        self.promptCacheSequences = UserDefaults.standard.object(forKey: Keys.promptCacheSequences) as? Int ?? ModelDefaults.promptCacheSequences
         self.contextLength = UserDefaults.standard.object(forKey: Keys.contextLength) as? Int ?? Self.safeDefaultContextLength(for: initialModel)
         self.openCodePath = Self.resolveOpenCode()
         self.openCodeMajor = self.openCodePath.flatMap { Self.openCodeVersion(at: $0)?.major }
@@ -807,11 +865,42 @@ final class ServerController: ObservableObject {
         selectedModel.profile.weightGB > Self.physicalRAMGB / 4
     }
 
-    /// Warning for the Max tokens field when the cap is raised beyond the safe
-    /// default on a memory-tight machine.
+    /// KV bits actually in effect: 0 = full precision (16-bit). Concurrent
+    /// requests and rotating-KV models always run full precision.
+    var effectiveKVBits: Int {
+        if allowConcurrentRequests || selectedModel.profile.rotatingKVCache { return 0 }
+        return kvBits
+    }
+
+    /// Estimated KV-cache size (GB) for `contextTokens` tokens at the current
+    /// KV bits. Approximate: ~3.9 KB/token per GB of weights at 4-bit (calibrated
+    /// to the 35B model's measured ~6 GB of 4-bit KV for an ~85k-token prompt),
+    /// scaled by the KV bits. MoE models are over-estimated (their attention is a
+    /// small share of total weights), which errs toward warning rather than
+    /// missing an OOM. Advisory only — the live memory sampler is authoritative.
+    func estimatedKVCacheGB(contextTokens: Int) -> Double {
+        let bits = effectiveKVBits == 0 ? 16 : effectiveKVBits
+        return 3_922.0 * selectedModel.profile.weightGB * Double(contextTokens)
+            * (Double(bits) / 4.0) / 1e9
+    }
+
+    /// Estimated total server memory (GB): weights + KV cache for the effective
+    /// context + prompt-cache cap. Advisory only.
+    var estimatedServerMemoryGB: Double {
+        selectedModel.profile.weightGB
+            + estimatedKVCacheGB(contextTokens: effectiveContextLength)
+            + Double(promptCacheBytesGB)
+    }
+
+    /// Warning for the Max tokens field when the cap is raised high enough that a
+    /// long generation's KV growth could exhaust memory — regardless of model size.
     var maxTokensWarning: String? {
-        guard maxTokens > ModelDefaults.maxTokens, selectedModelIsMemoryTight else { return nil }
-        return "Max tokens \(maxTokens) is above the safe \(ModelDefaults.maxTokens) for \(selectedModel.displayName) on this \(Int(Self.physicalRAMGB)) GB Mac — long replies fill the KV cache and can exhaust memory. Keep it at \(ModelDefaults.maxTokens), or free RAM / switch to a smaller model."
+        guard maxTokens > ModelDefaults.maxTokens else { return nil }
+        let footprint = selectedModel.profile.weightGB
+            + estimatedKVCacheGB(contextTokens: effectiveContextLength + maxTokens)
+            + Double(promptCacheBytesGB)
+        guard footprint > Self.physicalRAMGB * 0.75 else { return nil }
+        return "Max tokens \(maxTokens) lets a single reply grow the KV cache to an estimated ~\(Int(footprint)) GB on this \(Int(Self.physicalRAMGB)) GB Mac during a long task. Keep it at \(ModelDefaults.maxTokens), or lower the context / free RAM."
     }
 
     /// Warning for the Context window field when it's raised past the safe default
@@ -819,25 +908,72 @@ final class ServerController: ObservableObject {
     /// and on a tight machine a large context is what tips it into a whole-machine
     /// Metal OOM.
     var contextWarning: String? {
-        guard contextLength > ModelDefaults.contextLength, selectedModelIsMemoryTight else { return nil }
-        return "Context \(contextLength) is above the safe \(ModelDefaults.contextLength) for \(selectedModel.displayName) on this \(Int(Self.physicalRAMGB)) GB Mac — every token grows the KV cache and can exhaust memory. Keep it at \(ModelDefaults.contextLength), or free RAM / switch to a smaller model."
+        guard contextLength > safeDefaultContextLength else { return nil }
+        guard estimatedServerMemoryGB > Self.physicalRAMGB * 0.75 else { return nil }
+        return "Context \(contextLength) pushes the estimated server footprint to ~\(Int(estimatedServerMemoryGB)) GB on this \(Int(Self.physicalRAMGB)) GB Mac — every token of context grows the KV cache, and a long task can exhaust memory. Lower the context, or free RAM."
     }
 
     /// Warning for the thinking toggle. With mlx-lm ≥ 0.32 the reasoning arrives in
     /// a separate `reasoning` field, so agents still get a clean answer — but each
     /// turn is slower and, on a memory-tight machine, the extra tokens cost KV cache.
+    /// One-line subtitle for the thinking toggle, describing how the selected
+    /// model handles thinking.
+    var thinkingSubtitle: String {
+        switch selectedModel.profile.thinking {
+        case .toggleable:
+            return "The model reasons first, then answers — the reply stays clean either way."
+        case .none:
+            return "This model has no thinking mode."
+        case .alwaysOn:
+            return "This model always reasons — there's no off switch."
+        }
+    }
+
     var thinkingWarning: String? {
-        // Models with no thinking chat template can't reason first, so the toggle
-        // is disabled and forced off — tell the user why it won't switch on.
-        if !selectedModel.profile.thinkingSupported {
-            return "\(selectedModel.displayName) doesn't support thinking mode, so the toggle stays off for this model."
+        // A model without a thinking channel can't reason first, and an
+        // always-reasoning model has no off switch — tell the user why the
+        // toggle is disabled/irrelevant for each.
+        switch selectedModel.profile.thinking {
+        case .none:
+            return "\(selectedModel.displayName) has no thinking mode, so the toggle stays off for this model."
+        case .alwaysOn:
+            return "\(selectedModel.displayName) always reasons (there's no off switch), so the toggle doesn't apply — mlx-lm still keeps the reasoning in a separate field."
+        case .toggleable:
+            break
         }
         guard enableThinking else { return nil }
         var msg = "Thinking mode is ON — the model reasons in a separate step before answering. Claude Code and OpenCode still get a clean answer, but each turn is slower because it first emits those extra reasoning tokens."
+        msg += " Those reasoning tokens share the Max tokens budget with the answer, so a long reasoning pass can leave the answer empty and trip an “output token limit” error — raise Max tokens if that happens."
         if selectedModelIsMemoryTight {
             msg += " On this \(Int(Self.physicalRAMGB)) GB Mac, \(selectedModel.displayName) is memory-tight, so those extra reasoning tokens can also exhaust memory."
         }
         return msg
+    }
+
+    /// KV-cache quantization can't be used by sliding-window (rotating) KV models
+    /// (Gemma 4, Ministral 3, Llama 3.2 sliding-window layers) — they have no
+    /// quantized form yet, so passing `--kv-bits` would raise "RotatingKVCache
+    /// Quantization NYI" on the first request. The UI disables the picker for
+    /// them and they always run a full-precision cache.
+    var kvBitsSupported: Bool {
+        !selectedModel.profile.rotatingKVCache
+    }
+
+    /// Note/warning for the KV-bits setting. Full precision (0) is the
+    /// memory-hungry option the concurrent-requests guard exists to prevent, so
+    /// warn when it's chosen on a memory-tight model; otherwise explain when the
+    /// setting is currently ignored.
+    var kvBitsWarning: String? {
+        if !kvBitsSupported {
+            return "\(selectedModel.displayName) uses a sliding-window KV cache with no quantized form yet, so it always runs at full precision — the KV-bits setting is ignored for this model."
+        }
+        if allowConcurrentRequests {
+            return "Allow concurrent requests uses a full-precision KV cache (and batching), so the KV-bits setting is ignored while it's on. Turn it off to restore quantized KV cache."
+        }
+        if kvBits == 0, estimatedServerMemoryGB > Self.physicalRAMGB * 0.75 {
+            return "KV quantization is off (full precision) — the KV cache grows to an estimated ~\(Int(estimatedServerMemoryGB)) GB on this \(Int(Self.physicalRAMGB)) GB Mac. Keep 4-bit for long tasks, or lower the context."
+        }
+        return nil
     }
 
     var primaryLabel: String {
@@ -1529,6 +1665,8 @@ final class ServerController: ObservableObject {
         maxTokens = ModelDefaults.maxTokens
         contextLength = safeDefaultContextLength
         promptCacheBytesGB = ModelDefaults.promptCacheBytesGB
+        kvBits = ModelDefaults.kvBits
+        promptCacheSequences = ModelDefaults.promptCacheSequences
         allowConcurrentRequests = false
     }
 
@@ -2916,7 +3054,7 @@ final class ServerController: ObservableObject {
             "--host", "127.0.0.1",
             "--port", "\(port)"
         ]
-        // Quantized KV cache (--kv-bits 4) keeps large models inside Metal
+        // Quantized KV cache (--kv-bits, default 4) keeps large models inside Metal
         // memory. Combined with prompt/decode concurrency of 1, requests are
         // served one at a time so two agents (e.g. Claude Code + OpenCode)
         // can't be prefilled together and exhaust Metal RAM — the trigger for
@@ -2928,13 +3066,15 @@ final class ServerController: ObservableObject {
             args += [
                 "--prompt-concurrency", "1",
                 "--decode-concurrency", "1",
-                "--prompt-cache-bytes", "\(promptCacheBytesGB)GB"
+                "--prompt-cache-bytes", "\(promptCacheBytesGB)GB",
+                "--prompt-cache-size", "\(promptCacheSequences)"
             ]
             // Rotating-KV-cache models (Gemma 4, Ministral 3, Llama 3.2 sliding
             // window) have no quantized form yet, so skip --kv-bits there rather
             // than crash the first request with "RotatingKVCache Quantization NYI".
-            if !selectedModel.profile.rotatingKVCache {
-                args += ["--kv-bits", "4"]
+            // kvBits 0 = full precision (concurrent mode also drops it, above).
+            if !selectedModel.profile.rotatingKVCache && kvBits > 0 {
+                args += ["--kv-bits", "\(kvBits)"]
             }
         }
         args += [
@@ -2946,7 +3086,7 @@ final class ServerController: ObservableObject {
         // Only models whose chat template accepts `enable_thinking` (Qwen3-family)
         // get the flag. Non-thinking models (Coder, Ministral, Gemma, Llama,
         // Devstral) don't — passing it there is meaningless noise.
-        if selectedModel.profile.thinkingSupported {
+        if selectedModel.profile.thinking == .toggleable {
             args += ["--chat-template-args", "{\"enable_thinking\":\(enableThinking ? "true" : "false")}"]
         }
         // Mistral-family templates reject OpenCode's tool-call follow-ups with

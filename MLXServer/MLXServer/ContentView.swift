@@ -1403,15 +1403,13 @@ struct ContentView: View {
                 Toggle(isOn: $server.enableThinking) {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Thinking mode")
-                        Text(server.selectedModel.profile.thinkingSupported
-                             ? "Qwen3 models reason first, then answer — the reply stays clean either way."
-                             : "This model has no thinking mode.")
+                        Text(server.thinkingSubtitle)
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
                 }
                 .toggleStyle(.switch)
-                .disabled(!server.canSwitchModel || !server.selectedModel.profile.thinkingSupported)
+                .disabled(!server.canSwitchModel || server.selectedModel.profile.thinking != .toggleable)
 
                 if let warning = server.thinkingWarning {
                     Label(warning, systemImage: "exclamationmark.triangle.fill")
@@ -1493,11 +1491,48 @@ struct ContentView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("KV-cache bits").font(.callout)
+                        Spacer()
+                        Picker("KV-cache bits", selection: $server.kvBits) {
+                            Text("4-bit (default)").tag(4)
+                            Text("8-bit (higher quality)").tag(8)
+                            Text("6-bit").tag(6)
+                            Text("2-bit (save RAM)").tag(2)
+                            Text("Off — full precision").tag(0)
+                        }
+                        .pickerStyle(.menu)
+                        .labelsHidden()
+                        .fixedSize()
+                        .disabled(!server.canSwitchModel || !server.kvBitsSupported || server.allowConcurrentRequests)
+                    }
+                    Text("Quantizes the key/value cache (--kv-bits) so a large model's KV cache fits in unified memory. 4-bit is the memory-safe default; 8-bit trades RAM for quality; 2-bit saves the most RAM; Off is full precision (16-bit) — only for small models on Macs with RAM to spare. Lower bits also shrink the prompt cache per token.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+
+                    if let warning = server.kvBitsWarning {
+                        Label(warning, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
                     Stepper(value: $server.promptCacheBytesGB, in: 1...32) {
                         Text(verbatim: "Prompt cache: \(server.promptCacheBytesGB) GB").font(.callout)
                     }
                     .disabled(!server.canSwitchModel)
                     Text("Cap on cached prompt/KV memory (--prompt-cache-bytes). It must hold your system prompt's KV cache twice. Claude Code's ~85k-token system prompt needs ~6 GB, so the 6 GB default barely caches it — trim MCP servers/skills, or raise this if the Mac has spare RAM. OpenCode's small prompt caches fine at the default.")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Stepper(value: $server.promptCacheSequences, in: 1...64) {
+                        Text(verbatim: "Prompt cache sequences: \(server.promptCacheSequences)").font(.callout)
+                    }
+                    .disabled(!server.canSwitchModel)
+                    Text("How many distinct prompt/KV sequences the cache keeps (--prompt-cache-size). Bounded by the byte cap above — raising this only helps cache more conversation prefixes if the bytes allow them to fit. Default 10.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -1509,6 +1544,10 @@ struct ContentView: View {
                         .controlSize(.small)
                         .disabled(!server.canSwitchModel)
                 }
+
+                Text("Estimated footprint: ~\(Int(server.estimatedServerMemoryGB)) GB (weights + KV cache + prompt cache) on this \(Int(ServerController.physicalRAMGB)) GB Mac.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
 
                 Text("Settings apply on the next Start.")
                     .font(.caption2)

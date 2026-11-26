@@ -40,6 +40,7 @@ TOP_P="${TOP_P:-0.8}"
 TOP_K="${TOP_K:-20}"
 KV_BITS="${KV_BITS:-4}"
 PROMPT_CACHE_BYTES_GB="${PROMPT_CACHE_BYTES_GB:-6}"
+PROMPT_CACHE_SEQUENCES="${PROMPT_CACHE_SEQUENCES:-10}"
 ENABLE_THINKING="${ENABLE_THINKING:-0}"
 PYTHON="${PYTHON:-python3}"
 
@@ -154,7 +155,7 @@ MODELS_NAME=(
 )
 MODELS_CTX=(262144 262144 262144 262144 40960 262144 32768 262144 262144 393216 262144 262144 131072 131072 262144 131072 262144 262144 131072 131072 131072 262144 262144 202752 128000 128000 65536 32768 131072 262144 1048576 1048576 262400 262144 262144 1048576 262144 202752 202752 262144 262144 262144 131072 131072 262144 262144 262144 65536 262144 262144 262144 262144)
 MODELS_WGT=(18 18 19.51 14 7 6 4.28 3.03 1.72 15.10 10.99 5.60 5.15 3.55 2.75 1.81 44.84 17.18 18.43 63.39 12.08 15.61 15.34 16.85 12.49 0.66 16.11 7.62 8.03 28.17 5.04 5.67 8.12 21.63 17.18 10.15 22.13 29.94 29.94 6.9 2.37 20.40 4.37 2.32 7.28 4.43 4.43 6.15 2.49 1.11 19.8 20.7)
-MODELS_THINK=(yes yes no yes yes yes no yes yes no no no no no no no no no no no no no no no no no yes no no no yes yes no yes no yes yes no no yes yes yes yes yes yes yes no yes yes yes yes yes)
+MODELS_THINK=(yes yes yes yes yes yes no yes yes no no no no no no no no no no no no no no yes no no yes no no no yes yes no yes no yes yes yes yes yes yes yes yes yes yes yes no yes yes yes yes yes)
 MODELS_TAG=(
   "Agent"
   "Agent"
@@ -212,7 +213,7 @@ MODELS_TAG=(
 MODELS_DESC=(
   "Flagship Qwen MoE (35B total, 3B active) — the strongest agentic coding and reasoning here."
   "Newest Qwen MoE (35B total, 3B active) — refined reasoning and tool use for long agent sessions."
-  "Ornith's 35B-A3B self-improving coding MoE (Qwen3.5-based) — strong coding/agentic scores; ships no chat template."
+  "Ornith's 35B-A3B self-improving coding MoE (Qwen3.5-based) — strong coding and agentic scores."
   "Dense 27B — consistent coding and multi-turn agent work."
   "Balanced 14B — fast tool calling and solid reasoning; the memory-safe default for most Macs."
   "Compact 9B with huge context — quick daily coding and chat that still fits smaller-RAM Macs."
@@ -619,6 +620,7 @@ write_project_config() {
 //   top-k:        $TOP_K         [server-side]
 //   KV bits:      $KV_BITS       [server-side]
 //   prompt cache: ${PROMPT_CACHE_BYTES_GB} GB  [server-side]
+//   cache seqs:   $PROMPT_CACHE_SEQUENCES      [server-side]
 //   thinking:     $think         [server-side]
 //   server:       http://127.0.0.1:${MLX_PORT}/v1
 //
