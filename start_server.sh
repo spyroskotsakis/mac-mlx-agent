@@ -15,8 +15,19 @@ set -euo pipefail
 # it for agents), and Qwen2.5-Coder-14B wrapped its call in <tools> instead of
 # <tool_call> and was removed from the picker. Both come back as plain text and
 # stall the agent loop.
-MODEL="${1:-mlx-community/Qwen3.5-35B-A3B-4bit}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MODEL=""
+BACKEND_ARG=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --backend) BACKEND_ARG="${2:-mlx}"; shift 2 ;;
+    *) MODEL="$1"; shift ;;
+  esac
+done
+MODEL="${MODEL:-mlx-community/Qwen3.5-35B-A3B-4bit}"
 PORT="${PORT:-8080}"
+OMLX_PORT="${OMLX_PORT:-8000}"
+BACKEND="${BACKEND_ARG:-$(cat "$HOME/.config/mac-mlx-agent/backend" 2>/dev/null || echo mlx)}"
 
 # The server ships the same models as the menu-bar app (MLXServer/) and the
 # `./setup.sh` picker — 36 total. Pass any of their ids to `./start_server.sh <id>`.
@@ -322,6 +333,22 @@ export HF_HUB_DISABLE_XET=1
 # it finds MPICH (Anaconda sometimes ships it) instead of Open MPI. This is a
 # single-machine server, so disable the probe — no warning, no MPI.
 export MLX_MPI_LIBNAME="/nonexistent/libmpi.dylib"
+
+if [[ "$BACKEND" != "mlx" ]]; then
+  OMLX_PYTHON="$SCRIPT_DIR/.venv-omlx/bin/python"
+  [[ -x "$OMLX_PYTHON" ]] || { echo "oMLX is not installed. Run: ./setup.sh --backend omlx" >&2; exit 1; }
+  # M5 gate: downgrade omlx-m5 to omlx on a non-M5 chip.
+  if [[ "$BACKEND" == "omlx-m5" ]] && ! sysctl -n machdep.cpu.brand_string 2>/dev/null | grep -Eq '^Apple M5([[:space:]]|$)'; then
+    echo "Not an M5 Mac — running plain omlx." >&2
+    BACKEND="omlx"
+  fi
+  mkdir -p "$HOME/.config/mac-mlx-agent/omlx/models"
+  exec env OMLX_BASE_PATH="$HOME/.config/mac-mlx-agent/omlx" \
+    OMLX_API_KEY="sk-omlx-cli" \
+    "$OMLX_PYTHON" -m omlx.cli serve --host 127.0.0.1 --port "$OMLX_PORT" \
+    --model-dir "$HOME/.config/mac-mlx-agent/omlx/models" --headless \
+    --paged-ssd-cache-max-size 20GB
+fi
 
 if uses_optiq; then
   # Launch through the same Python interpreter that backs `mlx_lm.server` (read
