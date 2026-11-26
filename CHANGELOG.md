@@ -6,6 +6,16 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.33.1] — 2026-11-26
+
+### Added
+
+- **Clickable info popovers for Context window and KV-cache bits.** The Model
+  settings now show an "i" badge next to **Context window** and **KV-cache
+  bits** that expands a decision guide — what to change when output quality is
+  off, when memory runs out, or when you want maximum context/quality — so the
+  two memory levers are self-explanatory in the app.
+
 ## [1.33.0] — 2026-11-26
 
 ### Added
