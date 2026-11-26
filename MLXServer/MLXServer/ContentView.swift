@@ -1318,6 +1318,29 @@ struct ContentView: View {
 
     private var modelSection: some View {
         VStack(alignment: .leading, spacing: 6) {
+            Text("Backend").font(.subheadline).foregroundStyle(.secondary)
+            Picker("Backend", selection: Binding(
+                get: { server.backend },
+                set: { server.switchBackend(to: $0) }
+            )) {
+                Text("MLX (default)").tag(Backend.mlx)
+                Text("oMLX").tag(Backend.omlx)
+                if ServerController.isM5Chip && ServerController.isMacOS26_2OrLater {
+                    Text("oMLX (M5 optimized)").tag(Backend.omlxM5)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .disabled(!server.canSwitchBackend)
+
+            if !server.omlxRuntimeAvailable {
+                Label("oMLX isn't installed — run ./setup.sh --backend omlx, or set its Python path in Advanced.", systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
             Text("Model").font(.subheadline).foregroundStyle(.secondary)
             Picker("Model", selection: $server.selectedModel) {
                 ForEach(ServerController.availableModels) { model in
