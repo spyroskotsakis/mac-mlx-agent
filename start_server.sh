@@ -43,12 +43,23 @@ esac
 # OpenCode without them. Thinking mode applies only to
 # the Qwen3 family (see THINKING_MODELS below).
 
-echo "Starting MLX-LM server for: $MODEL"
-echo "Listening on http://127.0.0.1:${PORT}  (OpenAI API at /v1)"
+# Backend-aware banner: oMLX listens on 8000 and names models with "--".
+if [[ "$BACKEND" == "mlx" ]]; then
+  ACTIVE_PORT="$PORT"
+  BACKEND_NAME="MLX"
+  SMOKE_MODEL="default_model"
+else
+  ACTIVE_PORT="$OMLX_PORT"
+  BACKEND_NAME="oMLX"
+  SMOKE_MODEL="${MODEL//\//--}"
+fi
+
+echo "Starting ${BACKEND_NAME} server for: $MODEL"
+echo "Listening on http://127.0.0.1:${ACTIVE_PORT}  (OpenAI API at /v1)"
 echo "Smoke test:"
-echo "  curl http://127.0.0.1:${PORT}/v1/chat/completions \\"
+echo "  curl http://127.0.0.1:${ACTIVE_PORT}/v1/chat/completions \\"
 echo "    -H 'Content-Type: application/json' \\"
-echo "    -d '{\"model\":\"default_model\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello!\"}]}'"
+echo "    -d '{\"model\":\"${SMOKE_MODEL}\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello!\"}]}'"
 echo
 
 # Quantize the KV cache to 4 bits by default. Needed for the 35B-A3B MoE (its

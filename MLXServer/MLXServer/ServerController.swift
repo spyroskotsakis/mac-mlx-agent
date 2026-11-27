@@ -2034,6 +2034,11 @@ final class ServerController: ObservableObject {
                                hint: "Click Install in Requirements — installs the mlx-optiq runtime this OptiQ model needs.",
                                optional: false))
         }
+        if !omlxRuntimeAvailable {
+            steps.append(.init(title: "oMLX (optional backend)",
+                               hint: "Click Install in Requirements — installs oMLX via Homebrew (or the DMG from github.com/jundot/omlx/releases).",
+                               optional: true))
+        }
         if hfPath == nil {
             steps.append(.init(title: "Hugging Face CLI (hf)",
                                hint: "Click Install in Requirements. No Hugging Face account is needed.",
@@ -2171,6 +2176,25 @@ final class ServerController: ObservableObject {
             self.isInstalling = false
             self.appendInstallOutput(status == 0 ? "\n[huggingface_hub (hf) installed]\n" : "\n[install failed (status \(status))]\n")
             self.checkHF()
+        })
+    }
+
+    /// Installs oMLX (the second inference backend) via Homebrew, streaming
+    /// output to `installOutput`. oMLX is optional — only needed for the oMLX
+    /// backend; the MLX workflow never depends on it.
+    func installOMLX() {
+        guard !isInstalling else { return }
+        isInstalling = true
+        installOutput = ""
+        appendInstallOutput("$ brew tap jundot/omlx && brew install jundot/omlx/omlx\n\n")
+        runStreaming(executable: "/bin/bash",
+                     arguments: ["-lc", "brew tap jundot/omlx https://github.com/jundot/omlx && brew install jundot/omlx/omlx"],
+                     sink: { [weak self] in self?.appendInstallOutput($0) },
+                     completion: { [weak self] status in
+            guard let self else { return }
+            self.isInstalling = false
+            self.appendInstallOutput(status == 0 ? "\n[oMLX installed]\n" : "\n[oMLX install failed (status \(status)) — install the DMG from https://github.com/jundot/omlx/releases]\n")
+            self.checkOMLXRuntime()
         })
     }
 

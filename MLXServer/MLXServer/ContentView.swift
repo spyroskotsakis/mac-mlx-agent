@@ -17,7 +17,7 @@ struct ContentView: View {
     /// auto-config buttons modify the Python environment or overwrite a config
     /// file, so the user confirms each one before it runs.
     private enum PendingConfirm: String, Identifiable {
-        case installMLX, installOptiQ, installHF, installLitellm
+        case installMLX, installOptiQ, installHF, installLitellm, installOMLX
         case writeOpenCode, writeClaudeCode, writeLitellm
         case deleteModel, deleteAllModels
 
@@ -29,6 +29,7 @@ struct ContentView: View {
             case .installOptiQ: return "Install mlx-optiq?"
             case .installHF: return "Install the Hugging Face CLI?"
             case .installLitellm: return "Install LiteLLM?"
+            case .installOMLX: return "Install oMLX?"
             case .writeOpenCode: return "Write the OpenCode config?"
             case .writeClaudeCode: return "Write the Claude Code profile?"
             case .writeLitellm: return "Write the LiteLLM config?"
@@ -47,6 +48,8 @@ struct ContentView: View {
                 return "This runs pip install huggingface_hub (and pins brotli>=1.2.0, which model downloads need) into your Python environment. No Hugging Face account or token is needed."
             case .installLitellm:
                 return "This creates an isolated .venv-litellm and installs litellm[proxy] there — it does not touch your mlx-lm environment."
+            case .installOMLX:
+                return "This runs `brew tap jundot/omlx && brew install jundot/omlx/omlx` (installs oMLX via Homebrew). You can also install the DMG from github.com/jundot/omlx/releases — see \"How to install oMLX manually\"."
             case .writeOpenCode:
                 return "This overwrites ~/.config/opencode/opencode.jsonc (your existing file is backed up first). You can instead copy it by hand from “Manual”."
             case .writeClaudeCode:
@@ -66,6 +69,7 @@ struct ContentView: View {
             case .installOptiQ: return "Install mlx-optiq"
             case .installHF: return "Install hf"
             case .installLitellm: return "Install LiteLLM"
+            case .installOMLX: return "Install oMLX"
             case .writeOpenCode: return "Write config"
             case .writeClaudeCode: return "Write profile"
             case .writeLitellm: return "Write config"
@@ -78,7 +82,7 @@ struct ContentView: View {
         /// install into a Python env is a normal (but still confirmed) action.
         var destructive: Bool {
             switch self {
-            case .installMLX, .installOptiQ, .installHF, .installLitellm: return false
+            case .installMLX, .installOptiQ, .installHF, .installLitellm, .installOMLX: return false
             case .writeOpenCode, .writeClaudeCode, .writeLitellm: return true
             case .deleteModel, .deleteAllModels: return true
             }
@@ -151,6 +155,7 @@ struct ContentView: View {
         case .installOptiQ: server.installOptiQ()
         case .installHF: server.installHF()
         case .installLitellm: server.installLitellm()
+        case .installOMLX: server.installOMLX()
         case .writeOpenCode: server.writeOpenCodeConfig()
         case .writeClaudeCode: server.writeClaudeCodeConfig()
         case .writeLitellm: server.writeLitellmConfig()
@@ -744,6 +749,35 @@ struct ContentView: View {
             }
 
             requirementRow(
+                ok: server.omlxRuntimeAvailable,
+                showAction: !server.omlxRuntimeAvailable,
+                title: "oMLX (optional backend)",
+                detail: omlxDetail,
+                buttonTitle: "Install",
+                action: { confirm(.installOMLX) }
+            )
+
+            if !server.omlxRuntimeAvailable {
+                DisclosureGroup("How to install oMLX") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("oMLX is the optional second inference backend (port 8000). You only need it if you pick \"oMLX\" in the Backend picker — MLX (the default) doesn't need it.")
+                            .font(.caption)
+                        Text("Option 1 — Homebrew (recommended):")
+                            .font(.caption)
+                        codeBlock(title: "bash", code: "brew tap jundot/omlx https://github.com/jundot/omlx\nbrew install jundot/omlx/omlx")
+                        Text("Option 2 — DMG:")
+                            .font(.caption)
+                        Link("Download the oMLX DMG →", destination: URL(string: "https://github.com/jundot/omlx/releases")!)
+                            .font(.caption)
+                        Text("Then click \"Check status\" (or reopen the panel) so it re-detects oMLX.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 4)
+                }
+            }
+
+            requirementRow(
                 ok: server.modelCached == true,
                 showAction: server.modelCached == false,
                 title: "Model files",
@@ -839,6 +873,11 @@ struct ContentView: View {
     private var optiqDetail: String {
         if server.optiqHealthy { return "installed — loads OptiQ (4/8-bit + MTP) models" }
         return "not installed — needed to run OptiQ models"
+    }
+
+    private var omlxDetail: String {
+        if server.omlxRuntimeAvailable { return "installed — optional oMLX backend (port 8000)" }
+        return "not installed — optional, only for the oMLX backend"
     }
 
     private var modelDetail: String {

@@ -14,6 +14,7 @@
 #   ./setup.sh --context 32768                              # cap the context window (default 32768)
 #   ./setup.sh --project-config --model <id>                # write ./opencode.jsonc for this project
 #   ./setup.sh --no-model                                   # install tools only, skip the model
+#   ./setup.sh --backend omlx                               # use + install the oMLX backend (default mlx)
 #
 # Ports (must match the app and start_server.sh):
 #   MLX server     = 8080
@@ -339,7 +340,7 @@ check_status() {
 
   if "$PYTHON" -c "import mlx_lm" >/dev/null 2>&1; then ok "mlx-lm"; MLXLM_OK=1; else bad "mlx-lm"; MLXLM_OK=0; fi
   if "$PYTHON" -c "import optiq" >/dev/null 2>&1; then ok "mlx-optiq (OptiQ runtime)"; OPTIQ_OK=1; else bad "mlx-optiq (OptiQ runtime)"; OPTIQ_OK=0; fi
-  if command -v omlx >/dev/null 2>&1 || [[ -x "$HOME/.omlx/bin/omlx" ]]; then ok "oMLX"; OMLX_OK=1; else warn "oMLX not installed (optional — for the oMLX backend)"; OMLX_OK=0; fi
+  if command -v omlx >/dev/null 2>&1 || [[ -x "$HOME/.omlx/bin/omlx" ]]; then ok "oMLX"; OMLX_OK=1; else warn "oMLX not installed (optional — brew tap jundot/omlx https://github.com/jundot/omlx && brew install jundot/omlx/omlx, or the DMG from github.com/jundot/omlx/releases)"; OMLX_OK=0; fi
   if find_hf; then ok "hf (huggingface_hub) → $HF_BIN"; HF_OK=1; else bad "hf (huggingface_hub)"; HF_OK=0; fi
   if "$PYTHON" -c "import uvicorn, fastapi" >/dev/null 2>&1; then ok "uvicorn + fastapi"; UVICORN_OK=1; else bad "uvicorn + fastapi"; UVICORN_OK=0; fi
   if have opencode || [[ -x "$HOME/.opencode/bin/opencode" ]]; then ok "OpenCode (recommended agent)"; OPENCODE_OK=1; else bad "OpenCode (recommended agent)"; OPENCODE_OK=0; fi
@@ -733,11 +734,13 @@ print_next_steps() {
   say ""
   say "Done. Next steps:"
   say ""
-  say "  # 1. Start the MLX server (port ${MLX_PORT}):"
+  local backend_label="MLX"; [[ "$BACKEND" == "mlx" ]] || backend_label="oMLX"
+  local backend_flag=""; [[ "$BACKEND" == "mlx" ]] || backend_flag=" --backend $BACKEND"
+  say "  # 1. Start the ${backend_label} server (port ${SERVER_PORT}):"
   if [[ -n "$repo" ]]; then
-    say "  ./start_server.sh \"$repo\""
+    say "  ./start_server.sh${backend_flag} \"$repo\""
   else
-    say "  ./start_server.sh"
+    say "  ./start_server.sh${backend_flag}"
   fi
   say ""
   say "  # 2. OpenCode (recommended):"
