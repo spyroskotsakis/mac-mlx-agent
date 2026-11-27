@@ -28,6 +28,51 @@ package registers the architecture and the server launches via
 by `ModelProfile.requiresOptiQ` in `ServerController` and `OPTIQ_MODELS` in
 `start_server.sh`; `setup.sh` and the app both install `mlx-optiq`.
 
+## Backends (MLX vs oMLX vs oMLX-M5)
+
+The server runs **one backend at a time** (`ServerController.Backend`). MLX is the
+default; oMLX and its M5 profile are opt-in.
+
+- **`.mlx`** — `mlx_lm.server` on port `8080`, no API key, model served as the
+  fixed alias `default_model`. Everything else in this file assumes this backend.
+- **`.omlx`** — a separate inference runtime (`omlx serve`) on port `8000` with its
+  own API key. Install via `brew tap jundot/omlx https://github.com/jundot/omlx &&
+  brew install jundot/omlx/omlx` (or the DMG from github.com/jundot/omlx/releases);
+  the CLI resolves to `~/.omlx/bin/omlx` or `/opt/homebrew/bin/omlx`
+  (`resolveOMLXCLI()`, `installOMLX()`, `checkOMLXRuntime()`).
+- **`.omlxM5`** — the same oMLX binary with the Neural-Accelerator (NAX) kernels
+  **on**; gated to Apple M5 + macOS 26.2+ (`isM5Chip` && `isMacOS26_2OrLater`),
+  otherwise it downgrades to `.omlx`. `.omlx` sets `OMLX_QWEN35_QMM_NAX=0` (the
+  kill switch) for a deterministic cross-chip baseline; `.omlxM5` leaves it unset.
+
+### oMLX architecture rules (must not break)
+
+- **Port 8000, own API key, isolated state.** oMLX binds `127.0.0.1:8000` (MLX stays
+  on `8080`). It authenticates with a per-install key created once by
+  `omlxAPIKeyOrCreate()` and passed as `OMLX_API_KEY`; state lives under
+  `OMLX_BASE_PATH` = `~/Library/Application Support/MLXServer/omlx`
+  (`Self.omlxStateDir`), models under `<state>/models`. Every oMLX client config
+  (OpenCode / LiteLLM) must carry that key (`Backend.requiresAPIKey`).
+- **Model ids use `--`, not `/`.** oMLX's catalog spells `mlx-community/Qwen3.5-35B`
+  as `mlx-community--Qwen3.5-35B`. The app keeps the client-facing key stable as
+  `default_model` (`modelAlias`) and puts the `--` id in `apiModelID` / `modelID`.
+  Never send a `/` id to oMLX or a `--` id to MLX.
+- **Memory guard is on by default (`balanced`).** Unlike MLX (mmap'd weights
+  over-commit and load anyway), oMLX hard-refuses a model that doesn't fit the
+  Mac's *currently-free* RAM (HTTP `507 … does not fit`). The tier is
+  `--memory-guard {off,safe,balanced,aggressive}`, surfaced as
+  `ServerController.omlxMemoryGuard` (`MemoryGuardTier`) and `MEMORY_GUARD` in
+  `start_server.sh`. Keep `balanced` the default; `off` can take the whole machine
+  down, so never set it without surfacing the risk.
+- **Launch shape.** `omlx serve --host 127.0.0.1 --port 8000 --model-dir
+  <state>/models --headless --paged-ssd-cache-max-size 20GB --memory-guard <tier>`,
+  with `OMLX_BASE_PATH` + `OMLX_API_KEY` set and all inherited `OMLX_*` / `PYTHON*`
+  stripped from the env (isolation from any other oMLX install).
+- **Switching backends rewrites client configs.** `switchBackend(to:)` re-points
+  OpenCode / Claude Code to the new port + key and refreshes `activePort`
+  (`backend == .mlx ? port : 8000`). MLX is always the safe fallback for a
+  missing/invalid stored backend (`resolveBackend`).
+
 ## Repo layout
 
 - `MLXServer/` — the **product**: a native macOS menu-bar app (Swift/SwiftUI).
@@ -51,7 +96,8 @@ by `ModelProfile.requiresOptiQ` in `ServerController` and `OPTIQ_MODELS` in
    installs mlx-lm (and mlx-optiq, for OptiQ models), downloads the model, writes
    OpenCode + Claude Code config, and starts the server + bridge.
 2. **Terminal:** `./setup.sh` installs the prerequisites and downloads a model,
-   then `./start_server.sh` (server on 8080); for Claude Code:
+   then `./start_server.sh` (server on 8080; `--backend omlx` for the oMLX runtime
+   on 8000); for Claude Code:
    `.venv-litellm/bin/litellm --config litellm-mlx.yaml --host 127.0.0.1 --port 4001`
    and `./claude-local.sh`.
 
@@ -171,8 +217,8 @@ mlx-lm later gains image processors for `qwen3_5` / `gemma4` / `mistral3`, revis
   long agent prompts.
 - **LiteLLM lives in its own venv** (`.venv-litellm`): it pins `tokenizers==0.22.2`
   while mlx-lm's transformers needs `>=0.23.1`.
-- **Ports.** MLX server = `8080`; LiteLLM bridge = `4001` (NOT 4000 — that's
-  commonly taken by another LiteLLM instance).
+- **Ports.** MLX server = `8080`; oMLX server = `8000`; LiteLLM bridge = `4001`
+  (NOT 4000 — that's commonly taken by another LiteLLM instance).
 - **No duplicated backend code.** The MLX (default) and oMLX (opt-in) backend
   paths share one implementation of common lifecycle logic — process-tree
   stop/exit confirmation, health polling, client-config writing, the memory
@@ -335,6 +381,8 @@ notes must include this one-liner alongside the Gatekeeper unblock above.
 
 ## Key endpoints (when running)
 
-- `GET  http://127.0.0.1:8080/v1/models` — server health / cached models.
-- `POST http://127.0.0.1:8080/v1/chat/completions` — OpenAI chat + tool calling.
+- `GET  http://127.0.0.1:8080/v1/models` — MLX server health / cached models.
+- `POST http://127.0.0.1:8080/v1/chat/completions` — MLX OpenAI chat + tool calling.
+- `GET  http://127.0.0.1:8000/v1/models` — oMLX server health (oMLX backend, API key required).
+- `POST http://127.0.0.1:8000/v1/chat/completions` — oMLX OpenAI chat + tool calling.
 - `POST http://127.0.0.1:4001/v1/messages` — LiteLLM bridge (Anthropic API for Claude Code).

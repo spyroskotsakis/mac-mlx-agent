@@ -65,7 +65,7 @@ Prefer to download the zip yourself? See
 ### MLX, in a paragraph
 
 **MLX** is Apple's open-source machine-learning framework for Apple Silicon
-(M1/M2/M3/M4 Macs). It runs models on the GPU and Neural Engine through Metal,
+(M-series Macs, M1–M5). It runs models on the GPU and Neural Engine through Metal,
 and — critically — it uses the Mac's **unified memory**: the CPU and GPU share
 one pool of RAM instead of copying data back and forth over a bus. That single
 feature is what makes running a ~19 GB, 35-billion-parameter model on a laptop
@@ -173,19 +173,49 @@ can use it.
 
 ## Backends
 
-The app runs **one inference backend at a time**:
+The app runs **one inference backend at a time**, selected in the **Backend** picker:
 
-- **MLX (default)** — `mlx_lm.server` on port `8080`. No extra setup; this is what every
-  fresh install and upgrade uses.
-- **oMLX** — an opt-in second runtime on port `8000` (with its own API key). Install it
-  with `./setup.sh --backend omlx`, then select it in the app's **Backend** picker, or run
-  `./start_server.sh --backend omlx`.
+- **MLX (default)** — Apple's `mlx_lm.server` on port `8080`, no API key. This is what every
+  fresh install and upgrade uses, and what all the Steps below describe.
+- **oMLX** — an opt-in second runtime on port `8000` with its own API key. Select it in the
+  app's **Backend** picker, run `./setup.sh --backend omlx`, or `./start_server.sh --backend omlx`.
 - **oMLX (M5 optimized)** — an oMLX launch profile for the Apple M5 Neural Accelerators
   (macOS 26.2+). Only shown on M5 Macs.
 
 Switching backends rewrites the OpenCode and Claude Code (LiteLLM) configs to the active
-backend's port automatically. MLX stays the default; missing or invalid preferences always
-fall back to MLX silently.
+backend's port and API key automatically. MLX stays the default; missing or invalid
+preferences always fall back to MLX silently.
+
+### Installing oMLX
+
+oMLX is optional — you only need it if you pick the oMLX backend. Install it from the app's
+**Requirements** tab (one-click **Install** button) or manually:
+
+```bash
+# Option 1 — Homebrew (recommended)
+brew tap jundot/omlx https://github.com/jundot/omlx
+brew install jundot/omlx/omlx
+
+# Option 2 — DMG
+# Download from https://github.com/jundot/omlx/releases and install it.
+```
+
+### oMLX memory guard
+
+Unlike MLX (whose mmap'd weights over-commit and load even when RAM is tight), oMLX runs a
+**memory guard** that hard-refuses a model that doesn't fit the Mac's *currently-free* RAM —
+a `507 … does not fit` in the log. The guard tier — set in the app's **Advanced → oMLX memory
+guard**, or `MEMORY_GUARD=… ./start_server.sh --backend omlx` — decides how much RAM stays free:
+
+| Tier | Keeps free | Effect |
+|------|-----------|--------|
+| **Safe** | ~20% of RAM | Most conservative; refuses larger models. |
+| **Balanced** *(default)* | ~8% of RAM | oMLX's own default. |
+| **Aggressive** | ~2% of RAM | Compresses half of other apps' memory to fit a bigger model. |
+| **Off** | nothing | No guard — a model that overflows free RAM can take the whole Mac down. |
+
+For a `507 does not fit`, the safest fix is a smaller model; raise the tier to Aggressive/Off
+only if you accept a sluggish machine or the risk of a whole-machine OOM.
 
 ---
 
@@ -215,6 +245,7 @@ missing, so a fresh machine shows its gaps up front.
 | **Python 3** | base runtime for mlx-lm, `hf`, and the server | warning + "How to install Python" instructions |
 | **mlx-lm** (`mlx_lm.server`) | the local server | one-click **Install** (`pip install mlx-lm uvicorn fastapi huggingface_hub 'brotli>=1.2.0'`) |
 | **mlx-optiq** | second runtime for OptiQ (mixed 4/8-bit + MTP) models | one-click **Install** (`pip install mlx-optiq`) — only needed for the OptiQ models |
+| **oMLX** | optional second inference backend (port 8000) | one-click **Install** (`brew tap jundot/omlx && brew install jundot/omlx/omlx`, or the DMG) — only needed if you pick the oMLX backend |
 | **`hf` CLI** (`huggingface_hub`) | downloads models | one-click **Install** (`pip install huggingface_hub 'brotli>=1.2.0'`) |
 | **Model files** | the weights to serve | one-click **Download** with a progress bar |
 | **OpenCode** | recommended agent | "How to install OpenCode" fold-out (not pip — manual) |
@@ -248,6 +279,7 @@ writes the OpenCode + Claude Code configs that point at it.
 ./setup.sh --yes                                    # non-interactive: install everything + the default model
 ./setup.sh --model mlx-community/Qwen3-14B-4bit     # a specific model
 ./setup.sh --context 32768                          # cap the context window (default 32768)
+./setup.sh --backend omlx                           # use + install the oMLX backend (default mlx)
 ./setup.sh --project-config --model <id>            # write ./opencode.jsonc for this project
 ```
 
@@ -449,8 +481,10 @@ mlx_lm.server --model "$MODEL" --port "$PORT" \
 
 The server loads the model and listens on `http://127.0.0.1:8080` (port `8080`
 by default). Useful flags: `--host`, `--port`, `--max-tokens`, `--temp`,
-`--kv-bits`, `--prompt-cache-bytes`, `--prompt-cache-size`, and
-`--chat-template-args` (thinking mode).
+`--kv-bits`, `--prompt-cache-bytes`, `--prompt-cache-size`,
+`--chat-template-args` (thinking mode), `--backend mlx|omlx` (pick the runtime),
+and `MEMORY_GUARD=off|safe|balanced|aggressive` (oMLX only — see
+[Backends](#backends)).
 
 > **35B-A3B MoE — KV-cache fix.** The MoE's ~19 GB weights fit in RAM on most
 > Apple Silicon Macs, but its full-precision (16-bit) KV cache overflows Metal
@@ -473,6 +507,41 @@ Endpoints exposed:
 - `POST /v1/chat/completions` — OpenAI chat completions (with tool calling)
 - `GET /v1/models` — lists every locally cached model by its HF id, not just the
   loaded one; the loaded model is still served to clients as `default_model`
+
+---
+
+## MLX server — memory & settings
+
+The app (**Model settings**) and `start_server.sh` drive the same server flags. The
+three that matter most for **long tasks** (agents that grow the KV cache over many
+turns):
+
+| Setting | Flag / app | What it does | Default |
+|---|---|---|---|
+| **KV-cache bits** | `--kv-bits` / Model settings | Quantizes the key/value cache (`2`/`4`/`8`; `0` = full 16-bit). 4-bit is the memory-safe default; 8-bit trades RAM for quality; 2-bit saves the most RAM. | `4` |
+| **Prompt cache** | `--prompt-cache-bytes` + `--prompt-cache-size` / Model settings | Caps cached prompt/KV memory (bytes) and how many sequences it keeps. Must hold the system prompt's KV cache **twice** (stored + in-flight). | `6 GB` / `10` |
+| **Max tokens** | `--max-tokens` / Model settings | Caps a single reply. 8192 lets tool calls finish; raising it lets a long generation grow the KV cache. | `8192` |
+
+Plus the **Context window** (client-side `limit.context`, default 32768) — every
+token of context grows the KV cache, so it's the single biggest memory lever.
+
+**Rotating-KV models skip `--kv-bits`.** Gemma 4, Ministral 3, Llama 3.2, and
+GPT-OSS have no quantized KV form, so `start_server.sh` / the app omit `--kv-bits`
+for them — they always run a full-precision KV cache.
+
+**Memory-safety guard.** "Allow concurrent requests" drops the 4-bit KV cache and the
+prompt-cache byte cap (full precision + parallel batching), which needs roughly 4×
+the model's weights free in unified memory. The app hard-blocks Start for a model
+larger than ~¼ of the Mac's RAM in that mode and auto-clamps the toggle — that guard
+is what stops a *whole-machine* OOM (not just the server). Keep it off for the 35B.
+
+**Sampling.** `mlx_lm.server` ignores the model's `generation_config.json` and
+defaults to greedy decoding with no repetition penalty, which makes these Qwen models
+loop. The app/scripts set `--temp 0.2 --top-p 0.8 --top-k 20` to break the loop.
+
+**Thinking mode** is per-model and off by default; enabling it for a `.toggleable`
+model adds a hidden reasoning pass (extra tokens, slower turns). See the model
+table's **Thinking** column.
 
 ---
 
