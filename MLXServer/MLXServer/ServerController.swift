@@ -125,6 +125,29 @@ struct ModelOption: Identifiable, Hashable {
 
 /// Defaults for the model settings exposed in the app. These are the values
 /// `start_server.sh` shipped with; "Reset to defaults" restores them.
+/// Which inference backend runs the server. MLX is the default; oMLX is an
+/// opt-in second runtime (own port 8000, own API key). `omlxM5` is the M5
+/// Neural-Accelerator-optimized launch profile of oMLX.
+enum Backend: String, CaseIterable {
+    case mlx
+    case omlx
+    case omlxM5
+
+    var displayName: String {
+        switch self {
+        case .mlx: return "MLX (default)"
+        case .omlx: return "oMLX"
+        case .omlxM5: return "oMLX (M5 optimized)"
+        }
+    }
+
+    /// The port this backend's server listens on.
+    var serverPort: Int { self == .mlx ? 8080 : 8000 }
+
+    /// Whether client configs must carry an API key for this backend.
+    var requiresAPIKey: Bool { self != .mlx }
+}
+
 enum ModelDefaults {
     static let enableThinking = false
     static let temperature = 0.2
@@ -622,6 +645,13 @@ final class ServerController: ObservableObject {
         didSet { UserDefaults.standard.set(port, forKey: Keys.port) }
     }
 
+    /// Which inference backend runs the server (MLX default). Missing/invalid
+    /// values resolve to `.mlx`; a persisted M5 profile downgrades to `.omlx`
+    /// on non-M5 hardware or macOS < 26.2.
+    @Published var backend: Backend {
+        didSet { UserDefaults.standard.set(backend.rawValue, forKey: Keys.backend) }
+    }
+
     /// Port for the LiteLLM bridge (Claude Code's Anthropic → OpenAI proxy).
     @Published var bridgePort: Int {
         didSet { UserDefaults.standard.set(bridgePort, forKey: Keys.bridgePort) }
@@ -633,6 +663,14 @@ final class ServerController: ObservableObject {
             resolvedExecutable = Self.resolveExecutable(override: executablePath)
         }
     }
+
+    /// Path to the oMLX CLI (blank = auto-detect `~/.omlx/bin/omlx` or Homebrew).
+    @Published var omlxCLIPath: String {
+        didSet { UserDefaults.standard.set(omlxCLIPath, forKey: Keys.omlxCLIPath) }
+    }
+
+    /// Whether an oMLX runtime (launcher/venv) is available on this Mac.
+    @Published private(set) var omlxRuntimeAvailable: Bool = false
 
     /// When true, the server omits `--kv-bits 4` so its KV cache stays full
     /// precision and requests can be batched in parallel. Off by default because
@@ -719,6 +757,8 @@ final class ServerController: ObservableObject {
         static let port = "mlxServerPort"
         static let bridgePort = "mlxServerBridgePort"
         static let executable = "mlxServerExecutable"
+        static let backend = "mlxServerBackend"
+        static let omlxCLIPath = "mlxServerOmlxCLIPath"
         static let allowConcurrent = "mlxServerAllowConcurrent"
         static let enableThinking = "mlxServerEnableThinking"
         static let temperature = "mlxServerTemperature"
@@ -739,6 +779,8 @@ final class ServerController: ObservableObject {
         self.bridgePort = savedBridgePort == 0 ? 4001 : savedBridgePort
 
         self.executablePath = UserDefaults.standard.string(forKey: Keys.executable) ?? ""
+        self.backend = Self.resolveBackend(UserDefaults.standard.string(forKey: Keys.backend))
+        self.omlxCLIPath = UserDefaults.standard.string(forKey: Keys.omlxCLIPath) ?? ""
         self.allowConcurrentRequests = UserDefaults.standard.bool(forKey: Keys.allowConcurrent)
 
         let savedModel = UserDefaults.standard.string(forKey: Keys.model)
@@ -783,11 +825,51 @@ final class ServerController: ObservableObject {
         !state.isRunning && !state.isTransitioning
     }
 
+    /// Whether the backend can be switched right now (not starting/stopping).
+    var canSwitchBackend: Bool {
+        !state.isTransitioning
+    }
+
+    /// The port the active backend's server listens on — the user's MLX `port`
+    /// for MLX, 8000 for oMLX.
+    var activePort: Int { backend == .mlx ? port : 8000 }
+
     /// Installed RAM in GiB, read live from `ProcessInfo.physicalMemory` (Apple's
     /// advertised unified-memory tier). Drives the memory-safety guard below — it
     /// is never hardcoded, so every Mac sees its own figure.
     static var physicalRAMGB: Double {
         Double(ProcessInfo.processInfo.physicalMemory) / 1_073_741_824
+    }
+
+    /// True when this Mac's CPU brand string starts with "Apple M5" (with a
+    /// word boundary), used to gate the M5-optimized oMLX profile.
+    static var isM5Chip: Bool {
+        var size = 0
+        sysctlbyname("machdep.cpu.brand_string", nil, &size, nil, 0)
+        guard size > 0 else { return false }
+        var buf = [CChar](repeating: 0, count: size)
+        sysctlbyname("machdep.cpu.brand_string", &buf, &size, nil, 0)
+        let brand = String(cString: buf)
+        guard brand.hasPrefix("Apple M5") else { return false }
+        let rest = brand.dropFirst("Apple M5".count)
+        return rest.isEmpty || rest.first == " "
+    }
+
+    /// True when macOS is 26.2 or newer (the M5 Neural-Accelerator gate).
+    static var isMacOS26_2OrLater: Bool {
+        let v = ProcessInfo.processInfo.operatingSystemVersion
+        return v.majorVersion > 26 || (v.majorVersion == 26 && v.minorVersion >= 2)
+    }
+
+    /// Resolve a stored backend string, downgrading the M5 profile when the
+    /// hardware/OS can't run it. Missing/invalid → `.mlx`.
+    static func resolveBackend(_ stored: String?) -> Backend {
+        guard let stored else { return .mlx }
+        var b = Backend(rawValue: stored) ?? .mlx
+        if b == .omlxM5 && (!isM5Chip || !isMacOS26_2OrLater) {
+            b = .omlx
+        }
+        return b
     }
 
     /// Whether "Allow concurrent requests" is safe with the currently-selected
@@ -1034,6 +1116,7 @@ final class ServerController: ObservableObject {
         }
         checkMLXLM()
         checkOptiQ()
+        checkOMLXRuntime()
         startMemorySampling()
     }
 
@@ -1045,7 +1128,7 @@ final class ServerController: ObservableObject {
     /// Start right after this has the port free.
     func killAllServers() {
         let ownPIDs: Set<pid_t> = Set([process?.processIdentifier, bridgeProcess?.processIdentifier].compactMap { $0 })
-        let targets = Array(Set(Self.pidsMatching("mlx_lm\\.server") + Self.pidsMatching("litellm-mlx\\.yaml")))
+        let targets = Array(Set(Self.pidsMatching("mlx_lm\\.server") + Self.pidsMatching("litellm-mlx\\.yaml") + Self.pidsMatching("omlx\\.cli")))
             .filter { $0 > 0 && !ownPIDs.contains($0) }
         guard !targets.isEmpty else { return }
 
@@ -1245,36 +1328,62 @@ final class ServerController: ObservableObject {
             state = .failed("Model isn't downloaded yet — download it in Requirements, then start.")
             return
         }
-        let serverArgs = arguments(model: selectedModel.repoID, port: port)
-
         let proc = Process()
-        if selectedModel.profile.requiresOptiQ {
-            // OptiQ weights carry an MTP sidecar + mixed 4/8-bit architecture that
-            // stock `mlx_lm.server` can't load. `import optiq` registers both, so
-            // launch the server through the Python interpreter with the registration
-            // import first (the model cards' documented hand-off:
-            // `import optiq; from mlx_lm.server import main; main()`).
-            guard let python = resolvePython() else {
-                state = .failed("Python not found — needed to run the mlx-optiq runtime. Install Python, then mlx-optiq.")
-                return
+        var serverEnv = ProcessInfo.processInfo.environment
+
+        if backend == .mlx {
+            let serverArgs = arguments(model: selectedModel.repoID, port: port)
+            if selectedModel.profile.requiresOptiQ {
+                // OptiQ weights carry an MTP sidecar + mixed 4/8-bit architecture that
+                // stock `mlx_lm.server` can't load. `import optiq` registers both, so
+                // launch the server through the Python interpreter with the registration
+                // import first (the model cards' documented hand-off:
+                // `import optiq; from mlx_lm.server import main; main()`).
+                guard let python = resolvePython() else {
+                    state = .failed("Python not found — needed to run the mlx-optiq runtime. Install Python, then mlx-optiq.")
+                    return
+                }
+                proc.executableURL = URL(fileURLWithPath: python)
+                proc.arguments = ["-c", "import optiq; from mlx_lm.server import main; main()"] + serverArgs
+            } else {
+                guard let exe = resolvedExecutable else {
+                    state = .failed("mlx_lm.server not found. Set its full path in Advanced.")
+                    return
+                }
+                proc.executableURL = URL(fileURLWithPath: exe)
+                proc.arguments = serverArgs
             }
-            proc.executableURL = URL(fileURLWithPath: python)
-            proc.arguments = ["-c", "import optiq; from mlx_lm.server import main; main()"] + serverArgs
+            // MLX probes for MPI at import (distributed multi-node inference) and warns
+            // when it finds MPICH (which Anaconda sometimes ships) instead of Open MPI.
+            // This is a single-machine server, so disable the probe by pointing it at a
+            // library that doesn't exist — no warning, no MPI.
+            serverEnv["MLX_MPI_LIBNAME"] = "/nonexistent/libmpi.dylib"
         } else {
-            guard let exe = resolvedExecutable else {
-                state = .failed("mlx_lm.server not found. Set its full path in Advanced.")
+            // oMLX backend (omlx / omlxM5). Isolated env + own state dir + API key.
+            guard let omlxCLI = resolveOMLXCLI() else {
+                state = .failed("oMLX isn't installed — install it (brew install jundot/omlx/omlx, or set its CLI path in Advanced), then switch to oMLX.")
                 return
             }
-            proc.executableURL = URL(fileURLWithPath: exe)
-            proc.arguments = serverArgs
+            proc.executableURL = URL(fileURLWithPath: omlxCLI)
+            proc.arguments = [
+                "serve",
+                "--host", "127.0.0.1",
+                "--port", "\(activePort)",
+                "--model-dir", omlxModelDir,
+                "--headless",
+                "--paged-ssd-cache-max-size", "20GB"
+            ]
+            // Env isolation: never inherit a separate oMLX app's settings/credentials.
+            serverEnv = serverEnv.filter { !$0.key.hasPrefix("OMLX_") && !$0.key.hasPrefix("PYTHON") }
+            serverEnv["OMLX_BASE_PATH"] = Self.omlxStateDir
+            serverEnv["OMLX_API_KEY"] = omlxAPIKeyOrCreate()
+            if backend == .omlx {
+                // GPU-only baseline: NAX kill switch for a deterministic cross-chip baseline.
+                serverEnv["OMLX_QWEN35_QMM_NAX"] = "0"
+            }
+            // omlxM5 leaves the kill switch unset (NAX kernels on).
         }
 
-        // MLX probes for MPI at import (distributed multi-node inference) and warns
-        // when it finds MPICH (which Anaconda sometimes ships) instead of Open MPI.
-        // This is a single-machine server, so disable the probe by pointing it at a
-        // library that doesn't exist — no warning, no MPI.
-        var serverEnv = ProcessInfo.processInfo.environment
-        serverEnv["MLX_MPI_LIBNAME"] = "/nonexistent/libmpi.dylib"
         proc.environment = serverEnv
 
         let outPipe = Pipe()
@@ -1340,6 +1449,64 @@ final class ServerController: ObservableObject {
             }
             Self.signal(survivors, SIGKILL)
         }
+    }
+
+    /// Directory oMLX serves models from (its own format, separate from the
+    /// HuggingFace cache MLX uses).
+    var omlxModelDir: String { Self.omlxStateDir + "/models" }
+
+    /// Switches the inference backend. Stops the current backend (with a
+    /// confirmed exit), then starts the target if it was running. A failed oMLX
+    /// start reverts to the previous backend.
+    func switchBackend(to target: Backend) {
+        guard canSwitchBackend else { return }
+        guard target == .mlx || omlxRuntimeAvailable else {
+            state = .failed("oMLX runtime isn't installed — install oMLX (or set its Python path in Advanced), then switch.")
+            return
+        }
+        let previous = backend
+        let wasRunning = state.isRunning
+        if wasRunning {
+            stop()
+            confirmServerExit()
+        }
+        backend = target
+        rewriteOpenCodeConfig()
+        guard wasRunning else { return }
+        start()
+        if case .failed = state, target != .mlx {
+            // oMLX failed to launch synchronously; revert and restart the previous backend.
+            backend = previous
+            rewriteOpenCodeConfig()
+            if previous == .mlx {
+                start()
+            }
+        }
+    }
+
+    /// Re-writes the OpenCode config in place to the active backend's port +
+    /// model id. The port changes on a backend switch, so the "already
+    /// configured" guard in `autoSyncOpenCodeConfig` would skip it — this forces
+    /// the write regardless.
+    private func rewriteOpenCodeConfig() {
+        refreshOpenCodeMajor()
+        let path = openCodeConfigPath()
+        guard FileManager.default.fileExists(atPath: path) else { return }
+        let existing = Self.existingOpenCodeConfig(at: path)
+        try? Self.openCodeConfigJSON(mergedOpenCodeConfig(existing: existing))
+            .write(toFile: path, atomically: true, encoding: .utf8)
+        checkOpenCodeConfig()
+    }
+
+    /// Synchronously waits (up to ~5s) for the server process tree to exit.
+    private func confirmServerExit() {
+        guard let proc = process else { return }
+        let tree = Self.processTreePIDs(root: proc.processIdentifier)
+        for _ in 0..<100 {
+            if tree.allSatisfy({ kill($0, 0) != 0 }) { break }
+            usleep(50_000)
+        }
+        Self.signal(tree.filter { kill($0, 0) == 0 }, SIGKILL)
     }
 
     /// Stops the server and every process it spawned, waits (up to ~3s) for them
@@ -1464,7 +1631,7 @@ final class ServerController: ObservableObject {
         if serverUp {
             if state == .starting {
                 state = .running
-                appendLog("\n[Server is ready on port \(port)]\n")
+                appendLog("\n[Server is ready on port \(activePort)]\n")
             }
             return false
         }
@@ -1716,6 +1883,52 @@ final class ServerController: ObservableObject {
         }
     }
 
+    /// Probes for an oMLX runtime (a Python with `omlx` installed, via the
+    /// user-configured path or the repo-local `.venv-omlx`). Sets
+    /// `omlxRuntimeAvailable`; never blocks the MLX workflow.
+    func checkOMLXRuntime() {
+        omlxRuntimeAvailable = resolveOMLXCLI() != nil
+    }
+
+    /// The oMLX state directory (`OMLX_BASE_PATH`, API key, logs).
+    static var omlxStateDir: String {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        return appSupport.appendingPathComponent("MLXServer/omlx", isDirectory: true).path
+    }
+
+    /// Resolves the `omlx` CLI (nil if none — install via Homebrew/DMG).
+    func resolveOMLXCLI() -> String? {
+        var candidates: [String] = []
+        if !omlxCLIPath.isEmpty {
+            candidates.append(omlxCLIPath)
+        }
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        candidates += [
+            home + "/.omlx/bin/omlx",
+            "/opt/homebrew/bin/omlx",
+            "/usr/local/bin/omlx"
+        ]
+        for c in candidates where FileManager.default.isExecutableFile(atPath: c) {
+            return c
+        }
+        return nil
+    }
+
+    /// Returns the oMLX API key, generating and persisting it (0600) once so
+    /// client configs stay valid across starts.
+    func omlxAPIKeyOrCreate() -> String {
+        let keyPath = Self.omlxStateDir + "/api_key"
+        if let existing = try? String(contentsOfFile: keyPath, encoding: .utf8),
+           !existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return existing.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let key = "sk-omlx-" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
+        try? FileManager.default.createDirectory(atPath: Self.omlxStateDir, withIntermediateDirectories: true)
+        try? key.write(toFile: keyPath, atomically: true, encoding: .utf8)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: keyPath)
+        return key
+    }
+
     /// Re-resolves the HuggingFace `hf` CLI (nil if not installed).
     func checkHF() {
         hfPath = Self.findHF()
@@ -1743,6 +1956,7 @@ final class ServerController: ObservableObject {
         checkPortConflicts()
         checkMLXLM()
         checkOptiQ()
+        checkOMLXRuntime()
     }
 
     /// Whether every prerequisite is met: mlx-lm installed, the selected model
@@ -1875,7 +2089,8 @@ final class ServerController: ObservableObject {
     /// (ignoring the app's own running server/bridge). Call before starting.
     func checkPortConflicts() {
         var conflicts: [String] = []
-        if isExternalPortInUse(port) { conflicts.append("\(port) (MLX server)") }
+        let serverLabel = backend == .mlx ? "MLX server" : "oMLX server"
+        if isExternalPortInUse(activePort) { conflicts.append("\(activePort) (\(serverLabel))") }
         if isExternalPortInUse(bridgePort) { conflicts.append("\(bridgePort) (LiteLLM bridge)") }
         portConflictMessage = conflicts.isEmpty
             ? nil
@@ -2233,7 +2448,7 @@ final class ServerController: ObservableObject {
             openCodeConfigStatus = .notConfigured
             return
         }
-        openCodeConfigStatus = found == port ? .configured : .portMismatch(foundPort: found)
+        openCodeConfigStatus = found == activePort ? .configured : .portMismatch(foundPort: found)
     }
 
     /// Extracts the `127.0.0.1:<port>/v1` (or `localhost:<port>/v1`) port that a
@@ -2482,7 +2697,8 @@ final class ServerController: ObservableObject {
     /// The LiteLLM bridge config. Maps `default_model` to the MLX server's OpenAI
     /// endpoint so Claude Code (Anthropic API) can reach the local model.
     var litellmConfigText: String {
-        """
+        let apiKey = backend.requiresAPIKey ? omlxAPIKeyOrCreate() : "sk-no-key-needed"
+        return """
         # LiteLLM bridge: Anthropic Messages API (/v1/messages) -> MLX-LM OpenAI API.
         # Written and auto-started by MLX Server when you click "Start Server" —
         # you don't need to launch this proxy yourself.
@@ -2490,9 +2706,9 @@ final class ServerController: ObservableObject {
         model_list:
           - model_name: default_model
             litellm_params:
-              model: custom_openai/default_model
-              api_base: http://127.0.0.1:\(port)/v1
-              api_key: sk-no-key-needed
+              model: custom_openai/\(apiModelID)
+              api_base: http://127.0.0.1:\(activePort)/v1
+              api_key: \(apiKey)
 
         litellm_settings:
           drop_params: true
@@ -2715,18 +2931,35 @@ final class ServerController: ObservableObject {
         openCodeIsV2 ? mlxProviderConfigV2 : mlxProviderConfigV1
     }
 
+    /// The model identifier clients send. MLX serves everything under the fixed
+    /// alias `default_model`; oMLX serves models by their catalog id, which
+    /// spells the HF repo id with `--` instead of `/`.
+    var apiModelID: String {
+        backend == .mlx ? "default_model" : selectedModel.repoID.replacingOccurrences(of: "/", with: "--")
+    }
+
+    /// Shared client `options`/`settings` for the active backend (port + apiKey
+    /// when the backend requires one).
+    private var mlxClientSettings: [String: Any] {
+        var s: [String: Any] = [
+            "baseURL": "http://127.0.0.1:\(activePort)/v1",
+            "chunkTimeout": false,
+            "headerTimeout": false
+        ]
+        if backend.requiresAPIKey {
+            s["apiKey"] = omlxAPIKeyOrCreate()
+        }
+        return s
+    }
+
     /// v1 OpenCode provider entry (`provider` / `npm` / `options` shape).
     private var mlxProviderConfigV1: [String: Any] {
         [
             "npm": "@ai-sdk/openai-compatible",
             "name": "MLX (local)",
-            "options": [
-                "baseURL": "http://127.0.0.1:\(port)/v1",
-                "chunkTimeout": false,
-                "headerTimeout": false
-            ],
+            "options": mlxClientSettings,
             "models": [
-                "default_model": [
+                apiModelID: [
                     "name": selectedModel.displayName,
                     "limit": ["context": effectiveContextLength, "output": maxTokens],
                     // mlx_lm.server loads no vision processor for any of these
@@ -2746,7 +2979,7 @@ final class ServerController: ObservableObject {
     /// `compatibility.requireAssistantAfterTool` (see `mlxNeedsAssistantAfterTool`).
     private var mlxProviderConfigV2: [String: Any] {
         var model: [String: Any] = [
-            "modelID": "default_model",
+            "modelID": apiModelID,
             "name": selectedModel.displayName,
             "limit": ["context": effectiveContextLength, "output": maxTokens],
             // Same text-only constraint as v1, expressed via v2 `capabilities`:
@@ -2763,11 +2996,7 @@ final class ServerController: ObservableObject {
         return [
             "package": "@opencode/ai/providers/openai-compatible",
             "name": "MLX (local)",
-            "settings": [
-                "baseURL": "http://127.0.0.1:\(port)/v1",
-                "chunkTimeout": false,
-                "headerTimeout": false
-            ],
+            "settings": mlxClientSettings,
             "models": ["default_model": model]
         ]
     }
@@ -2904,7 +3133,7 @@ final class ServerController: ObservableObject {
     private func mergedOpenCodeConfig(existing: [String: Any]) -> [String: Any] {
         var config = existing
         config["$schema"] = "https://opencode.ai/config.json"
-        config["model"] = "mlx/default_model"
+        config["model"] = openCodeIsV2 ? "mlx/default_model" : "mlx/\(apiModelID)"
         if openCodeIsV2 {
             var providers = config["providers"] as? [String: Any] ?? [:]
             providers["mlx"] = mlxProviderConfig
@@ -2980,30 +3209,33 @@ final class ServerController: ObservableObject {
 
     // MARK: - Connect info
 
-    /// OpenAI-compatible base URL for the running server.
-    var baseURL: String { "http://127.0.0.1:\(port)/v1" }
+    /// OpenAI-compatible base URL for the active backend.
+    var baseURL: String { "http://127.0.0.1:\(activePort)/v1" }
 
-    /// Model name clients put in the `model` field. `mlx_lm.server` serves the
-    /// loaded model under the fixed alias `default_model` (mapped to `--model`).
+    /// The stable model key used in OpenCode's config (`default_model` on both
+    /// backends) so the selector shows the same name; the actual API model id
+    /// lives in `apiModelID`.
     var modelAlias: String { "default_model" }
 
-    /// A ready-to-paste `curl` smoke test for the running server.
+    /// A ready-to-paste `curl` smoke test for the active backend.
     var curlExample: String {
-        """
-        curl http://127.0.0.1:\(port)/v1/chat/completions \\
-          -H "Content-Type: application/json" \\
-          -d '{"model": "default_model", "messages": [{"role": "user", "content": "Hello!"}]}'
+        let auth = backend.requiresAPIKey ? " \\\n  -H \"Authorization: Bearer \(omlxAPIKeyOrCreate())\"" : ""
+        return """
+        curl http://127.0.0.1:\(activePort)/v1/chat/completions \\
+          -H "Content-Type: application/json"\(auth) \\
+          -d '{"model": "\(apiModelID)", "messages": [{"role": "user", "content": "Hello!"}]}'
         """
     }
 
     /// A ready-to-paste Python example using the OpenAI SDK.
     var pythonExample: String {
-        """
+        let apiKey = backend.requiresAPIKey ? omlxAPIKeyOrCreate() : "not-needed"
+        return """
         from openai import OpenAI
 
-        client = OpenAI(base_url="http://127.0.0.1:\(port)/v1", api_key="not-needed")
+        client = OpenAI(base_url="http://127.0.0.1:\(activePort)/v1", api_key="\(apiKey)")
         resp = client.chat.completions.create(
-            model="default_model",
+            model="\(apiModelID)",
             messages=[{"role": "user", "content": "Hello!"}],
         )
         print(resp.choices[0].message.content)
@@ -3013,11 +3245,14 @@ final class ServerController: ObservableObject {
     // MARK: - Networking
 
     private func isServerUp() async -> Bool {
-        guard let url = URL(string: "http://127.0.0.1:\(port)/v1/models") else {
+        guard let url = URL(string: "http://127.0.0.1:\(activePort)/v1/models") else {
             return false
         }
         var request = URLRequest(url: url)
         request.timeoutInterval = 1.5
+        if backend.requiresAPIKey {
+            request.setValue("Bearer \(omlxAPIKeyOrCreate())", forHTTPHeaderField: "Authorization")
+        }
         do {
             let (_, response) = try await URLSession.shared.data(for: request)
             return (response as? HTTPURLResponse)?.statusCode == 200

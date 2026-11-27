@@ -42,6 +42,9 @@ KV_BITS="${KV_BITS:-4}"
 PROMPT_CACHE_BYTES_GB="${PROMPT_CACHE_BYTES_GB:-6}"
 PROMPT_CACHE_SEQUENCES="${PROMPT_CACHE_SEQUENCES:-10}"
 ENABLE_THINKING="${ENABLE_THINKING:-0}"
+BACKEND="${BACKEND:-mlx}"
+OMLX_PORT="${OMLX_PORT:-8000}"
+BACKEND_STATE_DIR="$HOME/.config/mac-mlx-agent"
 PYTHON="${PYTHON:-python3}"
 
 # --- model table (mirrors ServerController.availableModels) --------------------
@@ -279,12 +282,24 @@ while [[ $# -gt 0 ]]; do
     -n|--no-model) SKIP_MODEL=1 ;;
     -m|--model)   MODEL_ARG="${2:-}"; shift ;;
     --context)    CONTEXT="${2:-32768}"; shift ;;
+    --backend)    BACKEND="${2:-mlx}"; BACKEND_EXPLICIT=1; shift ;;
     --project-config) WRITE_PROJECT_CONFIG=1 ;;
     -h|--help)    sed -n '2,18p' "$0"; exit 0 ;;
     *)            echo "Unknown option: $1" >&2; exit 2 ;;
   esac
   shift
 done
+
+# Normalize the backend. Only mlx/omlx are persisted (the M5 profile is a
+# runtime-only launch mode); omlx-m5 downgrades to omlx, invalid → mlx.
+case "$BACKEND" in
+  mlx) ;;
+  omlx|omlx-m5) BACKEND="omlx" ;;
+  *) BACKEND="mlx" ;;
+esac
+
+# The port the active backend's server listens on (MLX 8080, oMLX 8000).
+SERVER_PORT="$([[ "$BACKEND" == "mlx" ]] && echo "$MLX_PORT" || echo "$OMLX_PORT")"
 
 # --- output helpers ------------------------------------------------------------
 say()  { printf '%s\n' "$*"; }
@@ -324,6 +339,7 @@ check_status() {
 
   if "$PYTHON" -c "import mlx_lm" >/dev/null 2>&1; then ok "mlx-lm"; MLXLM_OK=1; else bad "mlx-lm"; MLXLM_OK=0; fi
   if "$PYTHON" -c "import optiq" >/dev/null 2>&1; then ok "mlx-optiq (OptiQ runtime)"; OPTIQ_OK=1; else bad "mlx-optiq (OptiQ runtime)"; OPTIQ_OK=0; fi
+  if command -v omlx >/dev/null 2>&1 || [[ -x "$HOME/.omlx/bin/omlx" ]]; then ok "oMLX"; OMLX_OK=1; else warn "oMLX not installed (optional — for the oMLX backend)"; OMLX_OK=0; fi
   if find_hf; then ok "hf (huggingface_hub) → $HF_BIN"; HF_OK=1; else bad "hf (huggingface_hub)"; HF_OK=0; fi
   if "$PYTHON" -c "import uvicorn, fastapi" >/dev/null 2>&1; then ok "uvicorn + fastapi"; UVICORN_OK=1; else bad "uvicorn + fastapi"; UVICORN_OK=0; fi
   if have opencode || [[ -x "$HOME/.opencode/bin/opencode" ]]; then ok "OpenCode (recommended agent)"; OPENCODE_OK=1; else bad "OpenCode (recommended agent)"; OPENCODE_OK=0; fi
@@ -368,6 +384,22 @@ install_litellm() {
   }
   LITELLM_OK=1
   ok "LiteLLM installed."
+}
+
+install_omlx() {
+  if [[ "${OMLX_OK:-0}" -eq 1 ]]; then ok "oMLX already installed."; return 0; fi
+  if ! have brew; then
+    say "Homebrew is required to install oMLX — install it from https://brew.sh, or use the oMLX DMG from https://github.com/jundot/omlx/releases." >&2
+    return 1
+  fi
+  say "Installing oMLX via Homebrew…"
+  brew tap jundot/omlx https://github.com/jundot/omlx
+  brew install jundot/omlx/omlx || {
+    say "oMLX install failed. Install the DMG from https://github.com/jundot/omlx/releases instead." >&2
+    return 1
+  }
+  OMLX_OK=1
+  ok "oMLX installed."
 }
 
 install_opencode() {
@@ -499,7 +531,7 @@ configure_agents() {
       "package": "@opencode/ai/providers/openai-compatible",
       "name": "MLX (local)",
       "settings": {
-        "baseURL": "http://127.0.0.1:${MLX_PORT}/v1",
+        "baseURL": "http://127.0.0.1:${SERVER_PORT}/v1",
         "chunkTimeout": false,
         "headerTimeout": false
       },
@@ -532,7 +564,7 @@ EOF
       "npm": "@ai-sdk/openai-compatible",
       "name": "MLX (local)",
       "options": {
-        "baseURL": "http://127.0.0.1:${MLX_PORT}/v1",
+        "baseURL": "http://127.0.0.1:${SERVER_PORT}/v1",
         "chunkTimeout": false,
         "headerTimeout": false
       },
@@ -635,7 +667,7 @@ write_project_config() {
       "package": "@opencode/ai/providers/openai-compatible",
       "name": "MLX (local)",
       "settings": {
-        "baseURL": "http://127.0.0.1:${MLX_PORT}/v1",
+        "baseURL": "http://127.0.0.1:${SERVER_PORT}/v1",
         "chunkTimeout": false,
         "headerTimeout": false
       },
@@ -746,6 +778,16 @@ install_python_pkgs || exit 1
 apply_gptoss_patch
 install_litellm     || exit 1
 install_opencode    || exit 1
+
+if [[ "$BACKEND" != "mlx" ]]; then
+  install_omlx || exit 1
+fi
+
+if [[ "${BACKEND_EXPLICIT:-0}" -eq 1 ]]; then
+  mkdir -p "$BACKEND_STATE_DIR"
+  echo "$BACKEND" > "$BACKEND_STATE_DIR/backend"
+  ok "Backend set to $BACKEND (persisted)."
+fi
 
 if [[ "$SKIP_MODEL" -eq 1 ]]; then
   say "Skipping model download (--no-model)."
