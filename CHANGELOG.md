@@ -6,6 +6,18 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.34.2] — 2026-11-27
+
+### Added
+
+- **oMLX memory-guard control + pre-flight warning.** oMLX's memory guard hard-refuses a
+  model that doesn't fit the Mac's currently-free RAM (a `507 … does not fit` in the log),
+  where MLX's mmap'd weights over-commit and load anyway. There's now a
+  **Memory guard** setting in Advanced (oMLX backends only — Off / Safe / Balanced /
+  Aggressive, passed as `--memory-guard`), and a warning next to the backend picker when the
+  selected model is over roughly half the Mac's RAM. `start_server.sh` also accepts
+  `MEMORY_GUARD` (default `balanced`).
+
 ## [1.34.1] — 2026-11-27
 
 ### Added
