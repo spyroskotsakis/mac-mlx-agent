@@ -240,7 +240,7 @@ struct ContentView: View {
                 .foregroundStyle(.secondary)
 
             copyRow(title: "Base URL", value: server.baseURL)
-            copyRow(title: "Model", value: server.modelAlias)
+            copyRow(title: "Model", value: server.apiModelID)
             copyRow(title: "API key", value: "not-needed")
             copyRow(title: "Loaded model (HF id)", value: server.selectedModel.repoID)
 

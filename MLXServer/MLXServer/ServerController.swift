@@ -2706,7 +2706,7 @@ final class ServerController: ObservableObject {
         model_list:
           - model_name: default_model
             litellm_params:
-              model: custom_openai/\(modelKey)
+              model: custom_openai/\(apiModelID)
               api_base: http://127.0.0.1:\(activePort)/v1
               api_key: \(apiKey)
 
@@ -2934,7 +2934,7 @@ final class ServerController: ObservableObject {
     /// The model identifier clients send. MLX serves everything under the fixed
     /// alias `default_model`; oMLX serves models by their catalog id, which
     /// spells the HF repo id with `--` instead of `/`.
-    var modelKey: String {
+    var apiModelID: String {
         backend == .mlx ? "default_model" : selectedModel.repoID.replacingOccurrences(of: "/", with: "--")
     }
 
@@ -2959,7 +2959,7 @@ final class ServerController: ObservableObject {
             "name": "MLX (local)",
             "options": mlxClientSettings,
             "models": [
-                modelKey: [
+                apiModelID: [
                     "name": selectedModel.displayName,
                     "limit": ["context": effectiveContextLength, "output": maxTokens],
                     // mlx_lm.server loads no vision processor for any of these
@@ -2979,7 +2979,7 @@ final class ServerController: ObservableObject {
     /// `compatibility.requireAssistantAfterTool` (see `mlxNeedsAssistantAfterTool`).
     private var mlxProviderConfigV2: [String: Any] {
         var model: [String: Any] = [
-            "modelID": modelKey,
+            "modelID": apiModelID,
             "name": selectedModel.displayName,
             "limit": ["context": effectiveContextLength, "output": maxTokens],
             // Same text-only constraint as v1, expressed via v2 `capabilities`:
@@ -2997,7 +2997,7 @@ final class ServerController: ObservableObject {
             "package": "@opencode/ai/providers/openai-compatible",
             "name": "MLX (local)",
             "settings": mlxClientSettings,
-            "models": [modelKey: model]
+            "models": ["default_model": model]
         ]
     }
 
@@ -3133,7 +3133,7 @@ final class ServerController: ObservableObject {
     private func mergedOpenCodeConfig(existing: [String: Any]) -> [String: Any] {
         var config = existing
         config["$schema"] = "https://opencode.ai/config.json"
-        config["model"] = "mlx/\(modelKey)"
+        config["model"] = openCodeIsV2 ? "mlx/default_model" : "mlx/\(apiModelID)"
         if openCodeIsV2 {
             var providers = config["providers"] as? [String: Any] ?? [:]
             providers["mlx"] = mlxProviderConfig
@@ -3212,9 +3212,10 @@ final class ServerController: ObservableObject {
     /// OpenAI-compatible base URL for the active backend.
     var baseURL: String { "http://127.0.0.1:\(activePort)/v1" }
 
-    /// Model name clients put in the `model` field — `default_model` on MLX,
-    /// the catalog id on oMLX.
-    var modelAlias: String { modelKey }
+    /// The stable model key used in OpenCode's config (`default_model` on both
+    /// backends) so the selector shows the same name; the actual API model id
+    /// lives in `apiModelID`.
+    var modelAlias: String { "default_model" }
 
     /// A ready-to-paste `curl` smoke test for the active backend.
     var curlExample: String {
@@ -3222,7 +3223,7 @@ final class ServerController: ObservableObject {
         return """
         curl http://127.0.0.1:\(activePort)/v1/chat/completions \\
           -H "Content-Type: application/json"\(auth) \\
-          -d '{"model": "\(modelKey)", "messages": [{"role": "user", "content": "Hello!"}]}'
+          -d '{"model": "\(apiModelID)", "messages": [{"role": "user", "content": "Hello!"}]}'
         """
     }
 
@@ -3234,7 +3235,7 @@ final class ServerController: ObservableObject {
 
         client = OpenAI(base_url="http://127.0.0.1:\(activePort)/v1", api_key="\(apiKey)")
         resp = client.chat.completions.create(
-            model="\(modelKey)",
+            model="\(apiModelID)",
             messages=[{"role": "user", "content": "Hello!"}],
         )
         print(resp.choices[0].message.content)
