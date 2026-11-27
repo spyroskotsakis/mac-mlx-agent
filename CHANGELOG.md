@@ -6,6 +6,22 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
+## [1.34.1] — 2026-11-27
+
+### Added
+
+- **oMLX install button + manual instructions.** The app's Requirements now offer an
+  **Install** button for oMLX (Homebrew `brew tap jundot/omlx && brew install jundot/omlx/omlx`),
+  plus a "How to install oMLX" manual path (Homebrew command + DMG link), mirroring the other
+  prerequisites. This is the step M5 users hit when oMLX wasn't installed yet.
+
+### Fixed
+
+- **CLI backend output.** `setup.sh` now documents `--backend`, prints the manual oMLX install
+  command in `--check`, and its next-steps show the correct port + `--backend` flag for the
+  active backend. `start_server.sh` prints a backend-aware banner (oMLX on port `8000` with the
+  `--` model-id separator) so the smoke test matches the running backend.
+
 ## [1.34.0] — 2026-11-27
 
 ### Added
