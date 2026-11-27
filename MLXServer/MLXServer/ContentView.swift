@@ -1376,6 +1376,10 @@ struct ContentView: View {
                 Label("oMLX isn't installed — run ./setup.sh --backend omlx, or set its Python path in Advanced.", systemImage: "info.circle")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            } else if let warning = server.omlxMemoryWarning {
+                Label(warning, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
             }
 
             Divider()
@@ -1690,6 +1694,22 @@ struct ContentView: View {
                     Label(conflict, systemImage: "exclamationmark.triangle.fill")
                         .font(.caption)
                         .foregroundStyle(.orange)
+                }
+
+                if server.backend != .mlx {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("oMLX memory guard").font(.callout)
+                        Picker("oMLX memory guard", selection: $server.omlxMemoryGuard) {
+                            ForEach(MemoryGuardTier.allCases, id: \.self) { tier in
+                                Text(tier.displayName).tag(tier)
+                            }
+                        }
+                        .disabled(!server.canSwitchModel)
+                        Text("How much RAM the oMLX server keeps free for macOS and other apps before it refuses to load a model (--memory-guard). Balanced keeps ~8% free; Aggressive keeps ~2% and compresses half of other apps' memory to squeeze in a bigger model; Off disables the guard — risky, it can take the whole machine down. For a \"507 … does not fit\" error, a smaller model is the safest fix.")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Divider()

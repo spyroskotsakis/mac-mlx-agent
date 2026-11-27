@@ -27,6 +27,10 @@ done
 MODEL="${MODEL:-mlx-community/Qwen3.5-35B-A3B-4bit}"
 PORT="${PORT:-8080}"
 OMLX_PORT="${OMLX_PORT:-8000}"
+# oMLX memory-guard tier (off/safe/balanced/aggressive). Balanced (oMLX's default)
+# keeps ~8% of RAM free and refuses models that don't fit; aggressive keeps ~2% and
+# compresses other apps' memory to fit a bigger model; off disables the guard.
+MEMORY_GUARD="${MEMORY_GUARD:-balanced}"
 BACKEND="${BACKEND_ARG:-$(cat "$HOME/.config/mac-mlx-agent/backend" 2>/dev/null || echo mlx)}"
 # Normalize: only mlx / omlx / omlx-m5 are valid; anything else falls back to mlx.
 case "$BACKEND" in
@@ -363,7 +367,7 @@ if [[ "$BACKEND" != "mlx" ]]; then
     OMLX_API_KEY="sk-omlx-cli" \
     "$OMLX_BIN" serve --host 127.0.0.1 --port "$OMLX_PORT" \
     --model-dir "$HOME/.config/mac-mlx-agent/omlx/models" --headless \
-    --paged-ssd-cache-max-size 20GB
+    --paged-ssd-cache-max-size 20GB --memory-guard "$MEMORY_GUARD"
 fi
 
 if uses_optiq; then

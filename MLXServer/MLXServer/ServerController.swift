@@ -148,8 +148,30 @@ enum Backend: String, CaseIterable {
     var requiresAPIKey: Bool { self != .mlx }
 }
 
+/// oMLX memory-guard tier, passed as `--memory-guard`. It decides how much RAM the
+/// oMLX server keeps free for macOS and other apps before refusing to load a model.
+/// `balanced` is oMLX's own default and what the app has always used. `aggressive`
+/// squeezes in a bigger model by compressing more of other apps' memory (at the cost
+/// of a sluggish machine); `off` disables the guard entirely — a model that doesn't
+/// fit can then take the whole machine down, which is exactly what the guard exists
+/// to prevent.
+enum MemoryGuardTier: String, CaseIterable {
+    case off, safe, balanced, aggressive
+
+    var displayName: String {
+        switch self {
+        case .off: return "Off (no guard)"
+        case .safe: return "Safe (keeps ~20% free)"
+        case .balanced: return "Balanced (keeps ~8% free)"
+        case .aggressive: return "Aggressive (keeps ~2% free)"
+        }
+    }
+}
+
 enum ModelDefaults {
     static let enableThinking = false
+    /// Default oMLX memory-guard tier (oMLX's own default — keeps ~8% of RAM free).
+    static let omlxMemoryGuard: MemoryGuardTier = .balanced
     static let temperature = 0.2
     static let topP = 0.8
     static let topK = 20
@@ -679,6 +701,11 @@ final class ServerController: ObservableObject {
         didSet { UserDefaults.standard.set(allowConcurrentRequests, forKey: Keys.allowConcurrent) }
     }
 
+    /// oMLX memory-guard tier (only used by the oMLX backends; MLX ignores it).
+    @Published var omlxMemoryGuard: MemoryGuardTier {
+        didSet { UserDefaults.standard.set(omlxMemoryGuard.rawValue, forKey: Keys.omlxMemoryGuard) }
+    }
+
     /// When true, the server passes `--chat-template-args '{"enable_thinking":true}'`
     /// so Qwen3-family models emit a hidden reasoning step before answering.
     /// Per-model (stored under the selected model's repo id); only takes effect
@@ -759,6 +786,7 @@ final class ServerController: ObservableObject {
         static let executable = "mlxServerExecutable"
         static let backend = "mlxServerBackend"
         static let omlxCLIPath = "mlxServerOmlxCLIPath"
+        static let omlxMemoryGuard = "mlxServerOmlxMemoryGuard"
         static let allowConcurrent = "mlxServerAllowConcurrent"
         static let enableThinking = "mlxServerEnableThinking"
         static let temperature = "mlxServerTemperature"
@@ -782,6 +810,7 @@ final class ServerController: ObservableObject {
         self.backend = Self.resolveBackend(UserDefaults.standard.string(forKey: Keys.backend))
         self.omlxCLIPath = UserDefaults.standard.string(forKey: Keys.omlxCLIPath) ?? ""
         self.allowConcurrentRequests = UserDefaults.standard.bool(forKey: Keys.allowConcurrent)
+        self.omlxMemoryGuard = MemoryGuardTier(rawValue: UserDefaults.standard.string(forKey: Keys.omlxMemoryGuard) ?? "") ?? ModelDefaults.omlxMemoryGuard
 
         let savedModel = UserDefaults.standard.string(forKey: Keys.model)
         let initialModel = Self.availableModels.first(where: { $0.repoID == savedModel })
@@ -993,6 +1022,21 @@ final class ServerController: ObservableObject {
         guard contextLength > safeDefaultContextLength else { return nil }
         guard estimatedServerMemoryGB > Self.physicalRAMGB * 0.75 else { return nil }
         return "Context \(contextLength) pushes the estimated server footprint to ~\(Int(estimatedServerMemoryGB)) GB on this \(Int(Self.physicalRAMGB)) GB Mac — every token of context grows the KV cache, and a long task can exhaust memory. Lower the context, or free RAM."
+    }
+
+    /// Warning for the oMLX backend when the selected model may not fit under
+    /// oMLX's memory guard on this Mac. MLX (mmap'd weights) over-commits and loads
+    /// anyway; oMLX's guard hard-refuses a model that doesn't fit the currently-free
+    /// RAM (a "507 … does not fit" in the log). Surface it before Start so the user
+    /// isn't left guessing why a request failed.
+    var omlxMemoryWarning: String? {
+        guard backend != .mlx else { return nil }
+        let w = selectedModel.profile.weightGB
+        if omlxMemoryGuard == .off {
+            return "oMLX memory guard is OFF — \(selectedModel.displayName) can load, but if its ~\(Int(w)) GB of weights overflows free RAM the whole Mac can hang. A smaller model is safer."
+        }
+        guard w > Self.physicalRAMGB * 0.5 else { return nil }
+        return "\(selectedModel.displayName) (~\(Int(w)) GB) may not fit on oMLX with the \(omlxMemoryGuard.displayName) guard — oMLX refuses a model that doesn't fit the Mac's currently-free RAM (a \"507 … does not fit\" in the log). Use a smaller model, close apps, or raise the guard to Aggressive/Off."
     }
 
     /// Warning for the thinking toggle. With mlx-lm ≥ 0.32 the reasoning arrives in
@@ -1371,7 +1415,8 @@ final class ServerController: ObservableObject {
                 "--port", "\(activePort)",
                 "--model-dir", omlxModelDir,
                 "--headless",
-                "--paged-ssd-cache-max-size", "20GB"
+                "--paged-ssd-cache-max-size", "20GB",
+                "--memory-guard", omlxMemoryGuard.rawValue
             ]
             // Env isolation: never inherit a separate oMLX app's settings/credentials.
             serverEnv = serverEnv.filter { !$0.key.hasPrefix("OMLX_") && !$0.key.hasPrefix("PYTHON") }
@@ -1835,6 +1880,7 @@ final class ServerController: ObservableObject {
         kvBits = ModelDefaults.kvBits
         promptCacheSequences = ModelDefaults.promptCacheSequences
         allowConcurrentRequests = false
+        omlxMemoryGuard = ModelDefaults.omlxMemoryGuard
     }
 
     // MARK: - Per-model settings
