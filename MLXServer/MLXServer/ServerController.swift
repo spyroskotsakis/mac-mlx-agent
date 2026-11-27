@@ -830,8 +830,9 @@ final class ServerController: ObservableObject {
         !state.isTransitioning
     }
 
-    /// The port the active backend's server listens on (8080 MLX, 8000 oMLX).
-    var activePort: Int { backend.serverPort }
+    /// The port the active backend's server listens on — the user's MLX `port`
+    /// for MLX, 8000 for oMLX.
+    var activePort: Int { backend == .mlx ? port : 8000 }
 
     /// Installed RAM in GiB, read live from `ProcessInfo.physicalMemory` (Apple's
     /// advertised unified-memory tier). Drives the memory-safety guard below — it
@@ -1470,15 +1471,31 @@ final class ServerController: ObservableObject {
             confirmServerExit()
         }
         backend = target
+        rewriteOpenCodeConfig()
         guard wasRunning else { return }
         start()
         if case .failed = state, target != .mlx {
             // oMLX failed to launch synchronously; revert and restart the previous backend.
             backend = previous
+            rewriteOpenCodeConfig()
             if previous == .mlx {
                 start()
             }
         }
+    }
+
+    /// Re-writes the OpenCode config in place to the active backend's port +
+    /// model id. The port changes on a backend switch, so the "already
+    /// configured" guard in `autoSyncOpenCodeConfig` would skip it — this forces
+    /// the write regardless.
+    private func rewriteOpenCodeConfig() {
+        refreshOpenCodeMajor()
+        let path = openCodeConfigPath()
+        guard FileManager.default.fileExists(atPath: path) else { return }
+        let existing = Self.existingOpenCodeConfig(at: path)
+        try? Self.openCodeConfigJSON(mergedOpenCodeConfig(existing: existing))
+            .write(toFile: path, atomically: true, encoding: .utf8)
+        checkOpenCodeConfig()
     }
 
     /// Synchronously waits (up to ~5s) for the server process tree to exit.
@@ -3116,7 +3133,7 @@ final class ServerController: ObservableObject {
     private func mergedOpenCodeConfig(existing: [String: Any]) -> [String: Any] {
         var config = existing
         config["$schema"] = "https://opencode.ai/config.json"
-        config["model"] = "mlx/default_model"
+        config["model"] = "mlx/\(modelKey)"
         if openCodeIsV2 {
             var providers = config["providers"] as? [String: Any] ?? [:]
             providers["mlx"] = mlxProviderConfig
