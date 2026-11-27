@@ -6,15 +6,16 @@ The version is bumped in `MLXServer/MLXServer.xcodeproj` (`MARKETING_VERSION`) a
 tagged in git (`vX.Y.Z`); each tag has a matching GitHub release with the built
 app attached.
 
-## [Unreleased]
+## [1.34.0] — 2026-11-27
 
 ### Added
 
 - **Second inference backend (oMLX).** An opt-in oMLX runtime next to MLX, in both the
   macOS app and the CLI. MLX stays the default everywhere; oMLX runs on its own port
   (`8000`) with its own API key and isolated environment. Switching rewrites the OpenCode
-  and Claude Code (LiteLLM) configs to the active backend. An **oMLX (M5 optimized)**
-  launch profile is offered on Apple M5 Macs (macOS 26.2+). Install via
+  and Claude Code (LiteLLM) configs to the active backend, keeping the `default_model`
+  key stable while routing the API model id under the hood. An **oMLX (M5 optimized)**
+  launch profile is offered on Apple M5 Macs (macOS 26.2+), gated on the chip. Install via
   `./setup.sh --backend omlx`; select in the app's Backend picker or
   `./start_server.sh --backend omlx`.
 
